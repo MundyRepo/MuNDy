@@ -99,35 +99,6 @@ KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a, con
 }
 //@}
 
-//! \name AVector3<T, Accessor> views
-//@{
-
-/// \brief A helper function to create a AVector3<T, Accessor> based on a given accessor.
-/// \param[in] data The data accessor.
-///
-/// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a AVector3<T, Accessor> from a data accessor.
-/// Instead of writing
-/// \code
-///   AVector3<T, Accessor> vec(data);
-/// \endcode
-/// you can write
-/// \code
-///   auto vec = get_vector3_view<T>(data);
-/// \endcode
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_vector3_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return AVector3<T, decltype(data_storage)>(data_storage);
-}
-
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return AVector3<T, decltype(data_storage)>(data_storage);
-}
-//@}
-
 //@}
 
 }  // namespace mundy

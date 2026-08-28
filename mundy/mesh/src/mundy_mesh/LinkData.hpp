@@ -615,6 +615,33 @@ inline LinkData* get_link_data(const stk::mesh::BulkData& bulk_data, const LinkM
   return get_link_data(bulk_data, our_name, link_rank);
 }
 
+/// \brief Reconcile \p link_data's runtime caches with the current mesh.
+///
+/// Resolves each link's stored linked-entity id and rank to the corresponding live entity and
+/// refreshes the runtime handle cache. Call after reading a mesh into a link data that was declared
+/// before the read; a link data declared after the read reconciles itself on construction. Idempotent.
+/// \param link_data [in] The link data to reconcile.
+inline void reconcile_links_after_read(const LinkData& link_data) {
+  impl::notify_coo_may_be_invalid(link_data);
+}
+
+/// \brief Reconcile every link data declared on \p bulk_data with the current mesh.
+///
+/// Applies \c reconcile_links_after_read to all link data on the mesh; a no-op when the mesh has no links.
+/// \param bulk_data [in] The mesh whose link data to reconcile.
+inline void reconcile_links_after_read(stk::mesh::BulkData& bulk_data) {
+  const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  const LinkDataMap* link_data_map = meta_data.get_attribute<LinkDataMap>();
+  if (link_data_map == nullptr) {
+    return;
+  }
+  for (unsigned rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
+    for (const auto& name_and_link_data : link_data_map->contents[rank]) {
+      reconcile_links_after_read(*name_and_link_data.second);
+    }
+  }
+}
+
 }  // namespace mesh
 
 }  // namespace mundy

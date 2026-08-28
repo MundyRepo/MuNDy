@@ -483,11 +483,11 @@ class NgpRequestEntitiesImplT {
 
   /// \brief Constructor.
   NgpRequestEntitiesImplT(unsigned helper_index)
-  #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
+#if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
       : state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestEntitiesImplT::state")) {
-        #else
+#else
       : state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestEntitiesImplT::state")) {
-  #endif
+#endif
     state_().index_ = helper_index;
     state_().active_space_dev_view_ = bool_view_t("NgpRequestEntitiesImplT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -755,10 +755,12 @@ class NgpRequestEntitiesImplT {
 
   struct no_requests_t {};
 
+ public:
   struct known_id_request_t {
     stk::mesh::EntityId entity_id = stk::mesh::InvalidEntityId;
   };
 
+ private:
   using bool_view_t = Kokkos::View<bool, memory_space>;
   using request_view_t = NgpViewT<known_id_request_t*, NgpMemSpace>;
   using requests_storage_t = std::conditional_t<HasKnownEntityId, request_view_t, no_requests_t>;
@@ -964,12 +966,14 @@ class NgpRequestConnectionsT {
   /// @brief Internal struct representing a single connection request.
   /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
   /// ticket and request helper).
+ public:
   struct ConnectionRequest {
     variant<stk::mesh::Entity, FutureEntity> from_entity;
     variant<stk::mesh::Entity, FutureEntity> to_entity;
     stk::mesh::RelationIdentifier ordinal;
   };
 
+ private:
   KOKKOS_INLINE_FUNCTION ConnectionRequest get_request(size_t ticket) const {
     constexpr auto name = make_string_literal("NgpRequestConnectionsT::get_request");
     assert_active_space<name>();
@@ -1020,11 +1024,11 @@ class NgpRequestLinkRelationsT {
   void initialize() {
     MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
                        "NgpRequestLinkRelationsT::initialize() called on already initialized object.");
-  #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
+#if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestLinkRelationsT::state"));
-  #else
+#else
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestLinkRelationsT::state"));
-  #endif
+#endif
     state_().active_space_dev_view_ = bool_view_t("NgpRequestLinkRelationsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1080,9 +1084,13 @@ class NgpRequestLinkRelationsT {
   //! \name Actions
   //@{
 
-  KOKKOS_INLINE_FUNCTION unsigned id() const noexcept { return state_().index_; }
+  KOKKOS_INLINE_FUNCTION unsigned id() const noexcept {
+    return state_().index_;
+  }
 
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept { return state_().ticket_issuer_; }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept {
+    return state_().ticket_issuer_;
+  }
 
   /// \brief Record a COO link relation request.
   ///
@@ -1126,12 +1134,14 @@ class NgpRequestLinkRelationsT {
   template <typename>
   friend class NgpModRequestsT;
 
+ public:
   struct LinkRelationRequest {
     variant<stk::mesh::Entity, FutureEntity> linker;
     variant<stk::mesh::Entity, FutureEntity> linked_entity;
     unsigned link_ordinal{0};
   };
 
+ private:
   KOKKOS_INLINE_FUNCTION LinkRelationRequest get_request(size_t ticket) const {
     constexpr auto name = make_string_literal("NgpRequestLinkRelationsT::get_request");
     assert_active_space<name>();
@@ -1143,8 +1153,7 @@ class NgpRequestLinkRelationsT {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    constexpr bool has_separate =
-        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    constexpr bool has_separate = !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
     if constexpr (has_separate) {
       KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(!state_().active_space_host_view_(), std::runtime_error,
                                            name + " called from host when device is active.");)
@@ -1539,12 +1548,14 @@ class NgpDestroyConnectionsT {
 
   /// @brief Internal struct representing a single connection destruction request.
   /// Requests must specify a pair of entities to destroy the connection between. Both entities must be real entities.
+ public:
   struct DestroyConnectionRequest {
     stk::mesh::Entity from_entity;
     stk::mesh::Entity to_entity;
     stk::mesh::RelationIdentifier ordinal;
   };
 
+ private:
   KOKKOS_INLINE_FUNCTION DestroyConnectionRequest get_request(size_t ticket) const {
     constexpr auto name = make_string_literal("NgpDestroyConnectionsT::get_request");
     assert_active_space<name>();
@@ -1583,13 +1594,13 @@ class NgpModRequestsT {
 
   /// \brief Default constructor.
   NgpModRequestsT()
-  #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
+#if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
       : shared_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::shared_state")),
         host_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::host_state")) {
-  #else
+#else
       : shared_state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpModRequestsT::shared_state")),
         host_state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpModRequestsT::host_state")) {
-  #endif
+#endif
     shared_state_().initialize();
   }
 

@@ -26,8 +26,8 @@
 // Mundy
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Vector.hpp>
-#include <mundy_math/solver_backends.hpp>
 #include <mundy_math/linear_system.hpp>
+#include <mundy_math/solver_backends.hpp>
 
 namespace mundy {
 
@@ -36,9 +36,9 @@ namespace {
 // A small, fixed, well-conditioned SPD system solved via mundy::MundyMathBackend: A is the classic
 // tridiagonal [2,-1,0;-1,2,-1;0,-1,2], b chosen so the exact solution is (1, 0, 1).
 Matrix3d spd_matrix() {
-  return Matrix3d{2.0, -1.0, 0.0,   //
-                  -1.0, 2.0, -1.0,  //
-                  0.0, -1.0, 2.0};
+  return Matrix3d{2.0,  -1.0, 0.0,   //
+                  -1.0, 2.0,  -1.0,  //
+                  0.0,  -1.0, 2.0};
 }
 
 Vector3d spd_rhs() {
@@ -201,8 +201,7 @@ struct TridiagKokkosOp {
   }
   void apply(const view_t& x, view_t& y) const {
     Kokkos::parallel_for(
-        "TridiagKokkosOp::apply", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1),
-        KOKKOS_LAMBDA(const int) {
+        "TridiagKokkosOp::apply", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1), KOKKOS_LAMBDA(const int) {
           y(0) = 2.0 * x(0) - x(1);
           y(1) = -x(0) + 2.0 * x(1) - x(2);
           y(2) = -x(1) + 2.0 * x(2);

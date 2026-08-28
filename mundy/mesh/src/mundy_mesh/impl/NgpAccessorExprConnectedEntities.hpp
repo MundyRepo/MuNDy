@@ -173,10 +173,9 @@ static constexpr bool is_connected_entities_expr_v = is_connected_entities_expr<
 // in the connected-entities collection produced by the parent expression.
 // ---------------------------------------------------------------------------
 template <typename PrevConnectedEntitiesExpr>
-class IndexedConnectedEntityExpr
-    : public EntityExprBase<IndexedConnectedEntityExpr<PrevConnectedEntitiesExpr>> {
+class IndexedConnectedEntityExpr : public EntityExprBase<IndexedConnectedEntityExpr<PrevConnectedEntitiesExpr>> {
  public:
-  using our_t   = IndexedConnectedEntityExpr<PrevConnectedEntitiesExpr>;
+  using our_t = IndexedConnectedEntityExpr<PrevConnectedEntitiesExpr>;
   using our_tag = typename EntityExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<PrevConnectedEntitiesExpr>;
   static constexpr bool constrains_num_entities = false;
@@ -190,8 +189,7 @@ class IndexedConnectedEntityExpr
   static constexpr bool is_this_expr_v = is_this_expr<T>::value;
 
   KOKKOS_INLINE_FUNCTION
-  IndexedConnectedEntityExpr(const PrevConnectedEntitiesExpr& prev, size_t index)
-      : prev_(prev), index_(index) {
+  IndexedConnectedEntityExpr(const PrevConnectedEntitiesExpr& prev, size_t index) : prev_(prev), index_(index) {
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -205,9 +203,8 @@ class IndexedConnectedEntityExpr
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(
-      const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-      const NgpEvalContext& context) const {
+  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                                       const NgpEvalContext& context) const {
     auto conn_entities = prev_.eval(fmis, context);
     return context.ngp_mesh().fast_mesh_index(conn_entities[index_]);
   }
@@ -224,15 +221,15 @@ class IndexedConnectedEntityExpr
         auto conn_result = prev_.template cached_eval<EvalCountsType, eval_counts>(
             fmis, std::forward<OldCacheType>(old_cache), context);
         auto conn_value = std::move(conn_result.first);
-        auto val        = context.ngp_mesh().fast_mesh_index(conn_value.get(conn_result.second)[index_]);
+        auto val = context.ngp_mesh().fast_mesh_index(conn_value.get(conn_result.second)[index_]);
         auto newest_cache = append<our_tag>(std::move(conn_result.second), val);
         return Kokkos::make_pair(CachedTagGetter<our_tag>{}, std::move(newest_cache));
       }
     } else {
-      auto conn_result = prev_.template cached_eval<EvalCountsType, eval_counts>(
-          fmis, std::forward<OldCacheType>(old_cache), context);
+      auto conn_result =
+          prev_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<OldCacheType>(old_cache), context);
       auto conn_value = std::move(conn_result.first);
-      auto val        = context.ngp_mesh().fast_mesh_index(conn_value.get(conn_result.second)[index_]);
+      auto val = context.ngp_mesh().fast_mesh_index(conn_value.get(conn_result.second)[index_]);
       return Kokkos::make_pair(OwnedCachedValue{std::move(val)}, std::move(conn_result.second));
     }
   }
@@ -278,7 +275,7 @@ class IndexedConnectedEntityExpr
 
  private:
   PrevConnectedEntitiesExpr prev_;
-  size_t                    index_;
+  size_t index_;
 };
 
 template <typename T>
@@ -288,8 +285,7 @@ template <typename PrevConnectedEntitiesExpr>
 struct is_indexed_connected_entity_expr<IndexedConnectedEntityExpr<PrevConnectedEntitiesExpr>> : std::true_type {};
 
 template <typename T>
-static constexpr bool is_indexed_connected_entity_expr_v =
-    is_indexed_connected_entity_expr<std::decay_t<T>>::value;
+static constexpr bool is_indexed_connected_entity_expr_v = is_indexed_connected_entity_expr<std::decay_t<T>>::value;
 
 }  // namespace impl
 

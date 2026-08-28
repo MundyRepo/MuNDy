@@ -251,21 +251,19 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
         if (!bulk_data.is_valid(node)) {
           auto it = node_info_map.find(node_id);
           MUNDY_THROW_REQUIRE(it != node_info_map.end(), std::runtime_error,
-                              sink() << "Element " << element_info.id
-                                     << " connects to undeclared node " << node_id);
+                              sink() << "Element " << element_info.id << " connects to undeclared node " << node_id);
           node = declare_node_from_info(it->second);
         }
-        bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i),
-                                   perm, scratch1, scratch2, scratch3);
+        bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i), perm, scratch1,
+                                   scratch2, scratch3);
 
         // If the current element is owned by a different processor than the node, we (the element's
         // owning process) need to share the node with the node's owning processor.
         // For nodes declared through this EntityDeclaration use the declared owning proc;
         // for pre-existing mesh nodes query STK directly.
         auto node_map_it = node_info_map.find(node_id);
-        const int node_owning_proc = (node_map_it != node_info_map.end())
-                                         ? node_map_it->second.owning_proc
-                                         : bulk_data.parallel_owner_rank(node);
+        const int node_owning_proc = (node_map_it != node_info_map.end()) ? node_map_it->second.owning_proc
+                                                                          : bulk_data.parallel_owner_rank(node);
         if (node_owning_proc != our_rank) {
           bulk_data.add_node_sharing(node, node_owning_proc);
           if (node_map_it != node_info_map.end()) {
@@ -326,14 +324,13 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
   }
 
   // Shared helper: write COO link relations for a linker entity.
-  auto setup_links = [&](stk::mesh::Entity entity, stk::mesh::EntityRank entity_rank,
-                         stk::mesh::EntityId entity_id,
+  auto setup_links = [&](stk::mesh::Entity entity, stk::mesh::EntityRank entity_rank, stk::mesh::EntityId entity_id,
                          const std::map<std::string, DeclareLinksInfo>& link_info_map) {
     for (const auto& [link_data_name, link_info] : link_info_map) {
       auto* link_data_ptr = get_link_data(bulk_data, link_data_name, entity_rank);
       MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
-                          sink() << "Entity (rank " << entity_rank << ", id " << entity_id
-                                 << ") has link info for '" << link_data_name << "' that does not exist");
+                          sink() << "Entity (rank " << entity_rank << ", id " << entity_id << ") has link info for '"
+                                 << link_data_name << "' that does not exist");
       const unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
       for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
         const stk::mesh::EntityId linked_id = link_info.linked_entity_ids[ordinal];
@@ -342,8 +339,8 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
         const stk::mesh::Entity linked_entity = bulk_data.get_entity(linked_rank, linked_id);
         MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error,
                             sink() << "Entity (rank " << entity_rank << ", id " << entity_id
-                                   << ") tries to link to non-existent entity (rank " << linked_rank
-                                   << ", id " << linked_id << ")");
+                                   << ") tries to link to non-existent entity (rank " << linked_rank << ", id "
+                                   << linked_id << ")");
         link_data_ptr->coo_data().declare_relation(entity, linked_entity, ordinal);
       }
     }

@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MATH_SHIFTEDVIEW_HPP_
-#define MUNDY_MATH_SHIFTEDVIEW_HPP_
+#ifndef MUNDY_MATH_SHIFTEDACCESSOR_HPP_
+#define MUNDY_MATH_SHIFTEDACCESSOR_HPP_
 
 // External
 #include <Kokkos_Core.hpp>
@@ -42,30 +42,31 @@ namespace mundy {
 /// \tparam shift The shift in the accessor
 /// \tparam Accessor The type of the contiguous accessor
 template <typename T, size_t shift, ValidAccessor<T> Accessor>
-class ShiftedView {
+class ShiftedAccessor {
  public:
   storage<Accessor> accessor_;
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr ShiftedView(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  explicit constexpr ShiftedAccessor(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(accessor) {
   }
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr ShiftedView(Accessor&& accessor)
+  explicit constexpr ShiftedAccessor(Accessor&& accessor)
       MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
       : accessor_(std::forward<Accessor>(accessor)) {
   }
 
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr ShiftedView(const ShiftedView<T, shift, Accessor>& other)
+  KOKKOS_INLINE_FUNCTION constexpr ShiftedAccessor(const ShiftedAccessor<T, shift, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr ShiftedView(ShiftedView<T, shift, Accessor>&& other) : accessor_(other.accessor_) {
+  KOKKOS_INLINE_FUNCTION constexpr ShiftedAccessor(ShiftedAccessor<T, shift, Accessor>&& other)
+      : accessor_(other.accessor_) {
   }
 
   /// \brief Element access operator
@@ -79,37 +80,34 @@ class ShiftedView {
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     return impl::access_at(accessor_, idx + shift);
   }
-};  // class ShiftedView
+};  // class ShiftedAccessor
 
-//! \name ShiftedView views
+//! \name ShiftedAccessor views
 //@{
 
-/// \brief A helper function to create a ShiftedView<T, N, Accessor> based on a given accessor.
+/// \brief A helper function to create a ShiftedAccessor<T, N, Accessor> based on a given accessor.
 /// \param[in] data The data accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a ShiftedView<T, stride, Accessor> from a data accessor.
+/// when creating a ShiftedAccessor<T, stride, Accessor> from a data accessor.
 /// Instead of writing
 /// \code
-///   ShiftedView<T, shift, Accessor> vec(data);
+///   ShiftedAccessor<T, shift, Accessor> vec(data);
 /// \endcode
 /// you can write
 /// \code
-///   auto shifted_data = get_shifted_view<T, shift>(data);
+///   auto shifted_data = get_shifted_accessor<T, shift>(data);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t shift, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_shifted_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return ShiftedView<T, shift, decltype(data_storage)>(data_storage);
-}
-
-template <typename T, size_t shift, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_shifted_accessor(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return ShiftedView<T, shift, decltype(data_storage)>(data_storage);
+KOKKOS_INLINE_FUNCTION constexpr auto get_shifted_accessor(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return ShiftedAccessor<T, shift, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 //@}
 
 }  // namespace mundy
 
-#endif  // MUNDY_MATH_SHIFTEDVIEW_HPP_
+#endif  // MUNDY_MATH_SHIFTEDACCESSOR_HPP_

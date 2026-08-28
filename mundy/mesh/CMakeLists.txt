@@ -24,7 +24,9 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/EntityIndices.hpp
     src/mundy_mesh/FieldComponent.hpp
     src/mundy_mesh/FieldViews.hpp
+    src/mundy_mesh/FillMesh.hpp
     src/mundy_mesh/ForEachEntity.hpp
+
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp
     src/mundy_mesh/impl/DeclareFieldImpl.hpp

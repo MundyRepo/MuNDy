@@ -322,7 +322,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidVSegmentType T1, ValidVSegmentType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& vs1, const T2& vs2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(vs1, vs2, tol);
 }
 

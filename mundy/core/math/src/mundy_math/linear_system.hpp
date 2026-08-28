@@ -65,7 +65,7 @@ struct CGConfig {
 
   unsigned max_iters{200};
   Scalar tol{get_relaxed_zero_tolerance<Scalar>()};  // compared directly against whatever ResidualPolicy
-                                                      // reports -- no unit baked in here, that's the policy's job
+                                                     // reports -- no unit baked in here, that's the policy's job
 };
 
 /// \brief The linear system A x = b for a square operator A.
@@ -75,8 +75,7 @@ struct CGConfig {
 template <typename Backend, typename LinearOp, typename RhsVector,
           typename Workspace = impl::workspace_for_t<std::remove_cvref_t<LinearOp>>>
 MUNDY_REQUIRES(LinearOperator<Backend, std::remove_cvref_t<LinearOp>, std::remove_cvref_t<RhsVector>,
-                              std::remove_cvref_t<RhsVector>> &&
-              VectorBackend<Backend, std::remove_cvref_t<RhsVector>>)
+                              std::remove_cvref_t<RhsVector>>&& VectorBackend<Backend, std::remove_cvref_t<RhsVector>>)
 class LinearSystem {
  public:
   using backend_t = Backend;
@@ -295,7 +294,7 @@ KOKKOS_INLINE_FUNCTION auto make_cg_solution_strategy(const CGConfig<Scalar>& cf
 template <class XVector, class RVector, class PVector, class ApVector>
 KOKKOS_INLINE_FUNCTION auto make_cg_state(XVector&& x, RVector&& r, PVector&& p, ApVector&& ap) {
   return CGState(std::forward<XVector>(x), std::forward<RVector>(r), std::forward<PVector>(p),
-                        std::forward<ApVector>(ap));
+                 std::forward<ApVector>(ap));
 }
 //@}
 
@@ -375,7 +374,7 @@ class CGInvOp {
     auto state = CGState(x_, r_, p_, ap_);
     auto strat = CGStrategy(L2Residual{}, cfg_);
     last_result_ = solve_linear_system(prob, strat, state);
-  
+
     // A non-converged CG would silently return a wrong answer with no way for us to inform the caller, so we throw.
     MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error, "CGInvOp: inner CG solve failed to converge.");
     Backend::deep_copy(out, x_);

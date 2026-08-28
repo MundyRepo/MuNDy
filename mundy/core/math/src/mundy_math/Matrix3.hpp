@@ -200,35 +200,6 @@ concept ValidMatrix3Type = is_matrix3_v<std::decay_t<Matrix3Type>> &&
 static_assert(is_matrix3_v<Matrix3<int>>, "Odd, default matrix3 is not a matrix3.");
 static_assert(is_matrix3_v<AMatrix3<int, Array<int, 9>>>, "Odd, default matrix3 with Array accessor is not a matrix3.");
 
-//! \name AMatrix3<T, Accessor> views
-//@{
-
-/// \brief A helper function to create a AMatrix3<T, Accessor> based on a given (valid) accessor.
-/// \param[in] data The data accessor.
-///
-/// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a AMatrix3<T, Accessor> from a data accessor.
-/// Instead of writing
-/// \code
-///   AMatrix3<T, Accessor> mat(data);
-/// \endcode
-/// you can write
-/// \code
-///   auto mat = get_matrix3_view<T>(data);
-/// \endcode
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_matrix3_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return AMatrix3<T, decltype(data_storage)>(data_storage);
-}
-
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return AMatrix3<T, decltype(data_storage)>(data_storage);
-}
-//@}
-
 //@}
 
 }  // namespace mundy

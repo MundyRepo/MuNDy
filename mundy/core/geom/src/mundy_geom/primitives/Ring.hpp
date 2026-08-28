@@ -265,7 +265,8 @@ class Ring {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy,
+                                 const value_type& qz) {
     center_circle_.set_orientation(qw, qx, qy, qz);
   }
 
@@ -331,16 +332,16 @@ template <ValidRingType T1, ValidRingType T2>
 KOKKOS_FUNCTION constexpr bool is_close(
     const T1& r1, const T2& r2,
     typename T1::value_type tol = get_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
-  return is_close(r1.major_radius(), r2.major_radius(), tol) &&
-         is_close(r1.minor_radius(), r2.minor_radius(), tol) && is_close(r1.center(), r2.center(), tol) &&
-         is_close(r1.orientation(), r2.orientation(), tol);
+  return is_close(r1.major_radius(), r2.major_radius(), tol) && is_close(r1.minor_radius(), r2.minor_radius(), tol) &&
+         is_close(r1.center(), r2.center(), tol) && is_close(r1.orientation(), r2.orientation(), tol);
 }
 
 /// \brief Element-wise approximate equality (within a relaxed tolerance)
 template <ValidRingType T1, ValidRingType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& r1, const T2& r2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(r1, r2, tol);
 }
 

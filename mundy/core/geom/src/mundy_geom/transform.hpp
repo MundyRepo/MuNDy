@@ -109,7 +109,7 @@ template <ValidVSegmentType VSegmentT, ValidVector3Type Vector3T>
 MUNDY_REQUIRES(std::is_same_v<typename VSegmentT::value_type, typename Vector3T::value_type>)
 KOKKOS_INLINE_FUNCTION auto translate(const VSegmentT& v_segment, const Vector3T& disp) {
   return VSegment<typename Vector3T::value_type>(v_segment.start() + disp, v_segment.middle() + disp,
-                                               v_segment.end() + disp);
+                                                 v_segment.end() + disp);
 }
 
 /// \brief Translate a v-segment by a given displacement vector (inplace)
@@ -169,7 +169,7 @@ template <ValidSpherocylinderType SpherocylinderT, ValidVector3Type Vector3T>
 MUNDY_REQUIRES(std::is_same_v<typename SpherocylinderT::value_type, typename Vector3T::value_type>)
 KOKKOS_INLINE_FUNCTION auto translate(const SpherocylinderT& spherocylinder, const Vector3T& disp) {
   return Spherocylinder<typename Vector3T::value_type>(spherocylinder.center() + disp, spherocylinder.orientation(),
-                                                     spherocylinder.radius(), spherocylinder.length());
+                                                       spherocylinder.radius(), spherocylinder.length());
 }
 
 /// \brief Translate a spherocylinder by a given displacement vector (inplace)
@@ -184,7 +184,7 @@ template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, ValidVector3Typ
 MUNDY_REQUIRES(std::is_same_v<typename SpherocylinderSegmentT::value_type, typename Vector3T::value_type>)
 KOKKOS_INLINE_FUNCTION auto translate(const SpherocylinderSegmentT& spherocylinder_segment, const Vector3T& disp) {
   return SpherocylinderSegment<typename Vector3T::value_type>(spherocylinder_segment.start() + disp,
-                                                            spherocylinder_segment.end() + disp);
+                                                              spherocylinder_segment.end() + disp);
 }
 
 /// \brief Translate a spherocylinder segment by a given displacement vector (inplace)
@@ -200,7 +200,7 @@ template <ValidRingType RingT, ValidVector3Type Vector3T>
 MUNDY_REQUIRES(std::is_same_v<typename RingT::value_type, typename Vector3T::value_type>)
 KOKKOS_INLINE_FUNCTION auto translate(const RingT& ring, const Vector3T& disp) {
   return Ring<typename Vector3T::value_type>(ring.center() + disp, ring.orientation(), ring.major_radius(),
-                                           ring.minor_radius());
+                                             ring.minor_radius());
 }
 
 /// \brief Translate a ring by a given displacement vector (inplace)
@@ -214,7 +214,8 @@ KOKKOS_INLINE_FUNCTION void translate_inplace(RingT& ring, const Vector3T& disp)
 template <ValidEllipsoidType EllipsoidT, ValidVector3Type Vector3T>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidT::value_type, typename Vector3T::value_type>)
 KOKKOS_INLINE_FUNCTION auto translate(const EllipsoidT& ellipsoid, const Vector3T& disp) {
-  return Ellipsoid<typename Vector3T::value_type>(ellipsoid.center() + disp, ellipsoid.orientation(), ellipsoid.radii());
+  return Ellipsoid<typename Vector3T::value_type>(ellipsoid.center() + disp, ellipsoid.orientation(),
+                                                  ellipsoid.radii());
 }
 
 /// \brief Translate an ellipsoid by a given displacement vector (inplace)
@@ -276,7 +277,7 @@ KOKKOS_INLINE_FUNCTION void rotate_inplace(LineT& line, const QuaternionT& q) {
 template <ValidLineSegmentType LineSegmentT, ValidQuaternionType QuaternionT>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentT::value_type, typename QuaternionT::value_type>)
 KOKKOS_INLINE_FUNCTION LineSegment<typename QuaternionT::value_type> rotate(const LineSegmentT& line_segment,
-                                                                          const QuaternionT& q) {
+                                                                            const QuaternionT& q) {
   return LineSegment<typename QuaternionT::value_type>(q * line_segment.start(), q * line_segment.end());
 }
 
@@ -292,7 +293,7 @@ KOKKOS_INLINE_FUNCTION void rotate_inplace(LineSegmentT& line_segment, const Qua
 template <ValidVSegmentType VSegmentT, ValidQuaternionType QuaternionT>
 MUNDY_REQUIRES(std::is_same_v<typename VSegmentT::value_type, typename QuaternionT::value_type>)
 KOKKOS_INLINE_FUNCTION VSegment<typename QuaternionT::value_type> rotate(const VSegmentT& v_segment,
-                                                                       const QuaternionT& q) {
+                                                                         const QuaternionT& q) {
   return VSegment<typename QuaternionT::value_type>(q * v_segment.start(), q * v_segment.middle(), q * v_segment.end());
 }
 
@@ -308,7 +309,8 @@ KOKKOS_INLINE_FUNCTION void rotate_inplace(VSegmentT& v_segment, const Quaternio
 /// \brief Rotate a circle3D about the origin by a given quaternion
 template <ValidCircle3DType Circle3DT, ValidQuaternionType QuaternionT>
 MUNDY_REQUIRES(std::is_same_v<typename Circle3DT::value_type, typename QuaternionT::value_type>)
-KOKKOS_INLINE_FUNCTION Circle3D<typename QuaternionT::value_type> rotate(const Circle3DT& circle, const QuaternionT& q) {
+KOKKOS_INLINE_FUNCTION Circle3D<typename QuaternionT::value_type> rotate(const Circle3DT& circle,
+                                                                         const QuaternionT& q) {
   return Circle3D<typename QuaternionT::value_type>(q * circle.center(), circle.orientation() * q, circle.radius());
 }
 
@@ -356,9 +358,9 @@ KOKKOS_INLINE_FUNCTION void rotate_inplace(SphereT& sphere, const QuaternionT& q
 template <ValidSpherocylinderType SpherocylinderT, ValidQuaternionType QuaternionT>
 MUNDY_REQUIRES(std::is_same_v<typename SpherocylinderT::value_type, typename QuaternionT::value_type>)
 KOKKOS_INLINE_FUNCTION Spherocylinder<typename QuaternionT::value_type> rotate(const SpherocylinderT& spherocylinder,
-                                                                             const QuaternionT& q) {
+                                                                               const QuaternionT& q) {
   return Spherocylinder<typename QuaternionT::value_type>(q * spherocylinder.center(), spherocylinder.orientation() * q,
-                                                        spherocylinder.radius(), spherocylinder.length());
+                                                          spherocylinder.radius(), spherocylinder.length());
 }
 
 /// \brief Rotate a spherocylinder about the origin by a given quaternion (inplace)
@@ -375,7 +377,7 @@ MUNDY_REQUIRES(std::is_same_v<typename SpherocylinderSegmentT::value_type, typen
 KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename QuaternionT::value_type> rotate(
     const SpherocylinderSegmentT& spherocylinder_segment, const QuaternionT& q) {
   return SpherocylinderSegment<typename QuaternionT::value_type>(q * spherocylinder_segment.start(),
-                                                               q * spherocylinder_segment.end());
+                                                                 q * spherocylinder_segment.end());
 }
 
 /// \brief Rotate a spherocylinder segment about the origin by a given quaternion (inplace)
@@ -391,7 +393,7 @@ template <ValidRingType RingT, ValidQuaternionType QuaternionT>
 MUNDY_REQUIRES(std::is_same_v<typename RingT::value_type, typename QuaternionT::value_type>)
 KOKKOS_INLINE_FUNCTION Ring<typename QuaternionT::value_type> rotate(const RingT& ring, const QuaternionT& q) {
   return Ring<typename QuaternionT::value_type>(q * ring.center(), ring.orientation() * q, ring.major_radius(),
-                                              ring.minor_radius());
+                                                ring.minor_radius());
 }
 
 /// \brief Rotate a ring about the origin by a given quaternion (inplace)
@@ -406,9 +408,9 @@ KOKKOS_INLINE_FUNCTION void rotate_inplace(RingT& ring, const QuaternionT& q) {
 template <ValidEllipsoidType EllipsoidT, ValidQuaternionType QuaternionT>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidT::value_type, typename QuaternionT::value_type>)
 KOKKOS_INLINE_FUNCTION Ellipsoid<typename QuaternionT::value_type> rotate(const EllipsoidT& ellipsoid,
-                                                                        const QuaternionT& q) {
+                                                                          const QuaternionT& q) {
   return Ellipsoid<typename QuaternionT::value_type>(q * ellipsoid.center(), ellipsoid.orientation() * q,
-                                                   ellipsoid.radii());
+                                                     ellipsoid.radii());
 }
 
 /// \brief Rotate an ellipsoid about the origin by a given quaternion (inplace)

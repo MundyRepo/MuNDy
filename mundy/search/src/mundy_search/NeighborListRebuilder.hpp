@@ -47,12 +47,12 @@
 #include <mundy_math/cmath.hpp>
 #include <mundy_mesh/EntityIndices.hpp>  // for mundy::mesh::get_local_entities, get_local_entity_indices
 #include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::AABBFieldComponent/OBBFieldComponent, get_updated_ngp_component
-#include <mundy_mesh/NgpFieldBLAS.hpp>    // for mundy::mesh::field_copy
+#include <mundy_mesh/NgpFieldBLAS.hpp>                 // for mundy::mesh::field_copy
 #include <mundy_mesh/impl/DeclareUniqueFieldLike.hpp>  // for mundy::mesh::impl::declare_unique_field_like
 #include <mundy_search/NeighborListBuildTraits.hpp>    // for AABBSearchInputTypeFor
 #include <mundy_search/SearchInput.hpp>                // for SearchInput
 #include <mundy_utils/host_ptr.hpp>                    // for host_ptr
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -377,7 +377,8 @@ class RebuildOnEntityChange {
   }
   //@}
 
-  //! \name Internal helpers TODO(palmerb4): Make these private somehow but handle CUDA's complain about device lambdas in private methods.
+  //! \name Internal helpers TODO(palmerb4): Make these private somehow but handle CUDA's complain about device lambdas
+  //! in private methods.
   //@{
 
   /// \brief Enumerate the current entities of an input's chunk into a device view (selector order).
@@ -418,7 +419,6 @@ class RebuildOnEntityChange {
   }
   //@}
  private:
-
   //! \name Internal members
   //@{
 
@@ -639,6 +639,7 @@ class RebuildOnAABBDisplacement {
     }
   }
 
+ public:
   /// \brief Return true if any AABB corner has moved beyond `threshold` under the metric.
   ///
   /// `ngp_live` holds the current corners and `ngp_scratch` the snapshot corners; both are read at the same
@@ -662,9 +663,11 @@ class RebuildOnAABBDisplacement {
         KOKKOS_LAMBDA(int i, int& lmax) {
           const auto aabb = ngp_live(d_indices(i));
           const auto aabb_old = ngp_scratch(d_indices(i));
-          const Point<scalar_type> old_min{aabb_old.min_corner()[0], aabb_old.min_corner()[1], aabb_old.min_corner()[2]};
+          const Point<scalar_type> old_min{aabb_old.min_corner()[0], aabb_old.min_corner()[1],
+                                           aabb_old.min_corner()[2]};
           const Point<scalar_type> new_min{aabb.min_corner()[0], aabb.min_corner()[1], aabb.min_corner()[2]};
-          const Point<scalar_type> old_max{aabb_old.max_corner()[0], aabb_old.max_corner()[1], aabb_old.max_corner()[2]};
+          const Point<scalar_type> old_max{aabb_old.max_corner()[0], aabb_old.max_corner()[1],
+                                           aabb_old.max_corner()[2]};
           const Point<scalar_type> new_max{aabb.max_corner()[0], aabb.max_corner()[1], aabb.max_corner()[2]};
           // met.sep gives the minimum-image displacement (identity for FreeSpaceMetric).
           const auto d_min = met.sep(old_min, new_min);
@@ -680,6 +683,7 @@ class RebuildOnAABBDisplacement {
   }
   //@}
 
+ private:
   //! \name Internal members
   //@{
 
@@ -934,6 +938,7 @@ class RebuildOnOBBDisplacement {
   //! \name Internal helpers
   //@{
 
+ public:
   /// \brief Return true if any current OBB has escaped its inflated snapshot entry.
   ///
   /// `ngp_live` holds the current OBBs and `ngp_scratch` the snapshot OBBs; both are read at the same FastMeshIndex
@@ -985,6 +990,7 @@ class RebuildOnOBBDisplacement {
   }
   //@}
 
+ private:
   //! \name Internal members
   //@{
 

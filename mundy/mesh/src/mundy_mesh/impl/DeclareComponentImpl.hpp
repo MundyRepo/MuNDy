@@ -44,12 +44,12 @@
 #include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::FieldOutputType
 
 // Mundy
-#include <mundy_mesh/Component.hpp>         // for make_tagged_component
-#include <mundy_mesh/ComponentAccess.hpp>   // for component_access_shape, canonical_component_access_t
-#include <mundy_mesh/DeclareField.hpp>      // for FieldDeclaration, FieldDeclarationT, impl::FieldDeclarationSnapshot
-#include <mundy_mesh/FieldComponent.hpp>    // for FieldComponent, ScalarFieldComponent, VectorFieldComponent, ...
-#include <mundy_mesh/SharedComponent.hpp>   // for SharedComponent, SharedScalarComponent, ...
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE, sink
+#include <mundy_mesh/Component.hpp>        // for make_tagged_component
+#include <mundy_mesh/ComponentAccess.hpp>  // for component_access_shape, canonical_component_access_t
+#include <mundy_mesh/DeclareField.hpp>     // for FieldDeclaration, FieldDeclarationT, impl::FieldDeclarationSnapshot
+#include <mundy_mesh/FieldComponent.hpp>   // for FieldComponent, ScalarFieldComponent, VectorFieldComponent, ...
+#include <mundy_mesh/SharedComponent.hpp>  // for SharedComponent, SharedScalarComponent, ...
+#include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_REQUIRE, sink
 
 namespace mundy {
 
@@ -150,29 +150,51 @@ struct shared_component_for<access::aabb<ScalarType>> {
 
 inline unsigned io_output_type_scalar_count(stk::io::FieldOutputType type) {
   switch (type) {
-    case stk::io::FieldOutputType::SCALAR:          return 1;
-    case stk::io::FieldOutputType::VECTOR_2D:       return 2;
-    case stk::io::FieldOutputType::VECTOR_3D:       return 3;
-    case stk::io::FieldOutputType::FULL_TENSOR_36:  return 9;
-    case stk::io::FieldOutputType::FULL_TENSOR_32:  return 5;
-    case stk::io::FieldOutputType::FULL_TENSOR_22:  return 4;
-    case stk::io::FieldOutputType::FULL_TENSOR_16:  return 7;
-    case stk::io::FieldOutputType::FULL_TENSOR_12:  return 3;
-    case stk::io::FieldOutputType::SYM_TENSOR_33:   return 6;
-    case stk::io::FieldOutputType::SYM_TENSOR_31:   return 4;
-    case stk::io::FieldOutputType::SYM_TENSOR_21:   return 3;
-    case stk::io::FieldOutputType::SYM_TENSOR_13:   return 4;
-    case stk::io::FieldOutputType::SYM_TENSOR_11:   return 2;
-    case stk::io::FieldOutputType::SYM_TENSOR_10:   return 1;
-    case stk::io::FieldOutputType::ASYM_TENSOR_03:  return 3;
-    case stk::io::FieldOutputType::ASYM_TENSOR_02:  return 2;
-    case stk::io::FieldOutputType::ASYM_TENSOR_01:  return 1;
-    case stk::io::FieldOutputType::MATRIX_22:       return 4;
-    case stk::io::FieldOutputType::MATRIX_33:       return 9;
-    case stk::io::FieldOutputType::QUATERNION_2D:   return 2;
-    case stk::io::FieldOutputType::QUATERNION_3D:   return 4;
+    case stk::io::FieldOutputType::SCALAR:
+      return 1;
+    case stk::io::FieldOutputType::VECTOR_2D:
+      return 2;
+    case stk::io::FieldOutputType::VECTOR_3D:
+      return 3;
+    case stk::io::FieldOutputType::FULL_TENSOR_36:
+      return 9;
+    case stk::io::FieldOutputType::FULL_TENSOR_32:
+      return 5;
+    case stk::io::FieldOutputType::FULL_TENSOR_22:
+      return 4;
+    case stk::io::FieldOutputType::FULL_TENSOR_16:
+      return 7;
+    case stk::io::FieldOutputType::FULL_TENSOR_12:
+      return 3;
+    case stk::io::FieldOutputType::SYM_TENSOR_33:
+      return 6;
+    case stk::io::FieldOutputType::SYM_TENSOR_31:
+      return 4;
+    case stk::io::FieldOutputType::SYM_TENSOR_21:
+      return 3;
+    case stk::io::FieldOutputType::SYM_TENSOR_13:
+      return 4;
+    case stk::io::FieldOutputType::SYM_TENSOR_11:
+      return 2;
+    case stk::io::FieldOutputType::SYM_TENSOR_10:
+      return 1;
+    case stk::io::FieldOutputType::ASYM_TENSOR_03:
+      return 3;
+    case stk::io::FieldOutputType::ASYM_TENSOR_02:
+      return 2;
+    case stk::io::FieldOutputType::ASYM_TENSOR_01:
+      return 1;
+    case stk::io::FieldOutputType::MATRIX_22:
+      return 4;
+    case stk::io::FieldOutputType::MATRIX_33:
+      return 9;
+    case stk::io::FieldOutputType::QUATERNION_2D:
+      return 2;
+    case stk::io::FieldOutputType::QUATERNION_3D:
+      return 4;
     case stk::io::FieldOutputType::CUSTOM:
-    default:                                        return 0;
+    default:
+      return 0;
   }
 }
 
@@ -181,10 +203,14 @@ inline unsigned io_output_type_scalar_count(stk::io::FieldOutputType type) {
 // ======================================================================================================================
 
 template <typename ValueType>
-std::string component_access_name(access::raw<ValueType>) { return "raw"; }
+std::string component_access_name(access::raw<ValueType>) {
+  return "raw";
+}
 
 template <typename ScalarType>
-std::string component_access_name(access::scalar<ScalarType>) { return "scalar"; }
+std::string component_access_name(access::scalar<ScalarType>) {
+  return "scalar";
+}
 
 template <typename ScalarType, size_t N>
 std::string component_access_name(access::vector<ScalarType, N>) {
@@ -197,16 +223,24 @@ std::string component_access_name(access::matrix<ScalarType, N, M>) {
 }
 
 template <typename ScalarType>
-std::string component_access_name(access::quaternion<ScalarType>) { return "quaternion"; }
+std::string component_access_name(access::quaternion<ScalarType>) {
+  return "quaternion";
+}
 
 template <typename ScalarType>
-std::string component_access_name(access::aabb<ScalarType>) { return "aabb"; }
+std::string component_access_name(access::aabb<ScalarType>) {
+  return "aabb";
+}
 
 template <typename ScalarType>
-std::string component_access_name(access::obb<ScalarType>) { return "obb"; }
+std::string component_access_name(access::obb<ScalarType>) {
+  return "obb";
+}
 
 template <typename CanonicalAccess>
-std::string component_access_name() { return component_access_name(CanonicalAccess{}); }
+std::string component_access_name() {
+  return component_access_name(CanonicalAccess{});
+}
 
 // ======================================================================================================================
 // component_default_output_type — maps a canonical access tag to its STK IO output type (if one exists).
@@ -258,23 +292,23 @@ struct component_default_output_type<access::quaternion<ScalarType>> {
 
 template <typename CanonicalAccess>
 void apply_default_output_type_if_needed(FieldDeclarationSnapshot& snapshot) {
-  using shape       = component_access_shape<CanonicalAccess>;
+  using shape = component_access_shape<CanonicalAccess>;
   using output_type = component_default_output_type<CanonicalAccess>;
 
   if (!snapshot.has_output_type) {
     if constexpr (output_type::has_default) {
       snapshot.has_output_type = true;
-      snapshot.output_type     = output_type::value;
+      snapshot.output_type = output_type::value;
     }
   } else if constexpr (shape::has_fixed_field_scalars) {
     const unsigned user_count = io_output_type_scalar_count(snapshot.output_type);
     if (user_count != 0) {
-      MUNDY_THROW_REQUIRE(
-          user_count == shape::field_scalars, std::invalid_argument,
-          sink() << "Component declaration for '" << snapshot.field_name << "' specifies an output type with "
-                 << user_count << " scalars, but access '" << component_access_name<CanonicalAccess>()
-                 << "' requires " << shape::field_scalars << " scalars. "
-                 << "Use CUSTOM output type for non-standard subscripting.");
+      MUNDY_THROW_REQUIRE(user_count == shape::field_scalars, std::invalid_argument,
+                          sink() << "Component declaration for '" << snapshot.field_name
+                                 << "' specifies an output type with " << user_count << " scalars, but access '"
+                                 << component_access_name<CanonicalAccess>() << "' requires " << shape::field_scalars
+                                 << " scalars. "
+                                 << "Use CUSTOM output type for non-standard subscripting.");
     }
   }
 }
@@ -337,16 +371,16 @@ class ComponentDeclaration;
 template <typename FieldScalarType, typename Tag>
 class TaggedFieldDeclarationT {
  public:
-  using our_t           = TaggedFieldDeclarationT<FieldScalarType, Tag>;
+  using our_t = TaggedFieldDeclarationT<FieldScalarType, Tag>;
   using field_value_typeype = std::remove_cvref_t<FieldScalarType>;
 
   //! \name Constructors and Assignment Operators
   //@{
 
   TaggedFieldDeclarationT(const TaggedFieldDeclarationT&) = default;
-  TaggedFieldDeclarationT(TaggedFieldDeclarationT&&)      = default;
+  TaggedFieldDeclarationT(TaggedFieldDeclarationT&&) = default;
   TaggedFieldDeclarationT& operator=(const TaggedFieldDeclarationT&) = default;
-  TaggedFieldDeclarationT& operator=(TaggedFieldDeclarationT&&)      = default;
+  TaggedFieldDeclarationT& operator=(TaggedFieldDeclarationT&&) = default;
 
   //@}
 
@@ -357,14 +391,14 @@ class TaggedFieldDeclarationT {
   our_t rank(stk::mesh::EntityRank rank) const {
     our_t copy = *this;
     copy.snapshot_.has_rank = true;
-    copy.snapshot_.rank     = rank;
+    copy.snapshot_.rank = rank;
     return copy;
   }
 
   /// \brief Set the name of the component.
   our_t name(const std::string& field_name) const {
     our_t copy = *this;
-    copy.snapshot_.has_name   = true;
+    copy.snapshot_.has_name = true;
     copy.snapshot_.field_name = field_name;
     return copy;
   }
@@ -372,7 +406,7 @@ class TaggedFieldDeclarationT {
   /// \brief Set the I/O role for the component.
   our_t role(Ioss::Field::RoleType field_role) const {
     our_t copy = *this;
-    copy.snapshot_.has_role   = true;
+    copy.snapshot_.has_role = true;
     copy.snapshot_.field_role = field_role;
     return copy;
   }
@@ -381,7 +415,7 @@ class TaggedFieldDeclarationT {
   our_t output_type(stk::io::FieldOutputType output_type) const {
     our_t copy = *this;
     copy.snapshot_.has_output_type = true;
-    copy.snapshot_.output_type     = output_type;
+    copy.snapshot_.output_type = output_type;
     return copy;
   }
 
@@ -406,13 +440,13 @@ class TaggedFieldDeclarationT {
   template <typename AccessLike, typename SharedSource>
   auto shared(SharedSource&& source) const {
     using canonical_access = canonical_component_access_t<AccessLike>;
-    using shape            = component_access_shape<canonical_access>;
-    using source_type      = std::decay_t<SharedSource>;
-    using shared_value_t   = impl::shared_component_source_value_t<source_type>;
+    using shape = component_access_shape<canonical_access>;
+    using source_type = std::decay_t<SharedSource>;
+    using shared_value_t = impl::shared_component_source_value_t<source_type>;
     static_assert(std::is_same_v<shared_value_t, typename shape::shared_value_type>,
                   "Shared source value type is incompatible with the chosen component access.");
-    return TaggedSharedComponentDeclarationT<source_type, AccessLike, Tag>(
-        std::forward<SharedSource>(source), snapshot_);
+    return TaggedSharedComponentDeclarationT<source_type, AccessLike, Tag>(std::forward<SharedSource>(source),
+                                                                           snapshot_);
   }
 
   /// \brief Replace the current tag, returning a new builder with the new tag.
@@ -424,8 +458,8 @@ class TaggedFieldDeclarationT {
   //@}
 
  private:
-  explicit TaggedFieldDeclarationT(impl::FieldDeclarationSnapshot snapshot)
-      : snapshot_(std::move(snapshot)) {}
+  explicit TaggedFieldDeclarationT(impl::FieldDeclarationSnapshot snapshot) : snapshot_(std::move(snapshot)) {
+  }
 
   impl::FieldDeclarationSnapshot snapshot_;
 
@@ -453,13 +487,12 @@ class TaggedFieldDeclarationT {
 template <typename FieldScalarType, typename AccessLike, typename Tag>
 class TaggedFieldBackedDeclarationHelperT {
  public:
-  using our_t          = TaggedFieldBackedDeclarationHelperT<FieldScalarType, AccessLike, Tag>;
-  using access_like    = AccessLike;
+  using our_t = TaggedFieldBackedDeclarationHelperT<FieldScalarType, AccessLike, Tag>;
+  using access_like = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
-  using shape          = component_access_shape<canonical_access>;
-  using field_value_typeype =
-      std::conditional_t<std::is_void_v<FieldScalarType>, typename shape::field_value_typeype,
-                         std::remove_cvref_t<FieldScalarType>>;
+  using shape = component_access_shape<canonical_access>;
+  using field_value_typeype = std::conditional_t<std::is_void_v<FieldScalarType>, typename shape::field_value_typeype,
+                                                 std::remove_cvref_t<FieldScalarType>>;
 
   static_assert(std::is_void_v<FieldScalarType> ||
                     std::is_same_v<std::remove_cvref_t<FieldScalarType>, typename shape::field_value_typeype>,
@@ -469,9 +502,9 @@ class TaggedFieldBackedDeclarationHelperT {
   //@{
 
   TaggedFieldBackedDeclarationHelperT(const TaggedFieldBackedDeclarationHelperT&) = default;
-  TaggedFieldBackedDeclarationHelperT(TaggedFieldBackedDeclarationHelperT&&)      = default;
+  TaggedFieldBackedDeclarationHelperT(TaggedFieldBackedDeclarationHelperT&&) = default;
   TaggedFieldBackedDeclarationHelperT& operator=(const TaggedFieldBackedDeclarationHelperT&) = default;
-  TaggedFieldBackedDeclarationHelperT& operator=(TaggedFieldBackedDeclarationHelperT&&)      = default;
+  TaggedFieldBackedDeclarationHelperT& operator=(TaggedFieldBackedDeclarationHelperT&&) = default;
 
   //@}
 
@@ -482,14 +515,14 @@ class TaggedFieldBackedDeclarationHelperT {
   our_t rank(stk::mesh::EntityRank rank) const {
     our_t copy = *this;
     copy.snapshot_.has_rank = true;
-    copy.snapshot_.rank     = rank;
+    copy.snapshot_.rank = rank;
     return copy;
   }
 
   /// \brief Set the name of the component.
   our_t name(const std::string& field_name) const {
     our_t copy = *this;
-    copy.snapshot_.has_name   = true;
+    copy.snapshot_.has_name = true;
     copy.snapshot_.field_name = field_name;
     return copy;
   }
@@ -497,7 +530,7 @@ class TaggedFieldBackedDeclarationHelperT {
   /// \brief Set the I/O role for the component.
   our_t role(Ioss::Field::RoleType field_role) const {
     our_t copy = *this;
-    copy.snapshot_.has_role   = true;
+    copy.snapshot_.has_role = true;
     copy.snapshot_.field_role = field_role;
     return copy;
   }
@@ -506,7 +539,7 @@ class TaggedFieldBackedDeclarationHelperT {
   our_t output_type(stk::io::FieldOutputType output_type) const {
     our_t copy = *this;
     copy.snapshot_.has_output_type = true;
-    copy.snapshot_.output_type     = output_type;
+    copy.snapshot_.output_type = output_type;
     return copy;
   }
 
@@ -539,11 +572,9 @@ class TaggedFieldBackedDeclarationHelperT {
     auto snapshot = snapshot_;
     impl::apply_default_output_type_if_needed<canonical_access>(snapshot);
 
-    stk::mesh::Field<field_value_typeype>& field =
-        impl::declare_field_from_snapshot<field_value_typeype>(snapshot);
+    stk::mesh::Field<field_value_typeype>& field = impl::declare_field_from_snapshot<field_value_typeype>(snapshot);
 
-    using component_type =
-        typename impl::field_component_for<canonical_access>::template type<field_value_typeype>;
+    using component_type = typename impl::field_component_for<canonical_access>::template type<field_value_typeype>;
     component_type component(field);
 
     if constexpr (std::is_void_v<Tag>) {
@@ -557,7 +588,8 @@ class TaggedFieldBackedDeclarationHelperT {
 
  private:
   explicit TaggedFieldBackedDeclarationHelperT(impl::FieldDeclarationSnapshot snapshot)
-      : snapshot_(std::move(snapshot)) {}
+      : snapshot_(std::move(snapshot)) {
+  }
 
   impl::FieldDeclarationSnapshot snapshot_;
 
@@ -587,11 +619,11 @@ class TaggedFieldBackedDeclarationHelperT {
 template <typename SharedSource, typename AccessLike, typename Tag = void>
 class TaggedSharedComponentDeclarationT {
  public:
-  using our_t            = TaggedSharedComponentDeclarationT<SharedSource, AccessLike, Tag>;
+  using our_t = TaggedSharedComponentDeclarationT<SharedSource, AccessLike, Tag>;
   using shared_source_type = SharedSource;
-  using access_like      = AccessLike;
+  using access_like = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
-  using shape            = component_access_shape<canonical_access>;
+  using shape = component_access_shape<canonical_access>;
   using shared_value_type = impl::shared_component_source_value_t<shared_source_type>;
 
   static_assert(std::is_same_v<shared_value_type, typename shape::shared_value_type>,
@@ -602,13 +634,14 @@ class TaggedSharedComponentDeclarationT {
 
   /// \brief Construct from a shared source value; snapshot carries optional metadata from the builder chain.
   explicit TaggedSharedComponentDeclarationT(shared_source_type shared_source,
-                                                   impl::FieldDeclarationSnapshot snapshot = {})
-      : shared_source_(std::move(shared_source)), snapshot_(std::move(snapshot)) {}
+                                             impl::FieldDeclarationSnapshot snapshot = {})
+      : shared_source_(std::move(shared_source)), snapshot_(std::move(snapshot)) {
+  }
 
   TaggedSharedComponentDeclarationT(const TaggedSharedComponentDeclarationT&) = default;
-  TaggedSharedComponentDeclarationT(TaggedSharedComponentDeclarationT&&)      = default;
+  TaggedSharedComponentDeclarationT(TaggedSharedComponentDeclarationT&&) = default;
   TaggedSharedComponentDeclarationT& operator=(const TaggedSharedComponentDeclarationT&) = default;
-  TaggedSharedComponentDeclarationT& operator=(TaggedSharedComponentDeclarationT&&)      = default;
+  TaggedSharedComponentDeclarationT& operator=(TaggedSharedComponentDeclarationT&&) = default;
 
   //@}
 
@@ -619,14 +652,14 @@ class TaggedSharedComponentDeclarationT {
   our_t rank(stk::mesh::EntityRank rank) const {
     our_t copy = *this;
     copy.snapshot_.has_rank = true;
-    copy.snapshot_.rank     = rank;
+    copy.snapshot_.rank = rank;
     return copy;
   }
 
   /// \brief Set the name of the component.
   our_t name(const std::string& component_name) const {
     our_t copy = *this;
-    copy.snapshot_.has_name   = true;
+    copy.snapshot_.has_name = true;
     copy.snapshot_.field_name = component_name;
     return copy;
   }
@@ -634,8 +667,7 @@ class TaggedSharedComponentDeclarationT {
   /// \brief Replace the semantic tag.
   template <typename NewTag>
   auto tag() const {
-    return TaggedSharedComponentDeclarationT<shared_source_type, AccessLike, NewTag>(
-        shared_source_, snapshot_);
+    return TaggedSharedComponentDeclarationT<shared_source_type, AccessLike, NewTag>(shared_source_, snapshot_);
   }
 
   //@}
@@ -672,8 +704,8 @@ class TaggedSharedComponentDeclarationT {
   //@}
 
  private:
-  shared_source_type              shared_source_;
-  impl::FieldDeclarationSnapshot  snapshot_;
+  shared_source_type shared_source_;
+  impl::FieldDeclarationSnapshot snapshot_;
 
   template <typename OtherSrc, typename OtherAL, typename OtherTag>
   friend class TaggedSharedComponentDeclarationT;

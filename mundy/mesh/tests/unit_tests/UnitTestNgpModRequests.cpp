@@ -588,15 +588,15 @@ TEST(NgpModRequests, RequestLinks_TwoLinkDataObjects) {
   NgpModRequests reqs;
   auto req_links_a = reqs.request_entities_new_ids(*link_part_a);
   auto req_links_b = reqs.request_entities_new_ids(*link_part_b);
-  auto req_rel_a   = reqs.request_links(link_data_a);
-  auto req_rel_b   = reqs.request_links(link_data_b);
+  auto req_rel_a = reqs.request_links(link_data_a);
+  auto req_rel_b = reqs.request_links(link_data_b);
 
   // request_links for two different LinkData must return helpers with different ids.
   EXPECT_NE(req_rel_a.id(), req_rel_b.id());
 
   reqs.activate_host();
-  size_t ta  = req_links_a.constraint_tickets().claim();
-  size_t tb  = req_links_b.constraint_tickets().claim();
+  size_t ta = req_links_a.constraint_tickets().claim();
+  size_t tb = req_links_b.constraint_tickets().claim();
   size_t ra0 = req_rel_a.tickets().claim();
   size_t ra1 = req_rel_a.tickets().claim();
   size_t rb0 = req_rel_b.tickets().claim();

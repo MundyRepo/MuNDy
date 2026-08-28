@@ -162,7 +162,8 @@ class Circle3D {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Circle3D<value_type, point_t, orientation_t>& operator=(Circle3D<value_type, point_t, orientation_t>&& other) {
+  constexpr Circle3D<value_type, point_t, orientation_t>& operator=(
+      Circle3D<value_type, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -195,7 +196,9 @@ class Circle3D {
   // clang-format on
 
   /// \brief Get a deep, owning copy of the Circle3D.
-  KOKKOS_FUNCTION constexpr deep_copy_t copy() const { return *this; }
+  KOKKOS_FUNCTION constexpr deep_copy_t copy() const {
+    return *this;
+  }
   //@}
 
   //! \name Setters
@@ -232,7 +235,8 @@ class Circle3D {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy,
+                                 const value_type& qz) {
     orientation_[0] = qw;
     orientation_[1] = qx;
     orientation_[2] = qy;
@@ -293,7 +297,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidCircle3DType T1, ValidCircle3DType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& c1, const T2& c2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(c1, c2, tol);
 }
 
@@ -332,11 +337,10 @@ namespace impl {
 template <ValidCircle3DType C>
 KOKKOS_FUNCTION Circle3D<passive_scalar_t<typename C::value_type>> passive_copy(const C& c) {
   using P = passive_scalar_t<typename C::value_type>;
-  return Circle3D<P>(
-      Point<P>(passive_value(c.center()[0]), passive_value(c.center()[1]), passive_value(c.center()[2])),
-      Quaternion<P>(passive_value(c.orientation().w()), passive_value(c.orientation().x()),
-                    passive_value(c.orientation().y()), passive_value(c.orientation().z())),
-      passive_value(c.radius()));
+  return Circle3D<P>(Point<P>(passive_value(c.center()[0]), passive_value(c.center()[1]), passive_value(c.center()[2])),
+                     Quaternion<P>(passive_value(c.orientation().w()), passive_value(c.orientation().x()),
+                                   passive_value(c.orientation().y()), passive_value(c.orientation().z())),
+                     passive_value(c.radius()));
 }
 
 }  // namespace impl

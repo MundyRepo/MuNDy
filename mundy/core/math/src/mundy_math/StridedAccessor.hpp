@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MATH_STRIDEDVIEW_HPP_
-#define MUNDY_MATH_STRIDEDVIEW_HPP_
+#ifndef MUNDY_MATH_STRIDEDACCESSOR_HPP_
+#define MUNDY_MATH_STRIDEDACCESSOR_HPP_
 
 // External
 #include <Kokkos_Core.hpp>
@@ -42,30 +42,31 @@ namespace mundy {
 /// \tparam stride The stride between elements
 /// \tparam Accessor The type of the contiguous accessor
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
-class StridedView {
+class StridedAccessor {
  public:
   storage<Accessor> accessor_;
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr StridedView(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  explicit constexpr StridedAccessor(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(accessor) {
   }
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr StridedView(Accessor&& accessor)
+  explicit constexpr StridedAccessor(Accessor&& accessor)
       MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
       : accessor_(std::forward<Accessor>(accessor)) {
   }
 
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedView(const StridedView<T, stride, Accessor>& other)
+  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(const StridedAccessor<T, stride, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedView(StridedView<T, stride, Accessor>&& other) : accessor_(other.accessor_) {
+  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(StridedAccessor<T, stride, Accessor>&& other)
+      : accessor_(other.accessor_) {
   }
 
   /// \brief Element access operator
@@ -77,37 +78,34 @@ class StridedView {
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     return impl::access_at(accessor_, idx * stride);
   }
-};  // class StridedView
+};  // class StridedAccessor
 
-//! \name StridedView views
+//! \name StridedAccessor views
 //@{
 
-/// \brief A helper function to create a StridedView<T, stride, Accessor> based on a given accessor.
+/// \brief A helper function to create a StridedAccessor<T, stride, Accessor> based on a given accessor.
 /// \param[in] data The data accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a StridedView<T, stride, Accessor> from a data accessor.
+/// when creating a StridedAccessor<T, stride, Accessor> from a data accessor.
 /// Instead of writing
 /// \code
-///   StridedView<T, stride, Accessor> vec(data);
+///   StridedAccessor<T, stride, Accessor> vec(data);
 /// \endcode
 /// you can write
 /// \code
-///   auto strided_data = get_strided_view<T, stride>(data);
+///   auto strided_data = get_strided_accessor<T, stride>(data);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_strided_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return StridedView<T, stride, decltype(data_storage)>(data_storage);
-}
-
-template <typename T, size_t stride, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_strided_accessor(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return StridedView<T, stride, decltype(data_storage)>(data_storage);
+KOKKOS_INLINE_FUNCTION constexpr auto get_strided_accessor(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return StridedAccessor<T, stride, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 //@}
 
 }  // namespace mundy
 
-#endif  // MUNDY_MATH_STRIDEDVIEW_HPP_
+#endif  // MUNDY_MATH_STRIDEDACCESSOR_HPP_

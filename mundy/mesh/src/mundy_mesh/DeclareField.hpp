@@ -37,9 +37,9 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 #include <mundy_mesh/impl/DeclareFieldImpl.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
-#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 

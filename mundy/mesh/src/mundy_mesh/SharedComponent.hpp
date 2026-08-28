@@ -46,6 +46,9 @@
 #include <stk_util/ngp/NgpSpaces.hpp>     // for stk::ngp::MemSpace
 
 // Mundy
+#include <mundy_math/Matrix.hpp>
+#include <mundy_math/Quaternion.hpp>
+#include <mundy_math/Vector.hpp>
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
 #include <mundy_mesh/Component.hpp>
 #include <mundy_mesh/FieldViews.hpp>       // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
@@ -53,9 +56,6 @@
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
 #include <mundy_mesh/impl/SharedComponentImpl.hpp>
-#include <mundy_math/Vector.hpp>
-#include <mundy_math/Matrix.hpp>
-#include <mundy_math/Quaternion.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
@@ -166,7 +166,7 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
   using our_t = SharedScalarComponent<ScalarType>;
   using base_t = SharedComponent<ScalarType>;
   using canonical_access = access::scalar<ScalarType>;
-  using view_t = decltype(get_scalar_view<ScalarType>(std::declval<ScalarType*>()));
+  using view_t = decltype(get_scalar<ScalarType>(std::declval<ScalarType*>()));
 
   SharedScalarComponent() = default;
   explicit SharedScalarComponent(ScalarType shared_value) : base_t(std::move(shared_value)) {
@@ -184,7 +184,7 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
 
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     ScalarType& value = base_t::operator()(entity);
-    return get_scalar_view<ScalarType>(&value);
+    return get_scalar<ScalarType>(&value);
   }
 };  // SharedScalarComponent
 
@@ -364,7 +364,7 @@ class NgpSharedComponent {
 
  private:
   using host_view_type = impl::shared_component_host_view_t<shared_type>;
-  using state_type     = impl::SharedComponentState<shared_type>;
+  using state_type = impl::SharedComponentState<shared_type>;
   static constexpr bool aliases_host_storage = Kokkos::SpaceAccessibility<NgpMemSpace, Kokkos::HostSpace>::accessible;
   using ngp_view_type =
       std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<shared_type*, NgpMemSpace>>;
@@ -395,8 +395,7 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
   using our_t = NgpSharedScalarComponent<ScalarType, NgpMemSpace>;
   using base_t = NgpSharedComponent<ScalarType, NgpMemSpace>;
   using canonical_access = access::scalar<ScalarType>;
-  using view_t =
-      decltype(get_scalar_view<ScalarType>(std::declval<decltype(std::declval<base_t&>().ngp_view().data())>()));
+  using view_t = decltype(get_scalar<ScalarType>(std::declval<decltype(std::declval<base_t&>().ngp_view().data())>()));
 
   NgpSharedScalarComponent() = default;
   explicit NgpSharedScalarComponent(base_t base_component) : base_t(std::move(base_component)) {
@@ -404,7 +403,7 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex /*entity_index*/) const {
-    return get_scalar_view<ScalarType>(this->ngp_view().data());
+    return get_scalar<ScalarType>(this->ngp_view().data());
   }
 };
 

@@ -17,24 +17,15 @@ global_set(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 set(NOINSTALLHEADERS
   src/mundy_geom/distance/EllipsoidEllipsoid.hpp
   src/mundy_geom/distance.hpp
-  src/mundy_geom/distance/LineEllipsoid.hpp
   src/mundy_geom/distance/LineLine.hpp
-  src/mundy_geom/distance/LinePlane.hpp
-  src/mundy_geom/distance/LineSegmentEllipsoid.hpp
   src/mundy_geom/distance/LineSegmentLineSegment.hpp
-  src/mundy_geom/distance/LineSegmentPlane.hpp
   src/mundy_geom/distance/LineSegmentSphere.hpp
   src/mundy_geom/distance/LineSphere.hpp
-  src/mundy_geom/distance/PlaneEllipsoid.hpp
-  src/mundy_geom/distance/PlanePlane.hpp
-  src/mundy_geom/distance/PlaneSphere.hpp
   src/mundy_geom/distance/PointEllipsoid.hpp
   src/mundy_geom/distance/PointLine.hpp
   src/mundy_geom/distance/PointLineSegment.hpp
-  src/mundy_geom/distance/PointPlane.hpp
   src/mundy_geom/distance/PointPoint.hpp
   src/mundy_geom/distance/PointSphere.hpp
-  src/mundy_geom/distance/SphereEllipsoid.hpp
   src/mundy_geom/distance/SphereSphere.hpp
   src/mundy_geom/distance/Types.hpp
   src/mundy_geom/primitives/AABB.hpp

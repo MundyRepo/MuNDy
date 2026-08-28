@@ -63,31 +63,30 @@ struct MockUnscaledOp {
 
 //! \name VectorBackend concept
 //@{
-static_assert(VectorBackend<MundyMathBackend, Vector3d>,
-             "Vector3d must satisfy VectorBackend under MundyMathBackend");
+static_assert(VectorBackend<MundyMathBackend, Vector3d>, "Vector3d must satisfy VectorBackend under MundyMathBackend");
 static_assert(!VectorBackend<MundyMathBackend, NotAVector>,
-             "NotAVector must NOT satisfy VectorBackend under MundyMathBackend");
+              "NotAVector must NOT satisfy VectorBackend under MundyMathBackend");
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 static_assert(VectorBackend<KokkosBackend<Kokkos::DefaultExecutionSpace>,
-                                    Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>>,
-             "Kokkos::View<double*> must satisfy VectorBackend under KokkosBackend");
+                            Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>>,
+              "Kokkos::View<double*> must satisfy VectorBackend under KokkosBackend");
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 //@}
 
 //! \name LinearOperator concept
 //@{
 static_assert(LinearOperator<MundyMathBackend, Matrix3d, Vector3d, Vector3d>,
-             "Matrix3d must satisfy LinearOperator under MundyMathBackend");
+              "Matrix3d must satisfy LinearOperator under MundyMathBackend");
 static_assert(!LinearOperator<MundyMathBackend, NotAnOperator, Vector3d, Vector3d>,
-             "NotAnOperator must NOT satisfy LinearOperator under MundyMathBackend");
+              "NotAnOperator must NOT satisfy LinearOperator under MundyMathBackend");
 //@}
 
 //! \name HasScaledApplyMember concept
 //@{
 static_assert(HasScaledApplyMember<MockScaledOp, double, Vector3d, Vector3d>,
-             "MockScaledOp must satisfy HasScaledApplyMember");
+              "MockScaledOp must satisfy HasScaledApplyMember");
 static_assert(!HasScaledApplyMember<MockUnscaledOp, double, Vector3d, Vector3d>,
-             "MockUnscaledOp must NOT satisfy HasScaledApplyMember");
+              "MockUnscaledOp must NOT satisfy HasScaledApplyMember");
 //@}
 
 }  // namespace

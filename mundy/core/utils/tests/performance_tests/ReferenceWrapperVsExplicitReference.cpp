@@ -101,7 +101,7 @@ value_type compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
 }
 
 value_type run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                          const size_t rounds) {
+                            const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceWrapper workspace{mundy::ref(x[i]), mundy::ref(y[i]), mundy::ref(z[i])};
@@ -112,7 +112,7 @@ value_type run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const value_type alpha
 }
 
 value_type run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                               const size_t rounds) {
+                                 const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceExplicit workspace{x[i], y[i], z[i]};
@@ -122,7 +122,8 @@ value_type run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const value_type 
   return compute_checksum(x, y, z);
 }
 
-value_type run_direct(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta, const size_t rounds) {
+value_type run_direct(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
+                      const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);

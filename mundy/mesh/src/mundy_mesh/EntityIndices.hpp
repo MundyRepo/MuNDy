@@ -68,9 +68,9 @@ NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const
                                                                            const stk::mesh::Selector& selector,
                                                                            const OurExecSpace& /*exec_space*/) {
   auto& cache = impl::get_or_create_local_entity_index_cache<OurExecSpace>(bulk_data);
-  return impl::get_or_refresh_cached_view(
-      cache.indices, rank, selector, bulk_data.synchronized_count(),
-      [&]() { return impl::build_local_entity_indices<OurExecSpace>(bulk_data, rank, selector); });
+  return impl::get_or_refresh_cached_view(cache.indices, rank, selector, bulk_data.synchronized_count(), [&]() {
+    return impl::build_local_entity_indices<OurExecSpace>(bulk_data, rank, selector);
+  });
 }
 
 /// \brief Get the entities of a (rank, selector) chunk as an NgpView, in the same order as
@@ -85,9 +85,9 @@ NgpViewT<stk::mesh::Entity*, OurExecSpace> get_local_entities(const stk::mesh::B
                                                               const stk::mesh::Selector& selector,
                                                               const OurExecSpace& /*exec_space*/) {
   auto& cache = impl::get_or_create_local_entity_index_cache<OurExecSpace>(bulk_data);
-  return impl::get_or_refresh_cached_view(
-      cache.entities, rank, selector, bulk_data.synchronized_count(),
-      [&]() { return impl::build_local_entities<OurExecSpace>(bulk_data, rank, selector); });
+  return impl::get_or_refresh_cached_view(cache.entities, rank, selector, bulk_data.synchronized_count(), [&]() {
+    return impl::build_local_entities<OurExecSpace>(bulk_data, rank, selector);
+  });
 }
 
 }  // namespace mesh

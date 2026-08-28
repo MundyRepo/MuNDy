@@ -185,10 +185,12 @@ class AVector {
   // Default copy/move constructors and assignment operators when interacting with an AVector of the same type
 
   /// \brief Default copy constructor (deep copies the accessor, not necessarily the data)
+  /// Copy from same is safe for many views since the accessor is simply copied.
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(const AVector<T, N, Accessor>&) = default;
 
   /// \brief Default move constructor (deep moves the accessor, not necessarily the data)
+  /// Move from same is safe for many views since the accessor is simply moved.
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor>&&) = default;
 
@@ -209,12 +211,32 @@ class AVector {
   // Custom copy/move constructors and assignment operators when interacting with an AVector of a different type
 
   /// \brief Deep copy constructor with different accessor or ownership
+  /// Deep copy construction from different is often ill-advised since the accessor must be default constructed and then
+  /// populated. For a T* accessor, this is illegal.
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
                      (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        std::is_pointer_v<Accessor> == false,
+        "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination vectors.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AVector<double, 3, double*> vec2 = get_vector<double>(a);\n"
+        "\n"
+        "This code fails because get_vector returns AVector<double, 3, SomeAccessor<double>> and the destination "
+        "is AVector<double, 3, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
 
@@ -225,6 +247,24 @@ class AVector {
                      (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        std::is_pointer_v<Accessor> == false,
+        "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination vectors.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AVector<double, 3, double*> vec2 = get_vector<double>(a);\n"
+        "\n"
+        "This code fails because get_vector returns AVector<double, 3, SomeAccessor<double>> and the destination "
+        "is AVector<double, 3, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
 
@@ -1120,19 +1160,56 @@ static_assert(!ValidScalarType<AVector<double, 3>>, "An AVector is rank-1, so it
 /// \endcode
 /// you can write
 /// \code
-///   auto vec = get_vector_view<T>(data);
+///   auto vec = get_vector<T>(data);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_vector_view(Accessor&& data) {
-  auto data_storage = store(std::forward<Accessor>(data));
-  return AVector<T, N, decltype(data_storage)>(data_storage);
+KOKKOS_INLINE_FUNCTION constexpr auto get_vector(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return AVector<T, N, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-template <typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor&& data) {
-  auto data_storage = store(std::move(data));  // Move not forward since we want to take ownership
-  return AVector<T, N, decltype(data_storage)>(data_storage);
-}
+#define MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)     \
+  template <typename T, ValidAccessor<T> Accessor>                           \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) { \
+    return get_vector<T, N>(std::forward<Accessor>(data));                   \
+  }
+
+#define MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(alias, alias_lower, T, N) \
+  template <ValidAccessor<T> Accessor>                                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {         \
+    return get_vector<T, N>(std::forward<Accessor>(data));                           \
+  }
+
+MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector1, vector1, 1)
+MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector2, vector2, 2)
+MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector3, vector3, 3)
+MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector4, vector4, 4)
+MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector5, vector5, 5)
+MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector6, vector6, 6)
+
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector1d, vector1d, double, 1)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector2d, vector2d, double, 2)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector3d, vector3d, double, 3)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector4d, vector4d, double, 4)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector5d, vector5d, double, 5)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector6d, vector6d, double, 6)
+
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector1f, vector1f, float, 1)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector2f, vector2f, float, 2)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector3f, vector3f, float, 3)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector4f, vector4f, float, 4)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector5f, vector5f, float, 5)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector6f, vector6f, float, 6)
+
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector1i, vector1i, int, 1)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector2i, vector2i, int, 2)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector3i, vector3i, int, 3)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector4i, vector4i, int, 4)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector5i, vector5i, int, 5)
+MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(Vector6i, vector6i, int, 6)
 //@}
 
 //@}

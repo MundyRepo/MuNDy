@@ -51,8 +51,22 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestAABB
+    SOURCES UnitTestAABB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestComputeAABB
     SOURCES UnitTestComputeAABB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestComputeOBB
+    SOURCES UnitTestComputeOBB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
     INSTALLABLE
   )
@@ -67,6 +81,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   tribits_add_executable_and_test(
     UnitTestPeriodicity
     SOURCES UnitTestPeriodicity.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestOBB
+    SOURCES UnitTestOBB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
     INSTALLABLE
   )

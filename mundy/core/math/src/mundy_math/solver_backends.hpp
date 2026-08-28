@@ -284,8 +284,7 @@ struct KokkosBackend {
   // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
   MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
-  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
-                    Workspace& workspace) {
+  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
     impl::workspace_invalidate(workspace);
     op.apply(alpha, x, beta, y);
   }
@@ -293,8 +292,7 @@ struct KokkosBackend {
   // Path 2: no fused member -- realize it from the workspace-threaded plain apply plus axpby.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
   MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
-  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
-                    Workspace& workspace) {
+  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp, workspace);
     axpby(alpha, tmp, beta, y);
@@ -504,9 +502,8 @@ struct MundyMathBackend {
   template <class LinearOp>
   MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
-    MUNDY_THROW_REQUIRE(
-        false, std::logic_error,
-        "MundyMathBackend::domain_size: op must be a mundy::Matrix or provide size_t domain_size().");
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "MundyMathBackend::domain_size: op must be a mundy::Matrix or provide size_t domain_size().");
     return 0;
   }
 
@@ -584,8 +581,8 @@ struct MundyMathBackend {
   // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
   template <class Scalar, typename LinearOp, class XVector, class YVector, typename Workspace>
   MUNDY_REQUIRES(HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
-  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta,
-                                           YVector& y, Workspace& workspace) {
+  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
+                                           Workspace& workspace) {
     impl::workspace_invalidate(workspace);
     op.apply(alpha, x, beta, y);
   }
@@ -593,8 +590,8 @@ struct MundyMathBackend {
   // Path 2: no fused member -- realize it from the workspace-threaded plain apply plus axpby.
   template <class Scalar, typename LinearOp, class XVector, class YVector, typename Workspace>
   MUNDY_REQUIRES(!HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
-  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta,
-                                           YVector& y, Workspace& workspace) {
+  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
+                                           Workspace& workspace) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp, workspace);
     axpby(alpha, tmp, beta, y);

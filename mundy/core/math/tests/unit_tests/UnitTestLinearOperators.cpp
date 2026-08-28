@@ -24,8 +24,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_math/solver_backends.hpp>
 #include <mundy_math/linear_ops.hpp>
+#include <mundy_math/solver_backends.hpp>
 
 namespace mundy {
 
@@ -144,10 +144,9 @@ struct FusedScaleOp {
 };
 
 static_assert(LinearOperator<backend_t, ScaleOp, view_t, view_t>, "ScaleOp must satisfy LinearOperator");
-static_assert(!HasScaledApplyMember<ScaleOp, double, view_t, view_t>,
-             "ScaleOp must NOT satisfy HasScaledApplyMember");
+static_assert(!HasScaledApplyMember<ScaleOp, double, view_t, view_t>, "ScaleOp must NOT satisfy HasScaledApplyMember");
 static_assert(HasScaledApplyMember<FusedScaleOp, double, view_t, view_t>,
-             "FusedScaleOp must satisfy HasScaledApplyMember");
+              "FusedScaleOp must satisfy HasScaledApplyMember");
 
 TEST(LinearOperators, SumOpAddsBothOperatorsContributions) {
   ScaleOp op1(2.0);

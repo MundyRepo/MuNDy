@@ -333,8 +333,10 @@ class variant_aggregate {
   KOKKOS_FUNCTION constexpr auto append(variant_t new_variant) const {
     // Copy the old variants into a new array with one extra slot
     Kokkos::Array<variant_t, N + 1> new_variants;
-    for (size_t i = 0; i < N; ++i) {
-      new_variants[i] = variants_[i];
+    if constexpr (N > 0) {
+      for (size_t i = 0; i < N; ++i) {
+        new_variants[i] = variants_[i];
+      }
     }
     new_variants[N] = std::move(new_variant);
 
@@ -370,7 +372,7 @@ class variant_aggregate {
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I>
   MUNDY_REQUIRES(I >= sizeof...(Tags))
-  KOKKOS_INLINE_FUNCTION constexpr const void get() const {
+  KOKKOS_INLINE_FUNCTION constexpr void get() const {
     static_assert(I < sizeof...(Tags), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>
@@ -701,7 +703,7 @@ class aggregate {
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I>
   MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
-  KOKKOS_INLINE_FUNCTION constexpr const void get_tagged() const {
+  KOKKOS_INLINE_FUNCTION constexpr void get_tagged() const {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>
@@ -755,7 +757,7 @@ class aggregate {
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I>
   MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
-  KOKKOS_INLINE_FUNCTION constexpr const void get() const {
+  KOKKOS_INLINE_FUNCTION constexpr void get() const {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>

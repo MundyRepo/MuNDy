@@ -138,7 +138,8 @@ class TorsionalSpring {
 
   /// \brief Copy assignment operator
   template <typename OtherTorsionalSpringType>
-  KOKKOS_FUNCTION TorsionalSpring<value_type, v_segment_t, ownership_t>& operator=(const OtherTorsionalSpringType& other)
+  KOKKOS_FUNCTION TorsionalSpring<value_type, v_segment_t, ownership_t>& operator=(
+      const OtherTorsionalSpringType& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherTorsionalSpringType, TorsionalSpring<value_type, v_segment_t, ownership_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     v_segment_ = other.v_segment_;

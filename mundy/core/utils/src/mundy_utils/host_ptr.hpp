@@ -272,8 +272,8 @@ class host_ptr {
   Control* make_control(Args&&... args) {
     static_assert(alignof(Control) <= alignof(std::max_align_t), "host_ptr control block is over-aligned");
     const std::size_t units = (sizeof(Control) + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
-    control_ =
-        Kokkos::View<std::max_align_t*, Kokkos::HostSpace>(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mundy_host_ptr"), units);
+    control_ = Kokkos::View<std::max_align_t*, Kokkos::HostSpace>(
+        Kokkos::view_alloc(Kokkos::WithoutInitializing, "mundy_host_ptr"), units);
     Control* block = ::new (static_cast<void*>(control_.data())) Control(std::forward<Args>(args)...);
     header_ = &block->header;
     return block;

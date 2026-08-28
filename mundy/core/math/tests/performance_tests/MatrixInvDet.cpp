@@ -68,7 +68,7 @@ void bench_det(size_t num_matrices) {
       .minEpochIterations(20);
   det_bench.run("det", [&] {
     for (size_t m = 0; m < num_matrices; ++m) {
-      const auto mat = mundy::get_matrix_view<double, N, N>(data.data() + m * N * N);
+      const auto mat = mundy::get_matrix<double, N, N>(data.data() + m * N * N);
       checksum += mundy::determinant(mat);
     }
     ankerl::nanobench::doNotOptimizeAway(checksum);
@@ -90,7 +90,7 @@ void bench_inv(size_t num_matrices) {
       .minEpochIterations(20);
   inv_bench.run("inv", [&] {
     for (size_t m = 0; m < num_matrices; ++m) {
-      const auto mat = mundy::get_matrix_view<double, N, N>(data.data() + m * N * N);
+      const auto mat = mundy::get_matrix<double, N, N>(data.data() + m * N * N);
       checksum += mundy::inverse(mat)(0, 0);
     }
     ankerl::nanobench::doNotOptimizeAway(checksum);

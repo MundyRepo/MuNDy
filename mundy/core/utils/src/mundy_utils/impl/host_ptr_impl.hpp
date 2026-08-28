@@ -98,6 +98,6 @@ struct host_control_ptr {
 
 }  // namespace impl
 
-} // namespace mundy
+}  // namespace mundy
 
 #endif  // MUNDY_UTILS_IMPL_HOST_PTR_IMPL_HPP_

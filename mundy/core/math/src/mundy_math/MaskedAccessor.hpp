@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MATH_MASKEDVIEW_HPP_
-#define MUNDY_MATH_MASKEDVIEW_HPP_
+#ifndef MUNDY_MATH_MASKEDACCESSOR_HPP_
+#define MUNDY_MATH_MASKEDACCESSOR_HPP_
 
 // External
 #include <Kokkos_Core.hpp>
@@ -45,7 +45,7 @@ namespace mundy {
 /// \tparam N The size of the accessor
 /// \tparam Accessor The type of the contiguous accessor
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-class MaskedView {
+class MaskedAccessor {
  private:
   KOKKOS_INLINE_FUNCTION
   static constexpr Kokkos::Array<size_t, N> create_index_array() {
@@ -90,24 +90,24 @@ class MaskedView {
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr MaskedView(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  explicit constexpr MaskedAccessor(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(accessor) {
   }
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr MaskedView(Accessor&& accessor)
+  explicit constexpr MaskedAccessor(Accessor&& accessor)
       MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
       : accessor_(std::forward<Accessor>(accessor)) {
   }
 
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr MaskedView(const MaskedView<T, N, mask, Accessor>& other)
+  KOKKOS_INLINE_FUNCTION constexpr MaskedAccessor(const MaskedAccessor<T, N, mask, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr MaskedView(MaskedView<T, N, mask, Accessor>&& other)
+  KOKKOS_INLINE_FUNCTION constexpr MaskedAccessor(MaskedAccessor<T, N, mask, Accessor>&& other)
       : accessor_(std::move(other.accessor_)) {
   }
 
@@ -120,37 +120,34 @@ class MaskedView {
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     return impl::access_at(accessor_, map_index(idx));
   }
-};  // class MaskedView
+};  // class MaskedAccessor
 
-//! \name MaskedView views
+//! \name MaskedAccessor views
 //@{
 
-/// \brief A helper function to create a MaskedView<T, N, Accessor> based on a given accessor.
+/// \brief A helper function to create a MaskedAccessor<T, N, Accessor> based on a given accessor.
 /// \param[in] accessor The accessor accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a MaskedView<T, stride, Accessor> from a accessor accessor.
+/// when creating a MaskedAccessor<T, stride, Accessor> from a accessor accessor.
 /// Instead of writing
 /// \code
-///   MaskedView<T, N, mask, Accessor> vec(accessor);
+///   MaskedAccessor<T, N, mask, Accessor> vec(accessor);
 /// \endcode
 /// you can write
 /// \code
-///   auto masked_accessor = get_masked_view<T, N, mask>(accessor);
+///   auto masked_accessor = get_masked_accessor<T, N, mask>(accessor);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_masked_view(Accessor&& accessor) {
-  auto accessor_storage = store(impl::unwrap_accessor(std::forward<Accessor>(accessor)));
-  return MaskedView<T, N, mask, decltype(accessor_storage)>(accessor_storage);
-}
-
-template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_masked_accessor(Accessor&& accessor) {
-  auto accessor_storage = store(impl::unwrap_accessor(std::move(accessor)));
-  return MaskedView<T, N, mask, decltype(accessor_storage)>(accessor_storage);
+KOKKOS_INLINE_FUNCTION constexpr auto get_masked_accessor(Accessor&& accessor) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return MaskedAccessor<T, N, mask, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(accessor))));
 }
 //@}
 
 }  // namespace mundy
 
-#endif  // MUNDY_MATH_MASKEDVIEW_HPP_
+#endif  // MUNDY_MATH_MASKEDACCESSOR_HPP_

@@ -72,7 +72,7 @@
 #include <mundy_mesh/impl/NgpAccessorExprMathBase.hpp>    // MathExprBase
 #include <mundy_mesh/impl/NgpAccessorExprRNG.hpp>  // RandomDistributionExpr, UniformDistributionExpr, CounterBasedRNGExpr
 #include <mundy_mesh/impl/NgpAccessorExprReductions.hpp>  // reduce helpers
-#include <mundy_mesh/impl/NgpAccessorExprSink.hpp>   // SinkArg, ApplySinkExpr, delayed_sink_expr_impl, BinarySideEffectExpr
+#include <mundy_mesh/impl/NgpAccessorExprSink.hpp>  // SinkArg, ApplySinkExpr, delayed_sink_expr_impl, BinarySideEffectExpr
 #include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>  // NgpEvalContext, holder types
 #include <mundy_mesh/impl/NgpAccessorExprUtils.hpp>  // is_crtp_base_of, is_crtp_base_of_v
 

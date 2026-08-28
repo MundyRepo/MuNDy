@@ -28,17 +28,17 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>   // for mundy::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>        // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/Ellipsoid.hpp>  // for mundy::Ellipsoid
-#include <mundy_geom/primitives/Point.hpp>      // for mundy::Point
-#include <mundy_math/Quaternion.hpp>            // for mundy::Quaternion
-#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>               // for mundy::Vector3
-#include <mundy_math/minimize.hpp>              // for mundy::find_min_using_approximate_derivatives
-#include <mundy_utils/requires.hpp>
-#include <mundy_math/cmath.hpp>
+#include <mundy_geom/distance/PointPoint.hpp>               // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>                    // for mundy::SharedNormalSigned
 #include <mundy_geom/distance/impl/PointEllipsoidImpl.hpp>  // for the cost-only objective functor
+#include <mundy_geom/primitives/Ellipsoid.hpp>              // for mundy::Ellipsoid
+#include <mundy_geom/primitives/Point.hpp>                  // for mundy::Point
+#include <mundy_math/Quaternion.hpp>                        // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>                         // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>                           // for mundy::Vector3
+#include <mundy_math/cmath.hpp>
+#include <mundy_math/minimize.hpp>  // for mundy::find_min_using_approximate_derivatives
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -51,15 +51,15 @@ namespace mundy {
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,  //
-                                                      const EllipsoidType& ellipsoid) {
+                                                        const EllipsoidType& ellipsoid) {
   return distance(SharedNormalSigned{}, point, ellipsoid);
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const PointType& point,                                   //
-                                                      const EllipsoidType& ellipsoid) {
+                                                        const PointType& point,                                   //
+                                                        const EllipsoidType& ellipsoid) {
   using Scalar = typename PointType::value_type;
   Point<Scalar> closest_point;
   mundy::Vector3<Scalar> ellipsoid_normal;
@@ -69,11 +69,12 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
-KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const PointType& point,                                   //
-                                                      const EllipsoidType& ellipsoid,                           //
-                                                      Point<typename PointType::value_type>& closest_point,       //
-                                                      mundy::Vector3<typename PointType::value_type>& ellipsoid_normal) {
+KOKKOS_FUNCTION typename PointType::value_type
+    distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+             const PointType& point,                                   //
+             const EllipsoidType& ellipsoid,                           //
+             Point<typename PointType::value_type>& closest_point,     //
+             mundy::Vector3<typename PointType::value_type>& ellipsoid_normal) {
   using Scalar = typename PointType::value_type;
   using Passive = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
   using PassiveEllipsoid = Ellipsoid<Passive>;
@@ -85,7 +86,7 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
   //
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of
   // approximate derivatives. The error is typically less than the square root of min_objective_delta.
-  constexpr Passive min_allowable_cost  = -Kokkos::Experimental::infinity_v<Passive>;    // no early-exit on cost
+  constexpr Passive min_allowable_cost = -Kokkos::Experimental::infinity_v<Passive>;     // no early-exit on cost
   constexpr Passive min_objective_delta = mundy::get_relaxed_zero_tolerance<Passive>();  // L-BFGS convergence tolerance
   constexpr size_t lbfgs_max_memory_size = 10;
 
@@ -120,7 +121,8 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
   }
 
   // Re-evaluate on the original point/ellipsoid with theta* frozen as a zero-derivative constant.
-  impl::PointEllipsoidObjective<PointType, EllipsoidType> objective_ad(point, ellipsoid, ellipsoid_normal, closest_point);
+  impl::PointEllipsoidObjective<PointType, EllipsoidType> objective_ad(point, ellipsoid, ellipsoid_normal,
+                                                                       closest_point);
   const mundy::Vector<Scalar, 2> theta_star{static_cast<Scalar>(global_theta_phi_sol[0]),
                                             static_cast<Scalar>(global_theta_phi_sol[1])};
   objective_ad(theta_star);

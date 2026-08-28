@@ -35,13 +35,13 @@
 // Mundy
 #include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
 #include <mundy_math/Array.hpp>                 // for mundy::Array
-#include <mundy_math/MaskedView.hpp>            // for mundy::MaskedView
+#include <mundy_math/MaskedAccessor.hpp>        // for mundy::MaskedAccessor
 #include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::NumTraits
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
-#include <mundy_math/ShiftedView.hpp>           // for mundy::ShiftedView
-#include <mundy_math/StridedView.hpp>           // for mundy::StridedView
+#include <mundy_math/ShiftedAccessor.hpp>       // for mundy::ShiftedAccessor
+#include <mundy_math/StridedAccessor.hpp>       // for mundy::StridedAccessor
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
-#include <mundy_math/TransposedView.hpp>        // for mundy::TransposedView
+#include <mundy_math/TransposedAccessor.hpp>    // for mundy::TransposedAccessor
 #include <mundy_math/Vector.hpp>                // for mundy::Vector
 #include <mundy_math/cmath.hpp>
 #include <mundy_utils/requires.hpp>

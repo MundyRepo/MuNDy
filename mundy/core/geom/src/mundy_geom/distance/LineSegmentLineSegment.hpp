@@ -35,8 +35,8 @@
 #include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::LineSegment
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::Point
 #include <mundy_math/Tolerance.hpp>                  // for mundy::get_zero_tolerance
-#include <mundy_utils/requires.hpp>
 #include <mundy_math/cmath.hpp>
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -53,7 +53,7 @@ namespace mundy {
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType1::value_type distance(const LineSegmentType1& line_segment1,  //
-                                                             const LineSegmentType2& line_segment2) {
+                                                               const LineSegmentType2& line_segment2) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2);
 }
 
@@ -64,8 +64,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type distance(const LineSegment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                             const LineSegmentType1& line_segment1,           //
-                                                             const LineSegmentType2& line_segment2) {
+                                                               const LineSegmentType1& line_segment1,           //
+                                                               const LineSegmentType2& line_segment2) {
   // no difference between distance types for line segments
   return distance(SharedNormalSigned{}, line_segment1, line_segment2);
 }
@@ -178,8 +178,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType1::value_type
-    distance(const LineSegmentType1& line_segment1,                       //
-             const LineSegmentType2& line_segment2,                       //
+    distance(const LineSegmentType1& line_segment1,                         //
+             const LineSegmentType2& line_segment2,                         //
              Point<typename LineSegmentType1::value_type>& closest_point1,  //
              Point<typename LineSegmentType1::value_type>& closest_point2,  //
              typename LineSegmentType1::value_type& arch_length1,           //
@@ -201,9 +201,9 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType1::value_type
-    distance([[maybe_unused]] const SharedNormalSigned distance_type,     //
-             const LineSegmentType1& line_segment1,                       //
-             const LineSegmentType2& line_segment2,                       //
+    distance([[maybe_unused]] const SharedNormalSigned distance_type,       //
+             const LineSegmentType1& line_segment1,                         //
+             const LineSegmentType2& line_segment2,                         //
              Point<typename LineSegmentType1::value_type>& closest_point1,  //
              Point<typename LineSegmentType1::value_type>& closest_point2,  //
              typename LineSegmentType1::value_type& arch_length1,           //
@@ -348,9 +348,9 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType1::value_type
-    distance([[maybe_unused]] const Euclidean distance_type,              //
-             const LineSegmentType1& line_segment1,                       //
-             const LineSegmentType2& line_segment2,                       //
+    distance([[maybe_unused]] const Euclidean distance_type,                //
+             const LineSegmentType1& line_segment1,                         //
+             const LineSegmentType2& line_segment2,                         //
              Point<typename LineSegmentType1::value_type>& closest_point1,  //
              Point<typename LineSegmentType1::value_type>& closest_point2,  //
              typename LineSegmentType1::value_type& arch_length1,           //

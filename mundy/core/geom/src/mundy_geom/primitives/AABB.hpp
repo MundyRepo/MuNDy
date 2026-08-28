@@ -107,7 +107,8 @@ class AABB {
   /// \param[in] y_max The maximum y-coordinate.
   /// \param[in] z_max The maximum z-coordinate.
   KOKKOS_FUNCTION
-  constexpr AABB(value_type x_min, value_type y_min, value_type z_min, value_type x_max, value_type y_max, value_type z_max)
+  constexpr AABB(value_type x_min, value_type y_min, value_type z_min, value_type x_max, value_type y_max,
+                 value_type z_max)
       MUNDY_REQUIRES(HasNArgConstructor<min_point_t, value_type, 3>&& HasNArgConstructor<max_point_t, value_type, 3>)
       : min_corner_(x_min, y_min, z_min), max_corner_(x_max, y_max, z_max) {
   }
@@ -148,7 +149,8 @@ class AABB {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr AABB<value_type, min_point_t, max_point_t>& operator=(const AABB<value_type, min_point_t, max_point_t>& other) {
+  constexpr AABB<value_type, min_point_t, max_point_t>& operator=(
+      const AABB<value_type, min_point_t, max_point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     min_corner_ = other.min_corner_;
     max_corner_ = other.max_corner_;
@@ -358,7 +360,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidAABBType T1, ValidAABBType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& a1, const T2& a2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(a1, a2, tol);
 }
 

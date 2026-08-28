@@ -40,9 +40,9 @@
 #include <mundy_math/Matrix3.hpp>
 #include <mundy_math/Tolerance.hpp>
 #include <mundy_math/Vector3.hpp>
+#include <mundy_math/cmath.hpp>
 #include <mundy_utils/rng.hpp>
 #include <mundy_utils/throw_assert.hpp>
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -148,8 +148,7 @@ struct TestObjectTraits<TestObjectType::SPHERE> {
   using type = Sphere<double>;
   static constexpr unsigned num_points = 1;
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
-    double w =
-        min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+    double w = min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     return generate_random_sphere<double>(box, 0.0, 0.25 * w, rng);
   }
   static KOKKOS_FUNCTION Point<double> reference_point(const type& s) {
@@ -166,8 +165,7 @@ struct TestObjectTraits<TestObjectType::ELLIPSOID> {
   using type = Ellipsoid<double>;
   static constexpr unsigned num_points = 1;
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
-    double w =
-        min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+    double w = min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     double r = 0.25 * w;
     return generate_random_ellipsoid<double>(box, Vector3<double>{0.0, 0.0, 0.0}, Vector3<double>{r, r, r}, rng);
   }
@@ -185,8 +183,7 @@ struct TestObjectTraits<TestObjectType::CIRCLE_3D> {
   using type = Circle3D<double>;
   static constexpr unsigned num_points = 1;
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
-    double w =
-        min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+    double w = min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     return generate_random_circle3D<double>(box, 0.0, 0.25 * w, rng);
   }
   static KOKKOS_FUNCTION Point<double> reference_point(const type& c) {
@@ -916,7 +913,7 @@ TEST(WrappingAPI, MinImageVsBruteForce_TriclinicDiagonal) {
 }
 
 static const std::vector<TestObjectType> kWrappableTypes = {
-    TestObjectType::POINT, TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
+    TestObjectType::POINT,     TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
     TestObjectType::ELLIPSOID, TestObjectType::CIRCLE_3D,
 };
 static const std::vector<TestObjectType> kWrapRigidTypes = {

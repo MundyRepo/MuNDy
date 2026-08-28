@@ -23,7 +23,7 @@
 
 // C++ core libs
 #include <stdexcept>  // for std::invalid_argument
-#include <string>  // for std::string
+#include <string>     // for std::string
 
 // Trilinos libs
 #include <stk_topology/topology.hpp>  // for stk::topology

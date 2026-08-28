@@ -59,8 +59,7 @@ KOKKOS_FUNCTION AABB<typename PointType::value_type> compute_aabb(const PointTyp
   return AABB<value_type>{x, y, z, x, y, z};
 }
 template <ValidPointType PointType, typename Metric>
-KOKKOS_FUNCTION AABB<typename PointType::value_type> compute_aabb(const PointType& point,
-                                                                   const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename PointType::value_type> compute_aabb(const PointType& point, const Metric& /*metric*/) {
   return compute_aabb(point);
 }
 
@@ -73,13 +72,13 @@ template <ValidLineSegmentType LineSegmentType>
 KOKKOS_FUNCTION AABB<typename LineSegmentType::value_type> compute_aabb(const LineSegmentType& line_segment) {
   using value_type = typename LineSegmentType::value_type;
   const auto& start = line_segment.start();
-  const auto& end   = line_segment.end();
+  const auto& end = line_segment.end();
   return AABB<value_type>{min(start[0], end[0]), min(start[1], end[1]), min(start[2], end[2]),
                           max(start[0], end[0]), max(start[1], end[1]), max(start[2], end[2])};
 }
 template <ValidLineSegmentType LineSegmentType, typename Metric>
 KOKKOS_FUNCTION AABB<typename LineSegmentType::value_type> compute_aabb(const LineSegmentType& line_segment,
-                                                                         const Metric& metric) {
+                                                                        const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(line_segment, metric, reference_point(line_segment)));
 }
 
@@ -91,16 +90,14 @@ KOKKOS_FUNCTION AABB<typename LineSegmentType::value_type> compute_aabb(const Li
 template <ValidSphereType SphereType>
 KOKKOS_FUNCTION AABB<typename SphereType::value_type> compute_aabb(const SphereType& sphere) {
   using value_type = typename SphereType::value_type;
-  constexpr mundy::Vector3<value_type> ones{static_cast<value_type>(1),
-                                            static_cast<value_type>(1),
+  constexpr mundy::Vector3<value_type> ones{static_cast<value_type>(1), static_cast<value_type>(1),
                                             static_cast<value_type>(1)};
   const mundy::Vector3<value_type> min_corner = sphere.center() - ones * sphere.radius();
   const mundy::Vector3<value_type> max_corner = sphere.center() + ones * sphere.radius();
   return AABB<value_type>{min_corner, max_corner};
 }
 template <ValidSphereType SphereType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SphereType::value_type> compute_aabb(const SphereType& sphere,
-                                                                    const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename SphereType::value_type> compute_aabb(const SphereType& sphere, const Metric& /*metric*/) {
   return compute_aabb(sphere);
 }
 
@@ -120,9 +117,9 @@ KOKKOS_FUNCTION AABB<typename SphereType::value_type> compute_aabb(const SphereT
 template <ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION AABB<typename EllipsoidType::value_type> compute_aabb(const EllipsoidType& ellipsoid) {
   using value_type = typename EllipsoidType::value_type;
-  using point_t    = Point<value_type>;
+  using point_t = Point<value_type>;
   const auto& center = ellipsoid.center();
-  const auto& radii  = ellipsoid.radii();
+  const auto& radii = ellipsoid.radii();
   const auto& orient = ellipsoid.orientation();
 
   constexpr point_t body_x{static_cast<value_type>(1), static_cast<value_type>(0), static_cast<value_type>(0)};
@@ -140,7 +137,7 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::value_type> compute_aabb(const Elli
 }
 template <ValidEllipsoidType EllipsoidType, typename Metric>
 KOKKOS_FUNCTION AABB<typename EllipsoidType::value_type> compute_aabb(const EllipsoidType& ellipsoid,
-                                                                       const Metric& /*metric*/) {
+                                                                      const Metric& /*metric*/) {
   return compute_aabb(ellipsoid);
 }
 
@@ -153,29 +150,26 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::value_type> compute_aabb(const Elli
 /// The centerline runs along the lab-frame image of the body z-axis with half-length `length/2`.
 /// The AABB is the centerline endpoint AABB padded by `radius` in every coordinate direction.
 template <ValidSpherocylinderType SpherocylinderType>
-KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(
-    const SpherocylinderType& spherocylinder) {
+KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(const SpherocylinderType& spherocylinder) {
   using value_type = typename SpherocylinderType::value_type;
-  using point_t    = Point<value_type>;
-  const auto& center      = spherocylinder.center();
+  using point_t = Point<value_type>;
+  const auto& center = spherocylinder.center();
   const auto& orientation = spherocylinder.orientation();
-  const auto& radius      = spherocylinder.radius();
-  const auto& length      = spherocylinder.length();
+  const auto& radius = spherocylinder.radius();
+  const auto& length = spherocylinder.length();
 
-  constexpr mundy::Vector3<value_type> z_axis{static_cast<value_type>(0),
-                                               static_cast<value_type>(0),
-                                               static_cast<value_type>(1)};
+  constexpr mundy::Vector3<value_type> z_axis{static_cast<value_type>(0), static_cast<value_type>(0),
+                                              static_cast<value_type>(1)};
   const point_t scaled_dir = static_cast<value_type>(0.5) * length * (orientation * z_axis);
   const point_t end0 = center - scaled_dir;
   const point_t end1 = center + scaled_dir;
   return AABB<value_type>{min(end0[0], end1[0]) - radius, min(end0[1], end1[1]) - radius,
-                          min(end0[2], end1[2]) - radius,
-                          max(end0[0], end1[0]) + radius, max(end0[1], end1[1]) + radius,
-                          max(end0[2], end1[2]) + radius};
+                          min(end0[2], end1[2]) - radius, max(end0[0], end1[0]) + radius,
+                          max(end0[1], end1[1]) + radius, max(end0[2], end1[2]) + radius};
 }
 template <ValidSpherocylinderType SpherocylinderType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(
-    const SpherocylinderType& spherocylinder, const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(const SpherocylinderType& spherocylinder,
+                                                                           const Metric& /*metric*/) {
   return compute_aabb(spherocylinder);
 }
 
@@ -187,17 +181,15 @@ KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(
 template <ValidSpherocylinderSegmentType SegmentType>
 KOKKOS_FUNCTION AABB<typename SegmentType::value_type> compute_aabb(const SegmentType& segment) {
   using value_type = typename SegmentType::value_type;
-  const auto& start  = segment.start();
-  const auto& end    = segment.end();
+  const auto& start = segment.start();
+  const auto& end = segment.end();
   const auto& radius = segment.radius();
   return AABB<value_type>{min(start[0], end[0]) - radius, min(start[1], end[1]) - radius,
-                          min(start[2], end[2]) - radius,
-                          max(start[0], end[0]) + radius, max(start[1], end[1]) + radius,
-                          max(start[2], end[2]) + radius};
+                          min(start[2], end[2]) - radius, max(start[0], end[0]) + radius,
+                          max(start[1], end[1]) + radius, max(start[2], end[2]) + radius};
 }
 template <ValidSpherocylinderSegmentType SegmentType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SegmentType::value_type> compute_aabb(const SegmentType& segment,
-                                                                     const Metric& metric) {
+KOKKOS_FUNCTION AABB<typename SegmentType::value_type> compute_aabb(const SegmentType& segment, const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(segment, metric, reference_point(segment)));
 }
 

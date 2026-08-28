@@ -52,11 +52,11 @@
 #include <Teuchos_RCP.hpp>
 
 // Mundy
-#include <mundy_math/Tolerance.hpp>                // for mundy::get_relaxed_zero_tolerance<T>
-#include <mundy_math/impl/belos_solver_impl.hpp>   // for the (self-contained) Tpetra/Belos machinery
-#include <mundy_math/linear_system.hpp>            // for mundy::LinearSystem
-#include <mundy_math/solver_backends.hpp>          // for the Backend contract
-#include <mundy_utils/storage.hpp>                 // for value-or-reference storage
+#include <mundy_math/Tolerance.hpp>               // for mundy::get_relaxed_zero_tolerance<T>
+#include <mundy_math/impl/belos_solver_impl.hpp>  // for the (self-contained) Tpetra/Belos machinery
+#include <mundy_math/linear_system.hpp>           // for mundy::LinearSystem
+#include <mundy_math/solver_backends.hpp>         // for the Backend contract
+#include <mundy_utils/storage.hpp>                // for value-or-reference storage
 #include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
@@ -93,8 +93,7 @@ struct BelosResult {
 /// \brief Write a BelosResult to an ostream.
 template <class Scalar>
 std::ostream& operator<<(std::ostream& os, const BelosResult<Scalar> result) {
-  os << "num_iters: " << result.num_iters << ", residual: " << result.residual
-     << ", converged?: " << result.converged;
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged;
   return os;
 }
 //@}
@@ -114,9 +113,9 @@ struct BelosConfig {
   BelosSolver solver{BelosSolver::PSEUDOBLOCK_GMRES};
   unsigned max_iters{200};
   Scalar tol{get_relaxed_zero_tolerance<Scalar>()};  ///< convergence tolerance (relative residual by default)
-  unsigned num_blocks{30};                            ///< Krylov subspace / restart length (GMRES, GCRO-DR)
-  unsigned max_restarts{20};                          ///< max restarts (GMRES, GCRO-DR)
-  int verbosity{1};                                   ///< errors + warnings
+  unsigned num_blocks{30};                           ///< Krylov subspace / restart length (GMRES, GCRO-DR)
+  unsigned max_restarts{20};                         ///< max restarts (GMRES, GCRO-DR)
+  int verbosity{1};                                  ///< errors + warnings
 
   /// Advanced: extra Belos parameters, merged after (and overriding) the typed fields above. Null by default.
   Teuchos::RCP<Teuchos::ParameterList> extra{};
@@ -128,12 +127,18 @@ namespace impl {
 /// \brief The Belos solver-manager name for a BelosSolver enumerator (the enumerator's own name, spaced).
 inline std::string solver_name_string(BelosSolver s) {
   switch (s) {
-    case BelosSolver::PSEUDOBLOCK_GMRES: return "PSEUDOBLOCK GMRES";
-    case BelosSolver::BICGSTAB: return "BICGSTAB";
-    case BelosSolver::TFQMR: return "TFQMR";
-    case BelosSolver::MINRES: return "MINRES";
-    case BelosSolver::PSEUDOBLOCK_CG: return "PSEUDOBLOCK CG";
-    case BelosSolver::GCRODR: return "GCRODR";
+    case BelosSolver::PSEUDOBLOCK_GMRES:
+      return "PSEUDOBLOCK GMRES";
+    case BelosSolver::BICGSTAB:
+      return "BICGSTAB";
+    case BelosSolver::TFQMR:
+      return "TFQMR";
+    case BelosSolver::MINRES:
+      return "MINRES";
+    case BelosSolver::PSEUDOBLOCK_CG:
+      return "PSEUDOBLOCK CG";
+    case BelosSolver::GCRODR:
+      return "GCRODR";
   }
   MUNDY_THROW_REQUIRE(false, std::logic_error, "solver_name_string: unhandled BelosSolver enumerator.");
   return {};  // unreachable; the switch above is exhaustive.
@@ -176,14 +181,15 @@ auto belos_solve(const Problem& prob, XVector& x, const BelosConfig<typename Pro
   using value_type = typename Problem::value_type;
   using backend_t = typename Problem::backend_t;
   using op_t = std::remove_cvref_t<decltype(prob.A())>;
-  static_assert(requires { typename backend_t::exec_space; },
-                "belos_solve requires a host-orchestrating KokkosBackend (Backend::exec_space); it cannot be used "
-                "with MundyMathBackend.");
+  static_assert(
+      requires { typename backend_t::exec_space; },
+      "belos_solve requires a host-orchestrating KokkosBackend (Backend::exec_space); it cannot be used "
+      "with MundyMathBackend.");
   impl::BelosSolveSession<backend_t, op_t, value_type, Precond> session(
       prob.A(), prob.b().extent(0), impl::solver_name_string(cfg.solver), impl::make_parameter_list(cfg), precond);
   const impl::BelosSolveStats stats = session.solve(prob.b(), x);
-  return BelosResult<value_type>{static_cast<unsigned>(stats.num_iters),
-                                 static_cast<value_type>(stats.achieved_tol), stats.converged};
+  return BelosResult<value_type>{static_cast<unsigned>(stats.num_iters), static_cast<value_type>(stats.achieved_tol),
+                                 stats.converged};
 }
 //@}
 
@@ -240,7 +246,8 @@ class BelosInvOp {
                                            static_cast<value_type>(stats.achieved_tol), stats.converged};
 
     // A non-converged solve would silently return a wrong answer, so throw instead of returning it.
-    MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error, "BelosInvOp: inner Belos solve failed to converge.");
+    MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error,
+                        "BelosInvOp: inner Belos solve failed to converge.");
     Backend::deep_copy(out, x_);
   }
 

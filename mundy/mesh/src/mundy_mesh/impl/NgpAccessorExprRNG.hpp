@@ -136,22 +136,22 @@ struct is_random_distribution_expr<RandomDistributionExpr<RNGExpr, T>> : std::tr
 template <typename T>
 static constexpr bool is_random_distribution_expr_v = is_random_distribution_expr<std::decay_t<T>>::value;
 
-#define MUNDY_ACCESSOR_EXPR_RANDOM_DISTRIBUTION_CONSTANT_LEFT_OPERATOR(OpName, op)                                    \
-  template <typename ConstantType, typename SubRNGExpr, typename T>                                                    \
+#define MUNDY_ACCESSOR_EXPR_RANDOM_DISTRIBUTION_CONSTANT_LEFT_OPERATOR(OpName, op)                                   \
+  template <typename ConstantType, typename SubRNGExpr, typename T>                                                  \
   MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>) \
-  auto operator op(const ConstantType& c, const RandomDistributionExpr<SubRNGExpr, T>& expr) {                        \
-    using expr_t = RandomDistributionExpr<SubRNGExpr, T>;                                                              \
-    ConstantMathExpr<ConstantType> constant_expr(c);                                                                   \
-    return OpName##Expr<ConstantMathExpr<ConstantType>, expr_t>(constant_expr, expr);                                  \
+  auto operator op(const ConstantType& c, const RandomDistributionExpr<SubRNGExpr, T>& expr) {                       \
+    using expr_t = RandomDistributionExpr<SubRNGExpr, T>;                                                            \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                                 \
+    return OpName##Expr<ConstantMathExpr<ConstantType>, expr_t>(constant_expr, expr);                                \
   }
 
-#define MUNDY_ACCESSOR_EXPR_RANDOM_DISTRIBUTION_CONSTANT_RIGHT_OPERATOR(OpName, op)                                   \
-  template <typename ConstantType, typename SubRNGExpr, typename T>                                                    \
+#define MUNDY_ACCESSOR_EXPR_RANDOM_DISTRIBUTION_CONSTANT_RIGHT_OPERATOR(OpName, op)                                  \
+  template <typename ConstantType, typename SubRNGExpr, typename T>                                                  \
   MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>) \
-  auto operator op(const RandomDistributionExpr<SubRNGExpr, T>& expr, const ConstantType& c) {                        \
-    using expr_t = RandomDistributionExpr<SubRNGExpr, T>;                                                              \
-    ConstantMathExpr<ConstantType> constant_expr(c);                                                                   \
-    return OpName##Expr<expr_t, ConstantMathExpr<ConstantType>>(expr, constant_expr);                                  \
+  auto operator op(const RandomDistributionExpr<SubRNGExpr, T>& expr, const ConstantType& c) {                       \
+    using expr_t = RandomDistributionExpr<SubRNGExpr, T>;                                                            \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                                 \
+    return OpName##Expr<expr_t, ConstantMathExpr<ConstantType>>(expr, constant_expr);                                \
   }
 
 MUNDY_ACCESSOR_EXPR_RANDOM_DISTRIBUTION_CONSTANT_LEFT_OPERATOR(Add, +)
@@ -298,22 +298,22 @@ struct is_uniform_distribution_expr<UniformDistributionExpr<RNGExpr, T, LowExpr,
 template <typename T>
 static constexpr bool is_uniform_distribution_expr_v = is_uniform_distribution_expr<std::decay_t<T>>::value;
 
-#define MUNDY_ACCESSOR_EXPR_UNIFORM_DISTRIBUTION_CONSTANT_LEFT_OPERATOR(OpName, op)                                   \
-  template <typename ConstantType, typename SubRNGExpr, typename T, typename LowExpr, typename HighExpr>              \
+#define MUNDY_ACCESSOR_EXPR_UNIFORM_DISTRIBUTION_CONSTANT_LEFT_OPERATOR(OpName, op)                                  \
+  template <typename ConstantType, typename SubRNGExpr, typename T, typename LowExpr, typename HighExpr>             \
   MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>) \
-  auto operator op(const ConstantType& c, const UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>& expr) {    \
-    using expr_t = UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>;                                          \
-    ConstantMathExpr<ConstantType> constant_expr(c);                                                                   \
-    return OpName##Expr<ConstantMathExpr<ConstantType>, expr_t>(constant_expr, expr);                                  \
+  auto operator op(const ConstantType& c, const UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>& expr) {   \
+    using expr_t = UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>;                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                                 \
+    return OpName##Expr<ConstantMathExpr<ConstantType>, expr_t>(constant_expr, expr);                                \
   }
 
-#define MUNDY_ACCESSOR_EXPR_UNIFORM_DISTRIBUTION_CONSTANT_RIGHT_OPERATOR(OpName, op)                                  \
-  template <typename ConstantType, typename SubRNGExpr, typename T, typename LowExpr, typename HighExpr>              \
+#define MUNDY_ACCESSOR_EXPR_UNIFORM_DISTRIBUTION_CONSTANT_RIGHT_OPERATOR(OpName, op)                                 \
+  template <typename ConstantType, typename SubRNGExpr, typename T, typename LowExpr, typename HighExpr>             \
   MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>) \
-  auto operator op(const UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>& expr, const ConstantType& c) {    \
-    using expr_t = UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>;                                          \
-    ConstantMathExpr<ConstantType> constant_expr(c);                                                                   \
-    return OpName##Expr<expr_t, ConstantMathExpr<ConstantType>>(expr, constant_expr);                                  \
+  auto operator op(const UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>& expr, const ConstantType& c) {   \
+    using expr_t = UniformDistributionExpr<SubRNGExpr, T, LowExpr, HighExpr>;                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                                 \
+    return OpName##Expr<expr_t, ConstantMathExpr<ConstantType>>(expr, constant_expr);                                \
   }
 
 MUNDY_ACCESSOR_EXPR_UNIFORM_DISTRIBUTION_CONSTANT_LEFT_OPERATOR(Add, +)
@@ -496,8 +496,7 @@ class CounterBasedRNGExpr
 template <typename T>
 struct is_counter_based_rng_expr : std::false_type {};
 
-template <typename SeedExpr, typename CounterExpr, typename RNGType,
-          RNGType (*make_counter_based_rng)(size_t, size_t)>
+template <typename SeedExpr, typename CounterExpr, typename RNGType, RNGType (*make_counter_based_rng)(size_t, size_t)>
 struct is_counter_based_rng_expr<CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>>
     : std::true_type {};
 

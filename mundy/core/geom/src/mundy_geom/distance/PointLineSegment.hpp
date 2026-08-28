@@ -50,7 +50,7 @@ namespace mundy {
 template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename LineSegmentType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,  //
-                                                      const LineSegmentType& line_segment) {
+                                                        const LineSegmentType& line_segment) {
   return distance(SharedNormalSigned{}, point, line_segment);
 }
 
@@ -61,8 +61,8 @@ KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point, 
 template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename LineSegmentType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const PointType& point,                                   //
-                                                      const LineSegmentType& line_segment) {
+                                                        const PointType& point,                                   //
+                                                        const LineSegmentType& line_segment) {
   using Scalar = typename PointType::value_type;
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
@@ -116,11 +116,11 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
 /// \param[out] sep The separation vector (from point to line segment)
 template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename LineSegmentType::value_type>)
-KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,                              //
-                                                      const LineSegmentType& line_segment,                 //
-                                                      Point<typename PointType::value_type>& closest_point,  //
-                                                      typename PointType::value_type& arch_length,           //
-                                                      mundy::Vector3<typename PointType::value_type>& sep) {
+KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,                                //
+                                                        const LineSegmentType& line_segment,                   //
+                                                        Point<typename PointType::value_type>& closest_point,  //
+                                                        typename PointType::value_type& arch_length,           //
+                                                        mundy::Vector3<typename PointType::value_type>& sep) {
   return distance(SharedNormalSigned{}, point, line_segment,  //
                   closest_point, arch_length, sep);
 }
@@ -135,11 +135,11 @@ KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point, 
 template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename LineSegmentType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const PointType& point,                                   //
-                                                      const LineSegmentType& line_segment,                      //
-                                                      Point<typename PointType::value_type>& closest_point,       //
-                                                      typename PointType::value_type& arch_length,                //
-                                                      mundy::Vector3<typename PointType::value_type>& sep) {
+                                                        const PointType& point,                                   //
+                                                        const LineSegmentType& line_segment,                      //
+                                                        Point<typename PointType::value_type>& closest_point,     //
+                                                        typename PointType::value_type& arch_length,              //
+                                                        mundy::Vector3<typename PointType::value_type>& sep) {
   using Scalar = typename PointType::value_type;
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();

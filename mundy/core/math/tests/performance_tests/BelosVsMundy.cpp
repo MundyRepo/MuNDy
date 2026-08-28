@@ -25,6 +25,10 @@
 /// over Tpetra/Kokkos), and a Mundy direct inverse (MundyMathBackend, fixed-size mundy::Matrix). The direct inverse
 /// uses a compile-time size, so it runs for N = 2..12; the View-based Krylov paths run for N > 12 too.
 ///
+/// The direct inverse can also run for larger sizes and is faster than the Krylov paths: N=12 was ~500x faster than
+/// either Belos or CG and N=24 was 30-50x. Both its runtime and compile cost grow steeply with N: N=24 takes
+/// minutes to compile and N=30 exceeds the maximum template instantiation depth of 900.
+///
 /// Usage: BelosVsMundy [--simple]
 ///   --simple   Suppress the per-size nanobench tables and print one compact table (median time per solve).
 
@@ -47,22 +51,20 @@
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
 
+#include <Tpetra_Map.hpp>
 #include <algorithm>
 #include <array>
 #include <cstdio>
 #include <iomanip>
 #include <map>
-#include <random>
-#include <utility>
-#include <vector>
-
-#include <Tpetra_Map.hpp>
-
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/belos_solver.hpp>
 #include <mundy_math/linear_system.hpp>
 #include <mundy_math/solver_backends.hpp>
+#include <random>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -180,8 +182,8 @@ void bench_view_methods(ankerl::nanobench::Bench& bench, const std::vector<doubl
 template <int N>
 void bench_mundymath_method(ankerl::nanobench::Bench& bench, const std::vector<double>& a,
                             const std::vector<double>& b) {
-  std::vector<double> a_local(a);  // get_matrix_view aliases mutable storage
-  auto A = mundy::get_matrix_view<double, N, N>(a_local.data());
+  std::vector<double> a_local(a);  // get_matrix aliases mutable storage
+  auto A = mundy::get_matrix<double, N, N>(a_local.data());
   mundy::Vector<double, N> bvec;
   for (int i = 0; i < N; ++i) {
     bvec[i] = b[static_cast<size_t>(i)];
@@ -310,9 +312,10 @@ int main(int argc, char** argv) {
   }
 
   RowMap rows;
-  bench_small_sizes(std::make_integer_sequence<int, 11>{}, opts, rows);
+  bench_small_sizes(std::make_integer_sequence<int, 12>{}, opts, rows);
   // increase by 8s until 128, then by 32s until 512
-  for (size_t n : {16u, 24u, 32u, 40u, 48u, 56u, 64u, 72u, 80u, 88u, 96u, 104u, 112u, 120u, 128u, 160u, 192u, 224u,
+  for (size_t n : {16u,  24u,  32u,  40u,  48u,  56u,  64u,  72u,  80u,   //
+                   88u,  96u,  104u, 112u, 120u, 128u, 160u, 192u, 224u,  //
                    256u, 288u, 320u, 352u, 384u, 416u, 448u, 480u, 512u}) {
     bench_large(n, opts, rows);
   }

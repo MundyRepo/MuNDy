@@ -127,8 +127,7 @@ class NgpForEachEntityExprDriver {
     // Perform the evaluation.
     // Intersect with locally_owned_part so that shared entities (present on this rank
     // but owned by another) are not double-counted across MPI ranks.
-    const stk::mesh::Selector owned_selector =
-        selector_ & bulk_data().mesh_meta_data().locally_owned_part();
+    const stk::mesh::Selector owned_selector = selector_ & bulk_data().mesh_meta_data().locally_owned_part();
     using value_type = typename ReductionOp::value_type;
     stk::mesh::for_each_entity_reduce(
         ngp_mesh, rank_, owned_selector, reduction,
@@ -171,8 +170,7 @@ template <typename ExecSpace>
 struct is_ngp_for_each_entity_expr_driver<NgpForEachEntityExprDriver<ExecSpace>> : std::true_type {};
 
 template <typename T>
-static constexpr bool is_ngp_for_each_entity_expr_driver_v =
-    is_ngp_for_each_entity_expr_driver<std::decay_t<T>>::value;
+static constexpr bool is_ngp_for_each_entity_expr_driver_v = is_ngp_for_each_entity_expr_driver<std::decay_t<T>>::value;
 
 template <typename PairView, typename FMIExtractor, typename ExecSpace = stk::ngp::ExecSpace>
 class NgpForEachEntityPairExprDriver {

@@ -330,7 +330,7 @@ TYPED_TEST(ScalarPairwiseTypeTest, MatrixScalarDivision) {
 
 TEST(AScalarTest, ViewSemantics) {
   double raw = 42.0;
-  auto view = get_scalar_view<double>(&raw);
+  auto view = get_scalar<double>(&raw);
 
   EXPECT_DOUBLE_EQ(view.value(), 42.0);
 

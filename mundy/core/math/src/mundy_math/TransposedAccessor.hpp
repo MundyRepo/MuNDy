@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MATH_TRANSPOSEDVIEW_HPP_
-#define MUNDY_MATH_TRANSPOSEDVIEW_HPP_
+#ifndef MUNDY_MATH_TRANSPOSEDACCESSOR_HPP_
+#define MUNDY_MATH_TRANSPOSEDACCESSOR_HPP_
 
 // External
 #include <Kokkos_Core.hpp>
@@ -46,30 +46,30 @@ namespace mundy {
 /// \tparam M The number of columns in the matrix
 /// \tparam Accessor The type of the contiguous accessor
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-class TransposedView {
+class TransposedAccessor {
  public:
   storage<Accessor> accessor_;
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr TransposedView(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  explicit constexpr TransposedAccessor(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(accessor) {
   }
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr TransposedView(Accessor&& accessor)
+  explicit constexpr TransposedAccessor(Accessor&& accessor)
       MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
       : accessor_(std::forward<Accessor>(accessor)) {
   }
 
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr TransposedView(const TransposedView<T, N, M, Accessor>& other)
+  KOKKOS_INLINE_FUNCTION constexpr TransposedAccessor(const TransposedAccessor<T, N, M, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr TransposedView(TransposedView<T, N, M, Accessor>&& other)
+  KOKKOS_INLINE_FUNCTION constexpr TransposedAccessor(TransposedAccessor<T, N, M, Accessor>&& other)
       : accessor_(other.accessor_) {
   }
 
@@ -92,37 +92,34 @@ class TransposedView {
     const size_t matrix_idx = j * M + i;
     return impl::access_at(accessor_, matrix_idx);
   }
-};  // class TransposedView
+};  // class TransposedAccessor
 
-//! \name TransposedView views
+//! \name TransposedAccessor views
 //@{
 
-/// \brief A helper function to create a TransposedView<T, N, Accessor> based on a given accessor.
+/// \brief A helper function to create a TransposedAccessor<T, N, Accessor> based on a given accessor.
 /// \param[in] data The data accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a TransposedView<T, stride, Accessor> from a data accessor.
+/// when creating a TransposedAccessor<T, stride, Accessor> from a data accessor.
 /// Instead of writing
 /// \code
-///   TransposedView<T, N, M, Accessor> trans(data);
+///   TransposedAccessor<T, N, M, Accessor> trans(data);
 /// \endcode
 /// you can write
 /// \code
-///   auto transposed_data = get_transposed_view<T, N, M>(data);
+///   auto transposed_data = get_transposed_accessor<T, N, M>(data);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_transposed_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return TransposedView<T, N, M, decltype(data_storage)>(data_storage);
-}
-
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_transposed_accessor(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return TransposedView<T, N, M, decltype(data_storage)>(data_storage);
+KOKKOS_INLINE_FUNCTION constexpr auto get_transposed_accessor(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return TransposedAccessor<T, N, M, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 //@}
 
 }  // namespace mundy
 
-#endif  // MUNDY_MATH_TRANSPOSEDVIEW_HPP_
+#endif  // MUNDY_MATH_TRANSPOSEDACCESSOR_HPP_

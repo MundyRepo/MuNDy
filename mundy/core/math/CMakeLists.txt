@@ -34,7 +34,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/lcp.hpp
   src/mundy_math/linear_ops.hpp
   src/mundy_math/linear_system.hpp
-  src/mundy_math/MaskedView.hpp
+  src/mundy_math/MaskedAccessor.hpp
   src/mundy_math/Matrix3.hpp
   src/mundy_math/Matrix.hpp
   src/mundy_math/minimize.hpp
@@ -43,11 +43,11 @@ set(NOINSTALLHEADERS
   src/mundy_math/residuals.hpp
   src/mundy_math/ScalarBinaryOpTraits.hpp
   src/mundy_math/ScalarWrapper.hpp
-  src/mundy_math/ShiftedView.hpp
+  src/mundy_math/ShiftedAccessor.hpp
   src/mundy_math/solver_backends.hpp
-  src/mundy_math/StridedView.hpp
+  src/mundy_math/StridedAccessor.hpp
   src/mundy_math/Tolerance.hpp
-  src/mundy_math/TransposedView.hpp
+  src/mundy_math/TransposedAccessor.hpp
   src/mundy_math/Vector3.hpp
   src/mundy_math/Vector.hpp
   src/mundy_math/zmort.hpp

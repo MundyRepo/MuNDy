@@ -327,10 +327,10 @@ template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView,
           typename IndexView2D, typename TargetShiftView, typename ShiftView2D>
   requires ExcluderType<NarrowExcluder>
 std::tuple<CountView, IndexView2D, ShiftView2D> apply_narrow_phase_2d(
-    ExecutionSpace exec, const NarrowExcluder& narrow_excluder,
-    const EntityView& target_entities, const EntityView& source_entities,
-    const TargetShiftView& target_image_shifts, const IndexView2D& broad_source_indices,
-    const ShiftView2D& broad_source_image_shifts, const CountView& owner_counts) {
+    ExecutionSpace exec, const NarrowExcluder& narrow_excluder, const EntityView& target_entities,
+    const EntityView& source_entities, const TargetShiftView& target_image_shifts,
+    const IndexView2D& broad_source_indices, const ShiftView2D& broad_source_image_shifts,
+    const CountView& owner_counts) {
   using size_type = typename CountView::value_type;
   using shift_type = typename ShiftView2D::value_type;
 
@@ -339,8 +339,7 @@ std::tuple<CountView, IndexView2D, ShiftView2D> apply_narrow_phase_2d(
   // L0: count narrow survivors per target row.
   CountView narrow_counts("mundy_2d_per_narrow_counts", num_targets);
   Kokkos::parallel_for(
-      "mundy_2d_per_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t) {
+      "mundy_2d_per_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets), KOKKOS_LAMBDA(size_type t) {
         size_type count = 0;
         const shift_type target_shift = target_image_shifts(t);
         for (size_type k = 0; k < owner_counts(t); ++k) {
@@ -366,8 +365,7 @@ std::tuple<CountView, IndexView2D, ShiftView2D> apply_narrow_phase_2d(
   IndexView2D narrow_src("mundy_2d_per_narrow_src", num_targets, new_max);
   ShiftView2D narrow_shifts("mundy_2d_per_narrow_shifts", num_targets, new_max);
   Kokkos::parallel_for(
-      "mundy_2d_per_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t) {
+      "mundy_2d_per_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets), KOKKOS_LAMBDA(size_type t) {
         size_type write_col = 0;
         const shift_type target_shift = target_image_shifts(t);
         for (size_type k = 0; k < owner_counts(t); ++k) {

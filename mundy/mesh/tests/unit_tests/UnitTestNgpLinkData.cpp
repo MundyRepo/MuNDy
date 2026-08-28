@@ -46,6 +46,7 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>
+#include <mundy_mesh/FillMesh.hpp>        // for mundy::mesh::fill_mesh, fill_mesh_with_fields
 #include <mundy_mesh/GetNgpLinkData.hpp>  // for mundy::mesh::get_updated_ngp_link_data
 #include <mundy_mesh/LinkData.hpp>        // for mundy::mesh::LinkData
 #include <mundy_mesh/MeshBuilder.hpp>
@@ -613,7 +614,7 @@ const char* link_decl_order_suffix(LinkDeclOrder order) {
 LinkData& read_restart_and_declare(LinkDeclOrder order, LinkRestartIoContext& reader,
                                    const std::filesystem::path& restart_file, LinkMetaData& reader_link_meta_data) {
   const auto read = [&] {
-    stk::io::fill_mesh_with_fields(restart_file.string(), reader.io_broker, *reader.bulk_data, stk::io::READ_RESTART);
+    fill_mesh_with_fields(restart_file.string(), reader.io_broker, *reader.bulk_data, stk::io::READ_RESTART);
   };
   if (order == LinkDeclOrder::BeforeRestart) {
     LinkData& link_data = declare_link_data(*reader.bulk_data, reader_link_meta_data);
@@ -871,12 +872,10 @@ TEST_P(LinkRestartRoundTrip, PreservesLinkRelations) {
   EXPECT_TRUE(reader_ngp_link_data.is_crs_up_to_date());
 }
 
-// Only AfterRestart is exercised: the LinkData reconciles its COO runtime caches at construction, so it must be
-// declared after the restart read.
-// TODO(palmerb4): add LinkDeclOrder::BeforeRestart back to the Values list once the COO is reconciled during the read
-// (add LinkDeclOrder::BeforeRestart alongside AfterRestart below).
+// Both declaration orders are exercised: a link data declared after the read reconciles on construction, and one
+// declared before the read is reconciled by the link-aware fill_mesh_with_fields used in read_restart_and_declare.
 INSTANTIATE_TEST_SUITE_P(DeclareOrder, LinkRestartRoundTrip,
-                         ::testing::Values(LinkDeclOrder::AfterRestart),
+                         ::testing::Values(LinkDeclOrder::BeforeRestart, LinkDeclOrder::AfterRestart),
                          [](const ::testing::TestParamInfo<LinkDeclOrder>& info) {
                            return std::string(link_decl_order_suffix(info.param));
                          });
@@ -909,7 +908,7 @@ struct LinkDataApiFixture {
 // LinkMetaData returns the same object, not a new one.
 TEST(UnitTestNgpLinkData, DeclareLinkData_Idempotent) {
   LinkDataApiFixture f;
-  LinkData& first  = declare_link_data(*f.bulk, *f.link_meta);
+  LinkData& first = declare_link_data(*f.bulk, *f.link_meta);
   LinkData& second = declare_link_data(*f.bulk, *f.link_meta);
   EXPECT_EQ(&first, &second);
 }

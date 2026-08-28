@@ -34,14 +34,14 @@
 // Our libs
 #include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
 #include <mundy_math/Array.hpp>                 // for mundy::Array
-#include <mundy_math/MaskedView.hpp>            // for mundy::MaskedView
+#include <mundy_math/MaskedAccessor.hpp>        // for mundy::MaskedAccessor
 #include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::NumTraits
 #include <mundy_math/Scalar.hpp>                // for mundy::AScalar (interaction operators)
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
-#include <mundy_math/ShiftedView.hpp>           // for mundy::ShiftedView
-#include <mundy_math/StridedView.hpp>           // for mundy::StridedView
+#include <mundy_math/ShiftedAccessor.hpp>       // for mundy::ShiftedAccessor
+#include <mundy_math/StridedAccessor.hpp>       // for mundy::StridedAccessor
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
-#include <mundy_math/TransposedView.hpp>        // for mundy::TransposedView
+#include <mundy_math/TransposedAccessor.hpp>    // for mundy::TransposedAccessor
 #include <mundy_math/Vector.hpp>                // for mundy::Vector
 #include <mundy_math/cmath.hpp>
 #include <mundy_math/impl/MatrixImpl.hpp>
@@ -351,9 +351,9 @@ class AMatrix {
     // column and then shift by the column index to access the contents of the desired column.
     constexpr size_t shift = col;
     constexpr size_t stride = M;
-    auto shifted_data_accessor = get_shifted_view<T, shift>(accessor_);
-    auto strided_shifted_data_accessor = get_owning_strided_accessor<T, stride>(shifted_data_accessor);
-    return get_owning_vector<T, N>(std::move(strided_shifted_data_accessor));
+    auto shifted_data_accessor = get_shifted_accessor<T, shift>(accessor_);
+    auto strided_shifted_data_accessor = get_strided_accessor<T, stride>(std::move(shifted_data_accessor));
+    return get_vector<T, N>(std::move(strided_shifted_data_accessor));
   }
 
   /// \brief Get a view into a certain column of the matrix
@@ -364,9 +364,9 @@ class AMatrix {
     // column and then shift by the column index to access the contents of the desired column.
     constexpr size_t shift = col;
     constexpr size_t stride = M;
-    auto shifted_data_accessor = get_shifted_view<T, shift>(accessor_);
-    auto strided_shifted_data_accessor = get_owning_strided_accessor<T, stride>(shifted_data_accessor);
-    return get_owning_vector<T, N>(std::move(strided_shifted_data_accessor));
+    auto shifted_data_accessor = get_shifted_accessor<T, shift>(accessor_);
+    auto strided_shifted_data_accessor = get_strided_accessor<T, stride>(std::move(shifted_data_accessor));
+    return get_vector<T, N>(std::move(strided_shifted_data_accessor));
   }
 
   /// \brief Get a view into a certain row of the matrix
@@ -376,8 +376,8 @@ class AMatrix {
     // To explain, because the data is stored in row-major order, we need to shift by row * N to get the correct row.
     // Once shifted, we can then get a view of the row.
     constexpr size_t shift = row * M;
-    auto shifted_data_accessor = get_shifted_view<T, shift>(accessor_);
-    return get_owning_vector<T, M>(std::move(shifted_data_accessor));
+    auto shifted_data_accessor = get_shifted_accessor<T, shift>(accessor_);
+    return get_vector<T, M>(std::move(shifted_data_accessor));
   }
 
   /// \brief Get a view into a certain row of the matrix
@@ -387,8 +387,8 @@ class AMatrix {
     // To explain, because the data is stored in row-major order, we need to shift by row * N to get the correct row.
     // Once shifted, we can then get a view of the row.
     constexpr size_t shift = row * M;
-    auto shifted_data_accessor = get_shifted_view<T, shift>(accessor_);
-    return get_owning_vector<T, M>(std::move(shifted_data_accessor));
+    auto shifted_data_accessor = get_shifted_accessor<T, shift>(accessor_);
+    return get_vector<T, M>(std::move(shifted_data_accessor));
   }
 
   /// \brief Get a view into the diagonal of the matrix
@@ -397,8 +397,8 @@ class AMatrix {
     // To explain, because the data is stored in row-major order, we need to stride by N+1 to access the contents of the
     // diagonal.
     constexpr size_t stride = M + 1;
-    auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
-    return get_owning_vector<T, min(N, M)>(std::move(strided_data_accessor));
+    auto strided_data_accessor = get_strided_accessor<T, stride>(accessor_);
+    return get_vector<T, min(N, M)>(std::move(strided_data_accessor));
   }
 
   /// \brief Get a view into the diagonal of the matrix
@@ -407,8 +407,8 @@ class AMatrix {
     // To explain, because the data is stored in row-major order, we need to stride by N+1 to access the contents of the
     // diagonal.
     constexpr size_t stride = M + 1;
-    auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
-    return get_owning_vector<T, min(N, M)>(std::move(strided_data_accessor));
+    auto strided_data_accessor = get_strided_accessor<T, stride>(accessor_);
+    return get_vector<T, min(N, M)>(std::move(strided_data_accessor));
   }
 
   /// \brief Get a view into the transpose of the matrix
@@ -416,8 +416,8 @@ class AMatrix {
   constexpr auto view_transpose() {
     // Isn't this neat? We can get a transposed view of the matrix without copying the data and then use any of our
     // existing function/operations on it!
-    auto transposed_data_accessor = get_transposed_view<T, N, M>(accessor_);
-    return get_owning_matrix<T, M, N>(std::move(transposed_data_accessor));
+    auto transposed_data_accessor = get_transposed_accessor<T, N, M>(accessor_);
+    return get_matrix<T, M, N>(std::move(transposed_data_accessor));
   }
 
   /// \brief Get a view into the transpose of the matrix
@@ -425,8 +425,8 @@ class AMatrix {
   constexpr auto view_transpose() const {
     // Isn't this neat? We can get a transposed view of the matrix without copying the data and then use any of our
     // existing function/operations on it!
-    auto transposed_data_accessor = get_transposed_view<T, N, M>(accessor_);
-    return get_owning_matrix<T, M, N>(std::move(transposed_data_accessor));
+    auto transposed_data_accessor = get_transposed_accessor<T, N, M>(accessor_);
+    return get_matrix<T, M, N>(std::move(transposed_data_accessor));
   }
 
   /// \brief Get a view into the matrix excluding a certain row and column
@@ -439,8 +439,8 @@ class AMatrix {
     constexpr size_t newN = N - 1;
     constexpr size_t newM = M - 1;
     constexpr Kokkos::Array<bool, N * M> mask = impl::create_row_and_col_mask<N, M, row_to_exclude, col_to_exclude>();
-    auto masked_data_accessor = get_masked_view<T, N * M, mask>(accessor_);
-    return get_owning_matrix<T, newN, newM>(std::move(masked_data_accessor));
+    auto masked_data_accessor = get_masked_accessor<T, N * M, mask>(accessor_);
+    return get_matrix<T, newN, newM>(std::move(masked_data_accessor));
   }
 
   /// \brief Get a view into the matrix excluding a certain row and column
@@ -453,8 +453,8 @@ class AMatrix {
     constexpr size_t newN = N - 1;
     constexpr size_t newM = M - 1;
     constexpr Kokkos::Array<bool, N * M> mask = impl::create_row_and_col_mask<N, M, row_to_exclude, col_to_exclude>();
-    auto masked_data_accessor = get_masked_view<T, N * M, mask>(accessor_);
-    return get_owning_matrix<T, newN, newM>(std::move(masked_data_accessor));
+    auto masked_data_accessor = get_masked_accessor<T, N * M, mask>(accessor_);
+    return get_matrix<T, newN, newM>(std::move(masked_data_accessor));
   }
 
   /// \brief Cast (and copy) the matrix to a different type
@@ -1404,19 +1404,70 @@ MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 
 /// \endcode
 /// you can write
 /// \code
-///   auto mat = get_matrix3_view<T>(data);
+///   auto mat = get_matrix3<T>(data);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_matrix_view(Accessor&& data) {
-  auto data_storage = store(std::forward<Accessor>(data));
-  return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
+KOKKOS_INLINE_FUNCTION constexpr auto get_matrix(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return AMatrix<T, N, M, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor&& data) {
-  auto data_storage = store(std::move(data));
-  return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
-}
+#define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M) \
+  template <typename T, ValidAccessor<T> Accessor>                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {     \
+    return get_matrix<T, N, M>(std::forward<Accessor>(data));                    \
+  }
+
+#define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, T, N, M) \
+  template <ValidAccessor<T> Accessor>                                                       \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {                 \
+    return get_matrix<T, N, M>(std::forward<Accessor>(data));                                \
+  }
+
+#define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION(N, M) \
+  MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M, matrix##N##M, N, M)
+
+#define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                             \
+  MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##f, matrix##N##M##f, float, N, M) \
+  MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##d, matrix##N##M##d, double, N, M)
+
+/// \brief Accessor helpers for each AMatrix specialization, mirroring the type specializations above.
+MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(
+    MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION)  // This is what creates get_matrix11, get_matrix12, etc.
+MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(
+    MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE)  // ... and get_matrix11d, etc.
+
+// Special diagonals overloads
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix1, matrix1, 1, 1)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix2, matrix2, 2, 2)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix3, matrix3, 3, 3)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix4, matrix4, 4, 4)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix5, matrix5, 5, 5)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix6, matrix6, 6, 6)
+
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1f, matrix1f, float, 1, 1)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2f, matrix2f, float, 2, 2)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3f, matrix3f, float, 3, 3)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4f, matrix4f, float, 4, 4)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5f, matrix5f, float, 5, 5)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6f, matrix6f, float, 6, 6)
+
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1d, matrix1d, double, 1, 1)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2d, matrix2d, double, 2, 2)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3d, matrix3d, double, 3, 3)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4d, matrix4d, double, 4, 4)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5d, matrix5d, double, 5, 5)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6d, matrix6d, double, 6, 6)
+
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1i, matrix1i, int, 1, 1)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2i, matrix2i, int, 2, 2)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3i, matrix3i, int, 3, 3)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4i, matrix4i, int, 4, 4)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5i, matrix5i, int, 5, 5)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 6)
 //@}
 
 //! \name Non-member arithmetic: AScalar op AMatrix / AMatrix op AScalar

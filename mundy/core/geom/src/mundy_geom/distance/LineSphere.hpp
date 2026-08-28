@@ -50,7 +50,7 @@ namespace mundy {
 template <ValidLineType LineType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename LineType::value_type distance(const LineType& line,  //
-                                                     const SphereType& sphere) {
+                                                       const SphereType& sphere) {
   return distance(SharedNormalSigned{}, line, sphere);
 }
 
@@ -61,8 +61,8 @@ KOKKOS_FUNCTION typename LineType::value_type distance(const LineType& line,  //
 template <ValidLineType LineType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename LineType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                     const LineType& line,                                     //
-                                                     const SphereType& sphere) {
+                                                       const LineType& line,                                     //
+                                                       const SphereType& sphere) {
   return distance(sphere.center(), line) - sphere.radius();
 }
 
@@ -75,11 +75,11 @@ KOKKOS_FUNCTION typename LineType::value_type distance([[maybe_unused]] const Sh
 /// \param[out] sep The separation vector (from line to sphere)
 template <ValidLineType LineType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineType::value_type, typename SphereType::value_type>)
-KOKKOS_FUNCTION typename LineType::value_type distance(const LineType& line,                               //
-                                                     const SphereType& sphere,                           //
-                                                     Point<typename LineType::value_type>& closest_point,  //
-                                                     typename LineType::value_type& arch_length,           //
-                                                     mundy::Vector3<typename LineType::value_type>& sep) {
+KOKKOS_FUNCTION typename LineType::value_type distance(const LineType& line,                                 //
+                                                       const SphereType& sphere,                             //
+                                                       Point<typename LineType::value_type>& closest_point,  //
+                                                       typename LineType::value_type& arch_length,           //
+                                                       mundy::Vector3<typename LineType::value_type>& sep) {
   return distance(SharedNormalSigned{}, line, sphere, closest_point, arch_length, sep);
 }
 
@@ -93,11 +93,11 @@ KOKKOS_FUNCTION typename LineType::value_type distance(const LineType& line,    
 template <ValidLineType LineType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename LineType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                     const LineType& line,                                     //
-                                                     const SphereType& sphere,                                 //
-                                                     Point<typename LineType::value_type>& closest_point,        //
-                                                     typename LineType::value_type& arch_length,                 //
-                                                     mundy::Vector3<typename LineType::value_type>& sep) {
+                                                       const LineType& line,                                     //
+                                                       const SphereType& sphere,                                 //
+                                                       Point<typename LineType::value_type>& closest_point,      //
+                                                       typename LineType::value_type& arch_length,               //
+                                                       mundy::Vector3<typename LineType::value_type>& sep) {
   using Scalar = typename LineType::value_type;
   const Scalar line_point_distance = distance(sphere.center(), line, closest_point, arch_length, sep);
 

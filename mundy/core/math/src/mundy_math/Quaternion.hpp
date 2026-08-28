@@ -364,15 +364,15 @@ class AQuaternion {
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr const auto vector() const {
-    auto shifted_accessor = get_shifted_view<T, x_storage_index>(accessor_);
-    return get_owning_vector<T, 3>(std::move(shifted_accessor));
+    auto shifted_accessor = get_shifted_accessor<T, x_storage_index>(accessor_);
+    return get_vector<T, 3>(std::move(shifted_accessor));
   }
 
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr auto vector() {
-    auto shifted_accessor = get_shifted_view<T, x_storage_index>(accessor_);
-    return get_owning_vector<T, 3>(std::move(shifted_accessor));
+    auto shifted_accessor = get_shifted_accessor<T, x_storage_index>(accessor_);
+    return get_vector<T, 3>(std::move(shifted_accessor));
   }
 
   /// \brief Get a deep copy of the quaternion
@@ -1115,19 +1115,26 @@ MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 /// \endcode
 /// you can write
 /// \code
-///   auto quat = get_quaternion_view<T>(data);
+///   auto quat = get_quaternion<T>(data);
 /// \endcode
-template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor&& data) {
-  auto data_storage = store(std::forward<Accessor>(data));
-  return AQuaternion<T, decltype(data_storage)>(data_storage);
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
+template <typename T, ValidAccessor<T> Accessor>
+KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return AQuaternion<T, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor&& data) {
-  auto data_storage = store(std::move(data));
-  return AQuaternion<T, decltype(data_storage)>(data_storage);
-}
+#define MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(alias, alias_lower, T) \
+  template <ValidAccessor<T> Accessor>                                       \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) { \
+    return get_quaternion<T>(std::forward<Accessor>(data));                  \
+  }
+
+/// \brief Accessor helpers for each AQuaternion specialization, mirroring the type specializations above.
+MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(Quaterniond, quaterniond, double)
+MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 //@}
 
 //@}

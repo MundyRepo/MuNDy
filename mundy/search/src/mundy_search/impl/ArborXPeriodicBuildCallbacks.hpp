@@ -24,8 +24,8 @@
 /// \file impl/ArborXPeriodicBuildCallbacks.hpp
 /// \brief No-output ArborX callbacks for periodic neighbor-list construction (shared between 1D and 2D builds).
 ///
-/// These callbacks receive ArborX image ordinals, map them to owner ordinals and per-object image shifts via the periodic
-/// candidate factory, apply the excluder, and atomically write to owner-indexed output views.
+/// These callbacks receive ArborX image ordinals, map them to owner ordinals and per-object image shifts via the
+/// periodic candidate factory, apply the excluder, and atomically write to owner-indexed output views.
 
 // Mundy
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*

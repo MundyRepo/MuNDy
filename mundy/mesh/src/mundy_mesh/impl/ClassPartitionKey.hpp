@@ -64,8 +64,7 @@ ClassPartitionKey get_class_partition_key(const ClassVector& classes);
 ///
 /// Iterates the registered classes on \p meta_data and returns those whose class_ordinal()
 /// appears in \p key, in ordinal order.  Throws if any ordinal in \p key has no matching class.
-ClassVector get_classes_for_class_partition_key(const ClassPartitionKey& key,
-                                                stk::mesh::MetaData&    meta_data);
+ClassVector get_classes_for_class_partition_key(const ClassPartitionKey& key, stk::mesh::MetaData& meta_data);
 
 }  // namespace impl
 
