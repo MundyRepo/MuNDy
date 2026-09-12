@@ -29,6 +29,8 @@
 #include <utility>  // for std::pair, std::make_pair
 
 // Trilinos
+#include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
+
 #include <Kokkos_Core.hpp>
 #include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>
@@ -63,6 +65,18 @@ using STKSearchBoxesT = SearchBoxes<MemorySpace, stk::search::Box<float>, stk::m
 template <typename MemorySpace, typename ImageShiftScalar = float>
 using PeriodicSTKSearchBoxesT =
     SearchBoxes<MemorySpace, stk::search::Box<float>, PeriodicImageIdentity<stk::mesh::EntityKey, ImageShiftScalar>>;
+
+/// \brief Kokkos space for the transient views handed to `stk::search::coarse_search`.
+///
+/// Trilinos 16.0.0 deduces one space from both the views and the execution-space argument; 16.1.0 onward templates
+/// them independently.
+#if TRILINOS_MAJOR_MINOR_VERSION > 160000
+template <typename MemorySpace, typename ExecSpace>
+using stk_coarse_search_space = MemorySpace;
+#else
+template <typename MemorySpace, typename ExecSpace>
+using stk_coarse_search_space = ExecSpace;
+#endif
 
 /// \brief Pack a MundyGeom AABB (the component's broad-phase volume) into an `stk::search::Box`, casting corners
 /// to the search scalar.

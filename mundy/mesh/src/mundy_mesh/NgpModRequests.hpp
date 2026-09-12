@@ -486,7 +486,7 @@ class NgpRequestEntitiesImplT {
 #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
       : state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestEntitiesImplT::state")) {
 #else
-      : state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestEntitiesImplT::state")) {
+      : state_("NgpRequestEntitiesImplT::state") {
 #endif
     state_().index_ = helper_index;
     state_().active_space_dev_view_ = bool_view_t("NgpRequestEntitiesImplT::active_space_dev_view");
@@ -808,7 +808,7 @@ class NgpRequestConnectionsT {
 #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestConnectionsT::state"));
 #else
-    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestConnectionsT::state"));
+    state_ = state_view_t("NgpRequestConnectionsT::state");
 #endif
     state_().active_space_dev_view_ = bool_view_t("NgpRequestConnectionsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -1027,7 +1027,7 @@ class NgpRequestLinkRelationsT {
 #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestLinkRelationsT::state"));
 #else
-    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestLinkRelationsT::state"));
+    state_ = state_view_t("NgpRequestLinkRelationsT::state");
 #endif
     state_().active_space_dev_view_ = bool_view_t("NgpRequestLinkRelationsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -1206,7 +1206,7 @@ class NgpDestroyEntitiesT {
 #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpDestroyEntitiesT::state"));
 #else
-    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpDestroyEntitiesT::state"));
+    state_ = state_view_t("NgpDestroyEntitiesT::state");
 #endif
     state_().active_space_dev_view_ = bool_view_t("NgpDestroyEntitiesT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -1399,7 +1399,7 @@ class NgpDestroyConnectionsT {
 #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpDestroyConnectionsT::state"));
 #else
-    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpDestroyConnectionsT::state"));
+    state_ = state_view_t("NgpDestroyConnectionsT::state");
 #endif
     state_().active_space_dev_view_ = bool_view_t("NgpDestroyConnectionsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -1598,8 +1598,7 @@ class NgpModRequestsT {
       : shared_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::shared_state")),
         host_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::host_state")) {
 #else
-      : shared_state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpModRequestsT::shared_state")),
-        host_state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpModRequestsT::host_state")) {
+      : shared_state_("NgpModRequestsT::shared_state"), host_state_("NgpModRequestsT::host_state") {
 #endif
     shared_state_().initialize();
   }

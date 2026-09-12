@@ -579,8 +579,9 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
     // Per-result type written by coarse_search: domain = target, range = source.
     using intersection_t = stk::search::IdentProcIntersection<ident_proc_t, ident_proc_t>;
 
-    using search_view_t = Kokkos::View<box_ident_proc_t*, MemorySpace>;
-    using results_view_t = Kokkos::View<intersection_t*, MemorySpace>;
+    using search_space = impl::stk_coarse_search_space<MemorySpace, exec_space>;
+    using search_view_t = Kokkos::View<box_ident_proc_t*, search_space>;
+    using results_view_t = Kokkos::View<intersection_t*, search_space>;
 
     // Device-side key-to-ordinal map.  EntityKey is effectively a uint64_t,
     // so Kokkos::pod_hash gives correct, device-callable hashing.
@@ -1103,8 +1104,9 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
     using box_type = stk::search::Box<float>;
     using box_ident_proc_t = stk::search::BoxIdentProc<box_type, ident_proc_t>;
     using intersection_t = stk::search::IdentProcIntersection<ident_proc_t, ident_proc_t>;
-    using search_view_t = Kokkos::View<box_ident_proc_t*, MemorySpace>;
-    using results_view_t = Kokkos::View<intersection_t*, MemorySpace>;
+    using search_space = impl::stk_coarse_search_space<MemorySpace, exec_space>;
+    using search_view_t = Kokkos::View<box_ident_proc_t*, search_space>;
+    using results_view_t = Kokkos::View<intersection_t*, search_space>;
     using key_map_t = Kokkos::UnorderedMap<stk::mesh::EntityKey, size_type, MemorySpace>;
 
     // Inputs copied (non-const) so each component can be synced to device before reading.
