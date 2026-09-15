@@ -74,19 +74,24 @@ class LinkCSRPartitionT {  // Raw data in any space.
   LinkCSRPartitionT(const stk::mesh::Ordinal& partition_id, const impl::PartitionKey key,
                     const stk::mesh::EntityRank& link_rank, const unsigned link_dimensionality,
                     const stk::mesh::BulkData& bulk_data)
-      : id_(partition_id), ngp_key_(), selector_(), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
+      : id_(partition_id),
+        key_ptr_(),
+        ngp_key_(),
+        selector_(),
+        link_rank_(link_rank),
+        link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
-    ngp_key_ =
-        impl::NgpPartitionKey(Kokkos::view_alloc(Kokkos::WithoutInitializing, "CSRNgpPartitionKey"), key.size());
+    key_ptr_ = make_host_ptr<impl::PartitionKey>(std::move(key));
+    ngp_key_ = impl::NgpPartitionKey(Kokkos::view_alloc(Kokkos::WithoutInitializing, "CSRNgpPartitionKey"), key.size());
     auto ngp_key_host = Kokkos::create_mirror_view(ngp_key_);
-    for (size_t i = 0; i < key.size(); ++i) {
-      ngp_key_host(i) = key[i];
+    for (size_t i = 0; i < key_ptr_->size(); ++i) {
+      ngp_key_host(i) = (*key_ptr_)[i];
     }
     Kokkos::deep_copy(ngp_key_, ngp_key_host);
 
     // Map key to selector
     stk::mesh::PartVector parts;
-    for (const stk::mesh::PartOrdinal& part_ordinal : key) {
+    for (const stk::mesh::PartOrdinal& part_ordinal : *key_ptr_) {
       parts.push_back(&bulk_data.mesh_meta_data().get_part(part_ordinal));
     }
     selector_ = make_host_ptr<stk::mesh::Selector>(stk::mesh::selectIntersection(parts));
@@ -114,6 +119,12 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   //! \name Getters
   //@{
+
+  /// \brief Fetch the partition key.
+  KOKKOS_INLINE_FUNCTION
+  const impl::PartitionKey& key() const noexcept {
+    return *key_ptr_;
+  }
 
   /// \brief Fetch the partition key.
   KOKKOS_INLINE_FUNCTION
@@ -147,17 +158,25 @@ class LinkCSRPartitionT {  // Raw data in any space.
   }
 
   /// \brief Check if this partition contains a given part
-  /// Device-only
+  /// Device or host
   KOKKOS_INLINE_FUNCTION
   bool contains(stk::mesh::PartOrdinal part_ordinal) const {
     bool does_contain = false;
-    for (size_t i = 0u; i < ngp_key_.extent(0); ++i) {
+    KOKKOS_IF_ON_HOST(for (size_t i = 0u; i < key_ptr_->size(); ++i) {
+      stk::mesh::PartOrdinal ordinal = (*key_ptr_)[i];
+      if (ordinal == part_ordinal) {
+        does_contain = true;
+        break;
+      }
+    })
+
+    KOKKOS_IF_ON_DEVICE(for (size_t i = 0u; i < ngp_key_.extent(0); ++i) {
       stk::mesh::PartOrdinal ordinal = ngp_key_(i);
       if (ordinal == part_ordinal) {
         does_contain = true;
         break;
       }
-    }
+    })
     return does_contain;
   }
   //@}
@@ -252,7 +271,8 @@ class LinkCSRPartitionT {  // Raw data in any space.
             }
           }
           linked_buckets_[rank] = LinkCSRBucketConnView();
-        } selector_ = nullptr;))
+        } selector_ = nullptr;
+         key_ptr_ = nullptr;))
   }
   //@}
 
@@ -260,8 +280,8 @@ class LinkCSRPartitionT {  // Raw data in any space.
   //@{
 
   stk::mesh::Ordinal id_;  ///< Unique identifier for this partition.
-  impl::NgpPartitionKey
-      ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
+  host_ptr<impl::PartitionKey> key_ptr_;
+  impl::NgpPartitionKey ngp_key_;  ///< Sorted view of the part ordinals that this partition contains
   /// Selector for this partition, derived from ngp_key_. A device-copyable, reference-counted host-resident handle:
   /// shallow copies share ownership and the value is destroyed when the last reference drops (host-only to access).
   host_ptr<stk::mesh::Selector> selector_;
