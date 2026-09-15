@@ -148,12 +148,22 @@ TEST(UnitTestLinkCSRPartition, FullConstruction_ScalarMetadataMatchesArguments) 
   EXPECT_EQ(p.ngp_key().extent(0), key.size());
 }
 
+void test_part_membership(const LinkCSRPartitionFixture& f, const LinkCSRPartition& p) {
+  size_t link_part_dim2_ordinal = f.link_part_dim2->mesh_meta_data_ordinal();
+  size_t link_part_dim3_ordinal = f.link_part_dim3->mesh_meta_data_ordinal();
+  size_t link_unrelated_ordinal = f.unrelated_part->mesh_meta_data_ordinal();
+  Kokkos::parallel_for(
+      "FullConstruction_NgpKeyReflectsPartitionKey", Kokkos::RangePolicy<>(0, 1), KOKKOS_LAMBDA(int) {
+        MUNDY_THROW_REQUIRE(p.contains(link_part_dim2_ordinal), std::runtime_error, "Partition part membership error");
+        MUNDY_THROW_REQUIRE(!p.contains(link_part_dim3_ordinal), std::runtime_error, "Partition part membership error");
+        MUNDY_THROW_REQUIRE(!p.contains(link_unrelated_ordinal), std::runtime_error, "Partition part membership error");
+      });
+}
+
 TEST(UnitTestLinkCSRPartition, FullConstruction_NgpKeyReflectsPartitionKey) {
   LinkCSRPartitionFixture f;
   LinkCSRPartition p(0u, f.key_for_dim2(), f.link_rank, 2u, *f.bulk);
-  EXPECT_TRUE(p.contains(f.link_part_dim2->mesh_meta_data_ordinal()));
-  EXPECT_FALSE(p.contains(f.link_part_dim3->mesh_meta_data_ordinal()));
-  EXPECT_FALSE(p.contains(f.unrelated_part->mesh_meta_data_ordinal()));
+  test_part_membership(f, p);
 }
 
 TEST(UnitTestLinkCSRPartition, FullConstruction_SelectorMatchesPartitionKey) {

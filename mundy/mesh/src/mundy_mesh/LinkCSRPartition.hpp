@@ -77,7 +77,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
       : id_(partition_id), ngp_key_(), selector_(), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
     ngp_key_ =
-        impl::NgpPartitionKey(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpCSRimpl::PartitionKey"), key.size());
+        impl::NgpPartitionKey(Kokkos::view_alloc(Kokkos::WithoutInitializing, "CSRNgpPartitionKey"), key.size());
     auto ngp_key_host = Kokkos::create_mirror_view(ngp_key_);
     for (size_t i = 0; i < key.size(); ++i) {
       ngp_key_host(i) = key[i];
@@ -147,6 +147,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
   }
 
   /// \brief Check if this partition contains a given part
+  /// Device-only
   KOKKOS_INLINE_FUNCTION
   bool contains(stk::mesh::PartOrdinal part_ordinal) const {
     bool does_contain = false;
