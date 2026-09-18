@@ -228,24 +228,37 @@ TEST(UnitTestLinkCOOData, CrsSnapshotReflectsRelationAfterSync_ThenPreservedAfte
   // Use the full LinkData machinery to perform a CSR sync
   LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
   link_data.coo_data().declare_relation(f.link, f.target0, 0u);
+  link_data.coo_data().declare_relation(f.link, f.target1, 1u);
   link_data.coo_modify_on_host();
 
   NgpLinkData& ngp = get_updated_ngp_link_data(link_data);
   ngp.coo_sync_to_device();
+  ASSERT_FALSE(ngp.is_crs_up_to_date());
   ngp.update_crs_from_coo();
+  ASSERT_TRUE(ngp.is_crs_up_to_date());
+  link_data.coo_sync_to_host();
   link_data.crs_sync_to_host();
 
-  // After CSR sync, the CRS snapshot should hold target0
+  // After CSR sync, the CRS snapshot should hold target0 and target1
+  EXPECT_EQ(link_data.coo_data().get_linked_entity(f.link, 0u), f.target0)
+      << "After update_crs_from_coo the CRS snapshot field should record the current relation";
+  EXPECT_EQ(link_data.coo_data().get_linked_entity(f.link, 1u), f.target1)
+      << "After update_crs_from_coo the CRS snapshot field should record the current relation";
+
   EXPECT_EQ(impl::get_linked_entity_crs(link_data.coo_data(), f.link, 0u), f.target0)
+      << "After update_crs_from_coo the CRS snapshot field should record the current relation";
+  EXPECT_EQ(impl::get_linked_entity_crs(link_data.coo_data(), f.link, 1u), f.target1)
       << "After update_crs_from_coo the CRS snapshot field should record the current relation";
 
   // Now destroy the relation
   link_data.coo_data().destroy_relation(f.link, 0u);
 
-  // COO field must be invalid; CRS snapshot must STILL hold target0
+  // COO field must be invalid; CRS snapshot must STILL hold target0 and target1
   EXPECT_FALSE(f.bulk->is_valid(link_data.coo_data().get_linked_entity(f.link, 0u)))
       << "COO field should be cleared by destroy_relation";
   EXPECT_EQ(impl::get_linked_entity_crs(link_data.coo_data(), f.link, 0u), f.target0)
+      << "CRS snapshot must be preserved by destroy_relation to enable change detection";
+  EXPECT_EQ(impl::get_linked_entity_crs(link_data.coo_data(), f.link, 1u), f.target1)
       << "CRS snapshot must be preserved by destroy_relation to enable change detection";
 }
 

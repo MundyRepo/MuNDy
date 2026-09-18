@@ -1023,6 +1023,43 @@ inline Scalar ngp_field_amin(stk::mesh::FieldBase& field_x,                  //
   return global_min;
 }
 
+/// \brief Print the field
+template <typename Scalar, typename ExecSpace>
+void ngp_field_print(stk::mesh::FieldBase& field,                    //
+                     const stk::mesh::Selector* const selector_ptr,  //
+                     const ExecSpace& exec_space) {
+  sync_field_to_space(field, exec_space);
+  stk::mesh::Selector field_selector = if_nullptr_select_fields(selector_ptr, field);
+
+  using NgpScalarField = stk::mesh::NgpField<Scalar>;
+  NgpScalarField ngp_field = stk::mesh::get_updated_ngp_field<Scalar>(field);
+  stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
+
+  stk::mesh::for_each_entity_run(
+      ngp_mesh, ngp_field.get_rank(), field_selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& fmi) {
+        unsigned num_components = ngp_field.get_num_components_per_entity(fmi);
+        Kokkos::printf("EntityID: %d, values: ", ngp_mesh.identifier(ngp_mesh.get_entity(ngp_field.get_rank(), fmi)));
+        for (unsigned d = 0; d < num_components; ++d) {
+          if constexpr (std::is_same_v<Scalar, int>) {
+            Kokkos::printf("%i ", ngp_field(fmi, d));
+          } else if constexpr (std::is_same_v<Scalar, unsigned int>) {
+            Kokkos::printf("%u ", ngp_field(fmi, d));
+          } else if constexpr (std::is_same_v<Scalar, long>) {
+            Kokkos::printf("%ld ", ngp_field(fmi, d));
+          } else if constexpr (std::is_same_v<Scalar, float>) {
+            Kokkos::printf("%f ", ngp_field(fmi, d));
+          } else if constexpr (std::is_same_v<Scalar, double>) {
+            Kokkos::printf("%lf ", ngp_field(fmi, d));
+          } else {
+            Kokkos::printf("%f ", ngp_field(fmi, d));
+          }
+        }
+        Kokkos::printf("\n");
+      });
+
+  mark_field_modified_on_space(field, exec_space);
+}
+
 }  // namespace impl
 
 }  // namespace mesh

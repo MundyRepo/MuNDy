@@ -330,7 +330,7 @@ class Aggregate {
   }
   template <typename Tag>
   MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
-  const void get_component() const {
+  void get_component() const {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
   }
@@ -555,7 +555,7 @@ class NgpAggregate {
   }
   template <typename Tag>
   MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
-  KOKKOS_INLINE_FUNCTION const void get_component() const {
+  KOKKOS_INLINE_FUNCTION void get_component() const {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
   }

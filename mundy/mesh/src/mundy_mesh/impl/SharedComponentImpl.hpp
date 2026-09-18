@@ -117,6 +117,12 @@ class SharedComponentSynchronizerT : public HostDeviceSynchronizer {
   void modify_on_device() override {
   }
 
+  void clear_host_sync_state() override {
+  }
+
+  void clear_device_sync_state() override {
+  }
+
   void update_post_mesh_mod() override {
   }
 

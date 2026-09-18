@@ -432,6 +432,155 @@ void basic_usage_test() {
   validate_crs_connectivity(context, link_init_data_b, link_data);
 }
 
+TEST(UnitTestNgpLinkData, SyncHostDeviceLogic) {
+  // Stock setup
+  TestContext context;
+  context.link_rank = stk::topology::NODE_RANK;
+  setup_mesh_and_metadata(context);
+  LinkMetaData link_meta_data = declare_and_validate_link_metadata(context, "ALL_LINKS");
+  setup_parts_and_links(context, link_meta_data);
+  LinkData& link_data = declare_link_data(*context.bulk_data, link_meta_data);
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
+
+  constexpr bool dev_is_host_accessible =
+      Kokkos::SpaceAccessibility<Kokkos::DefaultHostExecutionSpace, stk::ngp::MemSpace>::accessible;
+  if constexpr (dev_is_host_accessible) {
+    // Dev == Host
+    ASSERT_FALSE(link_data.coo_has_device_data());
+    ASSERT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    ASSERT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    ASSERT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    ASSERT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // HOST
+    // Mark dirty on host
+    ngp_link_data.coo_modify_on_host();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // Sync to device
+    ngp_link_data.coo_sync_to_device();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // No-op (already sync)
+    ngp_link_data.coo_sync_to_device();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // Mark and then reset on host
+    ngp_link_data.coo_modify_on_host();
+    ngp_link_data.coo_clear_host_sync_state();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // DEVICE
+    // Mark dirty on device
+    ngp_link_data.coo_modify_on_device();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // Sync to host
+    ngp_link_data.coo_sync_to_host();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // No-op (already sync)
+    ngp_link_data.coo_sync_to_host();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // Mark and then reset on device
+    ngp_link_data.coo_modify_on_device();
+    ngp_link_data.coo_clear_device_sync_state();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+  } else {
+    // Dev != Host
+    ASSERT_TRUE(link_data.coo_has_device_data());
+    ASSERT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    ASSERT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    ASSERT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    ASSERT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // HOST
+    // Mark dirty on host
+    ngp_link_data.coo_modify_on_host();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_TRUE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+    // Sync to device
+    ngp_link_data.coo_sync_to_device();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+    // No-op (already sync)
+    ngp_link_data.coo_sync_to_device();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+    // Mark and then reset on host
+    ngp_link_data.coo_modify_on_host();
+    ngp_link_data.coo_clear_host_sync_state();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+    // DEVICE
+    // Mark dirty on device
+    ngp_link_data.coo_modify_on_device();
+    EXPECT_TRUE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+    // Sync to host
+    ngp_link_data.coo_sync_to_host();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 1u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+    // No-op (already sync)
+    ngp_link_data.coo_sync_to_host();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 1u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+    // Mark and then reset on device
+    ngp_link_data.coo_modify_on_device();
+    ngp_link_data.coo_clear_device_sync_state();
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+    EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 1u);
+    EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+  }
+}
+
 TEST(UnitTestNgpLinkData, BasicUsage) {
   basic_usage_test();
 }

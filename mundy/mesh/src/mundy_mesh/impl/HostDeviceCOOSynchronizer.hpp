@@ -95,6 +95,24 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_link_crs_needs_updated_field(lmd).sync_to_device();
   }
 
+  virtual void clear_host_sync_state() override {
+    LinkMetaData& lmd = coo_data_.link_meta_data();
+    impl::get_linked_entities_field(lmd).clear_host_sync_state();
+    impl::get_linked_entities_crs_field(lmd).clear_host_sync_state();
+    impl::get_linked_entity_ids_field(lmd).clear_host_sync_state();
+    impl::get_linked_entity_ranks_field(lmd).clear_host_sync_state();
+    impl::get_link_crs_needs_updated_field(lmd).clear_host_sync_state();
+  }
+
+  virtual void clear_device_sync_state() override {
+    LinkMetaData& lmd = coo_data_.link_meta_data();
+    impl::get_linked_entities_field(lmd).clear_device_sync_state();
+    impl::get_linked_entities_crs_field(lmd).clear_device_sync_state();
+    impl::get_linked_entity_ids_field(lmd).clear_device_sync_state();
+    impl::get_linked_entity_ranks_field(lmd).clear_device_sync_state();
+    impl::get_link_crs_needs_updated_field(lmd).clear_device_sync_state();
+  }
+
   virtual void update_post_mesh_mod() override {
     stk::mesh::NgpMesh& ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
     NgpLinkMetaDataT<NgpMemSpace>& ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);

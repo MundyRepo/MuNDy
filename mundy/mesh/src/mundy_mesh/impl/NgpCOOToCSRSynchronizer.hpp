@@ -487,11 +487,11 @@ class NgpCOOToCSRSynchronizerT {
             const unsigned d = work % dimensionality;
             const stk::mesh::Entity link = bucket[i];
             const stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
-            if (!coo_data.get_link_crs_needs_updated(link_index)) {
+            if (!impl::get_link_crs_needs_updated(coo_data, link_index)) {
               return;
             }
 
-            const stk::mesh::Entity linked_entity_crs = coo_data.get_linked_entity_crs(link_index, d);
+            const stk::mesh::Entity linked_entity_crs = impl::get_linked_entity_crs(coo_data, link_index, d);
             const stk::mesh::Entity linked_entity = coo_data.get_linked_entity(link_index, d);
             if (linked_entity_crs == linked_entity) {
               return;
@@ -836,6 +836,9 @@ class NgpCOOToCSRSynchronizerT {
     ::mundy::mesh::field_copy<entity_value_t>(impl::get_linked_entities_field(crs_data.link_meta_data()),
                                               impl::get_linked_entities_crs_field(crs_data.link_meta_data()),
                                               link_subset_selector, stk::ngp::ExecSpace());
+
+    // Return the COO to a uniform state of up-to-dateness
+    impl::get_linked_entities_crs_field(crs_data.link_meta_data()).sync_to_host();
   }
 
   /// \brief Check consistency between the COO and CSR connectivity for the given selector

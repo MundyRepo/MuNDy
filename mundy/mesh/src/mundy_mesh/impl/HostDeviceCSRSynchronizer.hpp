@@ -48,6 +48,8 @@ namespace mesh {
 
 namespace impl {
 
+/// @brief \brief This class just exists for type erasure of NgpMemSpace for orchestrating host/device synchronization
+/// @tparam NgpMemSpace
 template <typename NgpMemSpace>
 class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
  public:
@@ -71,6 +73,12 @@ class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
 
   virtual void sync_to_host() override {
     crs_data_.synchronize_with(ngp_crs_data_);
+  }
+
+  virtual void clear_host_sync_state() override {
+  }
+
+  virtual void clear_device_sync_state() override {
   }
 
   virtual void update_post_mesh_mod() override {

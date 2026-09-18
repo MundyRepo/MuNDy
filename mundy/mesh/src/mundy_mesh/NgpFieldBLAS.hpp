@@ -61,6 +61,7 @@ List of available field operations:
   - field_amax
   - field_min
   - field_amin
+  - field_print
 */
 
 /// \brief Fill a component of a field with a scalar value
@@ -466,6 +467,21 @@ template <typename Scalar, typename ExecSpace>
 inline Scalar field_amin(stk::mesh::FieldBase& x,  //
                          const ExecSpace& exec_space) {
   return impl::ngp_field_amin<Scalar>(x, nullptr, exec_space);
+}
+
+/// \brief Print the field
+template <typename Scalar, typename ExecSpace>
+inline void field_print(stk::mesh::FieldBase& x,              //
+                        const stk::mesh::Selector& selector,  //
+                        const ExecSpace& exec_space) {
+  impl::ngp_field_print<Scalar>(x, &selector, exec_space);
+}
+
+/// \brief Print the field
+template <typename Scalar, typename ExecSpace>
+inline void field_print(stk::mesh::FieldBase& x,  //
+                        const ExecSpace& exec_space) {
+  impl::ngp_field_print<Scalar>(x, nullptr, exec_space);
 }
 
 /// We currently do not support arg-min/max operations. This is because we are not sure how to handle entity conflicts

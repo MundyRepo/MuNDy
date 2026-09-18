@@ -290,9 +290,11 @@ class LinkData {
   }
   void crs_clear_host_sync_state() {
     crs_modified_on_host_ = false;
+    crs_synchronizer_->clear_host_sync_state();
   }
   void crs_clear_device_sync_state() {
     crs_modified_on_device_ = false;
+    crs_synchronizer_->clear_device_sync_state();
   }
   bool crs_has_device_data() const {
     return crs_synchronizer_ != nullptr;
@@ -302,6 +304,12 @@ class LinkData {
   }
   void crs_increment_num_syncs_to_device() {
     ++crs_num_syncs_to_device_;
+  }
+  size_t crs_num_syncs_to_host() const {
+    return crs_num_syncs_to_host_;
+  }
+  size_t crs_num_syncs_to_device() const {
+    return crs_num_syncs_to_device_;
   }
   //@}
 
@@ -366,9 +374,11 @@ class LinkData {
   }
   void coo_clear_host_sync_state() {
     coo_modified_on_host_ = false;
+    coo_synchronizer_->clear_host_sync_state();
   }
   void coo_clear_device_sync_state() {
     coo_modified_on_device_ = false;
+    coo_synchronizer_->clear_device_sync_state();
   }
   bool coo_has_device_data() const {
     return coo_synchronizer_ != nullptr;
@@ -378,6 +388,12 @@ class LinkData {
   }
   void coo_increment_num_syncs_to_device() {
     ++coo_num_syncs_to_device_;
+  }
+  size_t coo_num_syncs_to_host() const {
+    return coo_num_syncs_to_host_;
+  }
+  size_t coo_num_syncs_to_device() const {
+    return coo_num_syncs_to_device_;
   }
   //@}
 
