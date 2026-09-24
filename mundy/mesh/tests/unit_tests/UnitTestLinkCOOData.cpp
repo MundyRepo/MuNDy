@@ -124,12 +124,16 @@ TEST(UnitTestLinkCOOData, Construction_ValidityReflectsSetup) {
 
 TEST(UnitTestLinkCOOData, WrongRankLinkerThrows) {
 #ifdef NDEBUG
-  GTEST_SKIP() << "MUNDY_THROW_ASSERT is disabled in non-debug builds (NDEBUG defined).";
-#endif
+  LinkCOODataFixture f;
+  LinkCOOData coo(*f.bulk, *f.link_meta);
+  EXPECT_NO_THROW(coo.declare_relation(f.target0, f.target1, 0u));
+  EXPECT_NO_THROW(coo.destroy_relation(f.target0, 0u));
+#else
   LinkCOODataFixture f;
   LinkCOOData coo(*f.bulk, *f.link_meta);
   EXPECT_THROW(coo.declare_relation(f.target0, f.target1, 0u), std::exception);
   EXPECT_THROW(coo.destroy_relation(f.target0, 0u), std::exception);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -275,14 +279,15 @@ TEST(UnitTestLinkCOOData, NgpCOOData_Construction_IsValid) {
 
 // After declaring a relation on the host and syncing to device, a kernel must read
 // back the correct entity and rank.
-
-void cache_result(const NgpLinkCOOData& ngp_coo, stk::mesh::FastMeshIndex link_idx,
+void cache_result(const NgpLinkData& ngp_link_data, stk::mesh::Entity link,
                   Kokkos::View<stk::mesh::Entity*, stk::ngp::MemSpace> entity_result,
                   Kokkos::View<stk::mesh::EntityRank*, stk::ngp::MemSpace> rank_result) {
+  NgpLinkCOOData ngp_coo = ngp_link_data.coo_data();
   Kokkos::parallel_for(
       Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) {
-        entity_result(0) = ngp_coo.get_linked_entity(link_idx, 0u);
-        rank_result(0) = ngp_coo.get_linked_entity_rank(link_idx, 0u);
+        const stk::mesh::FastMeshIndex link_fmi = ngp_link_data.ngp_mesh().fast_mesh_index(link);
+        entity_result(0) = ngp_coo.get_linked_entity(link_fmi, 0u);
+        rank_result(0) = ngp_coo.get_linked_entity_rank(link_fmi, 0u);
       });
   Kokkos::fence();
 }
@@ -294,14 +299,12 @@ TEST(UnitTestLinkCOOData, NgpCOOData_ReflectsHostRelationsAfterSync) {
   link_data.coo_data().declare_relation(f.link, f.target0, 0u);
   link_data.coo_modify_on_host();
 
-  NgpLinkData& ngp = get_updated_ngp_link_data(link_data);
-  ngp.coo_sync_to_device();
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
+  ngp_link_data.coo_sync_to_device();
 
-  NgpLinkCOOData ngp_coo = ngp.coo_data();
-  const stk::mesh::FastMeshIndex link_idx = ngp.ngp_mesh().fast_mesh_index(f.link);
   Kokkos::View<stk::mesh::Entity*, stk::ngp::MemSpace> entity_result("entity_result", 1);
   Kokkos::View<stk::mesh::EntityRank*, stk::ngp::MemSpace> rank_result("rank_result", 1);
-  cache_result(ngp_coo, link_idx, entity_result, rank_result);
+  cache_result(ngp_link_data, f.link, entity_result, rank_result);
 
   auto entity_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, entity_result);
   auto rank_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rank_result);
@@ -311,10 +314,12 @@ TEST(UnitTestLinkCOOData, NgpCOOData_ReflectsHostRelationsAfterSync) {
 
 // A destroy_relation executed inside a device kernel must be visible on the host
 // after coo_sync_to_host().
-
-void destroy_relation_on_device(const NgpLinkCOOData& ngp_coo, stk::mesh::FastMeshIndex link_idx) {
+void destroy_relation_on_device(const NgpLinkData& ngp_link_data, stk::mesh::Entity link) {
   Kokkos::parallel_for(
-      Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) { ngp_coo.destroy_relation(link_idx, 0u); });
+      Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) {
+        const stk::mesh::FastMeshIndex link_fmi = ngp_link_data.ngp_mesh().fast_mesh_index(link);
+        ngp_link_data.coo_data().destroy_relation(link_fmi, 0u);
+      });
   Kokkos::fence();
 }
 
@@ -325,16 +330,14 @@ TEST(UnitTestLinkCOOData, NgpCOOData_DestroyRelationOnDevice_ReflectedAfterSyncB
   link_data.coo_data().declare_relation(f.link, f.target0, 0u);
   link_data.coo_modify_on_host();
 
-  NgpLinkData& ngp = get_updated_ngp_link_data(link_data);
-  ngp.coo_sync_to_device();
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
+  ngp_link_data.coo_sync_to_device();
 
-  NgpLinkCOOData ngp_coo = ngp.coo_data();
-  const stk::mesh::FastMeshIndex link_idx = ngp.ngp_mesh().fast_mesh_index(f.link);
+  NgpLinkCOOData ngp_coo = ngp_link_data.coo_data();
+  destroy_relation_on_device(ngp_link_data, f.link);
 
-  destroy_relation_on_device(ngp_coo, link_idx);
-
-  ngp.coo_modify_on_device();
-  ngp.coo_sync_to_host();
+  ngp_link_data.coo_modify_on_device();
+  ngp_link_data.coo_sync_to_host();
 
   EXPECT_FALSE(f.bulk->is_valid(link_data.coo_data().get_linked_entity(f.link, 0u)))
       << "After device kernel destroy_relation synced back to host, the relation should be invalid";

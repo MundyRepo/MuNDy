@@ -581,16 +581,29 @@ TEST(BelosSolver, RightPreconditionerReducesIterations) {
 }
 
 // ---- Tpetra::Operator adapter: general alpha/beta apply ----
+struct SymTridiagOpComparisonFunctor {
+  int n;
+  double operator()(int i) const {
+      const double x_im1 = (i > 0) ? static_cast<double>(i) : 0.0;          // x_{i-1} = 1 + (i-1)
+      const double x_ip1 = (i < n - 1) ? static_cast<double>(i + 2) : 0.0;  // x_{i+1} = 1 + (i+1)
+      return 4.0 * (1.0 + i) - x_im1 - x_ip1;
+  }
+};
 
 TEST(BelosSolver, TpetraOperatorHonorsAlphaBeta) {
   constexpr int n = 5;
   // SymTridiagOp: (A x)_i = 4 x_i - x_{i-1} - x_{i+1}, with x_i = 1 + i.
-  expect_scaled_apply(SymTridiagOp{n}, n, /*alpha=*/2.0, /*beta=*/3.0, [n](int i) {
-    const double x_im1 = (i > 0) ? static_cast<double>(i) : 0.0;          // x_{i-1} = 1 + (i-1)
-    const double x_ip1 = (i < n - 1) ? static_cast<double>(i + 2) : 0.0;  // x_{i+1} = 1 + (i+1)
-    return 4.0 * (1.0 + i) - x_im1 - x_ip1;
-  });
+  expect_scaled_apply(SymTridiagOp{n}, n, /*alpha=*/2.0, /*beta=*/3.0, SymTridiagOpComparisonFunctor{n});
 }
+
+struct WorkspacedScaledDiagOpComparisonFunctor {
+  view_t diag;
+  double scale;
+  int n;
+  double operator()(int i) const {
+    return scale * diag(i) * (1.0 + i);
+  }
+};
 
 TEST(BelosSolver, TpetraOperatorHonorsAlphaBetaWithWorkspacedOp) {
   constexpr int n = 5;
@@ -605,7 +618,7 @@ TEST(BelosSolver, TpetraOperatorHonorsAlphaBetaWithWorkspacedOp) {
   }
   // Workspace-only op A = scale * diag(d): (A x)_i = scale * d_i * x_i, with x_i = 1 + i, d_i = 2 + i.
   expect_scaled_apply(WorkspacedScaledDiagOp{d, scale, n}, n, /*alpha=*/2.0, /*beta=*/3.0,
-                      [scale](int i) { return scale * (2.0 + i) * (1.0 + i); });
+                      WorkspacedScaledDiagOpComparisonFunctor{d, scale, n});
 }
 
 }  // namespace
