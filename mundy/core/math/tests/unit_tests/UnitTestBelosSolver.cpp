@@ -286,8 +286,8 @@ void expect_matches(const view_t& x_out, const host_view_t& x_exact_h, double at
 
 // Apply `op` (wrapped as a Tpetra::Operator) as Y = alpha*(A X) + beta*Y on a size-n system with X_i = 1+i and
 // Y_i = 10+i, and check each entry against an independent host reference: ax(i) must return (A X)_i for X_i = 1+i.
-template <class Op, class AxFn>
-void expect_scaled_apply(const Op& op, int n, double alpha, double beta, AxFn ax) {
+template <class Op, class AxFnHost>
+void expect_scaled_apply(const Op& op, int n, double alpha, double beta, AxFnHost ax) {
   using LO = Tpetra::Map<>::local_ordinal_type;
   using GO = Tpetra::Map<>::global_ordinal_type;
   using NO = Tpetra::Map<>::node_type;
@@ -581,23 +581,23 @@ TEST(BelosSolver, RightPreconditionerReducesIterations) {
 }
 
 // ---- Tpetra::Operator adapter: general alpha/beta apply ----
-struct SymTridiagOpComparisonFunctor {
+struct SymTridiagOpHostComparisonFunctor {
   int n;
   double operator()(int i) const {
-      const double x_im1 = (i > 0) ? static_cast<double>(i) : 0.0;          // x_{i-1} = 1 + (i-1)
-      const double x_ip1 = (i < n - 1) ? static_cast<double>(i + 2) : 0.0;  // x_{i+1} = 1 + (i+1)
-      return 4.0 * (1.0 + i) - x_im1 - x_ip1;
+    const double x_im1 = (i > 0) ? static_cast<double>(i) : 0.0;          // x_{i-1} = 1 + (i-1)
+    const double x_ip1 = (i < n - 1) ? static_cast<double>(i + 2) : 0.0;  // x_{i+1} = 1 + (i+1)
+    return 4.0 * (1.0 + i) - x_im1 - x_ip1;
   }
 };
 
 TEST(BelosSolver, TpetraOperatorHonorsAlphaBeta) {
   constexpr int n = 5;
   // SymTridiagOp: (A x)_i = 4 x_i - x_{i-1} - x_{i+1}, with x_i = 1 + i.
-  expect_scaled_apply(SymTridiagOp{n}, n, /*alpha=*/2.0, /*beta=*/3.0, SymTridiagOpComparisonFunctor{n});
+  expect_scaled_apply(SymTridiagOp{n}, n, /*alpha=*/2.0, /*beta=*/3.0, SymTridiagOpHostComparisonFunctor{n});
 }
 
-struct WorkspacedScaledDiagOpComparisonFunctor {
-  view_t diag;
+struct WorkspacedScaledDiagOpHostComparisonFunctor {
+  host_view_t diag;
   double scale;
   int n;
   double operator()(int i) const {
@@ -609,16 +609,15 @@ TEST(BelosSolver, TpetraOperatorHonorsAlphaBetaWithWorkspacedOp) {
   constexpr int n = 5;
   const double scale = 1.5;
   view_t d("d", n);
-  {
-    auto dh = Kokkos::create_mirror_view(d);
-    for (int i = 0; i < n; ++i) {
-      dh(i) = 2.0 + i;
-    }
-    Kokkos::deep_copy(d, dh);
+  auto dh = Kokkos::create_mirror_view(d);
+  for (int i = 0; i < n; ++i) {
+    dh(i) = 2.0 + i;
   }
+  Kokkos::deep_copy(d, dh);
+
   // Workspace-only op A = scale * diag(d): (A x)_i = scale * d_i * x_i, with x_i = 1 + i, d_i = 2 + i.
   expect_scaled_apply(WorkspacedScaledDiagOp{d, scale, n}, n, /*alpha=*/2.0, /*beta=*/3.0,
-                      WorkspacedScaledDiagOpComparisonFunctor{d, scale, n});
+                      WorkspacedScaledDiagOpHostComparisonFunctor{dh, scale, n});
 }
 
 }  // namespace
