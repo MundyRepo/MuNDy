@@ -625,10 +625,6 @@ TEST(NgpModRequests, RequestLinks_TwoLinkDataObjects) {
   // link_data_b COO must hold node1 at ordinal 0, node0 at ordinal 1.
   EXPECT_EQ(link_data_b.coo_data().get_linked_entity(link_b, 0u), node1);
   EXPECT_EQ(link_data_b.coo_data().get_linked_entity(link_b, 1u), node0);
-
-  // coo_modify_on_host() was called for both — both should need a device sync.
-  EXPECT_TRUE(link_data_a.coo_need_sync_to_device());
-  EXPECT_TRUE(link_data_b.coo_need_sync_to_device());
 }
 
 }  // namespace

@@ -23,6 +23,7 @@
 
 // C++ core libs
 #include <algorithm>    // for std::max
+#include <limits>       // for std::numeric_limits
 #include <map>          // for std::map
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <stdexcept>    // for std::logic_error, std::invalid_argument
@@ -126,6 +127,27 @@ TYPED_TEST(Vector3PairwiseTypeTest, SpecialOperations) {
   Vector3<T2> v2(4, 5, 6);
   is_close_debug(cross(v1, v2), Vector3d{-3.0, 6.0, -3.0}, "Cross product failed.");
   is_close_debug(elementwise_mul(v1, v2), Vector3d{4.0, 10.0, 18.0}, "Element-wise product failed.");
+}
+
+TYPED_TEST(Vector3SingleTypeTest, Perp) {
+  using T = TypeParam;
+  using R = typename NumTraits<T>::NonInteger;
+
+  // perp's whole contract is unit length plus exact orthogonality, for any nonzero input. The six
+  // axis directions are the discriminating cases: an implementation that crossed with a *fixed*
+  // reference axis yields an exactly zero cross product for the one direction it picked, and NaN
+  // once normalized. The non-unit inputs check that only the direction of v matters.
+  const std::vector<Vector3<T>> directions = {Vector3<T>(1, 0, 0),  Vector3<T>(0, 1, 0),   Vector3<T>(0, 0, 1),
+                                              Vector3<T>(-1, 0, 0), Vector3<T>(0, -1, 0),  Vector3<T>(0, 0, -1),
+                                              Vector3<T>(1, 1, 1),  Vector3<T>(3, 0, 4),   Vector3<T>(0, 5, 12),
+                                              Vector3<T>(-7, 2, -3)};
+
+  const R tol = static_cast<R>(32) * std::numeric_limits<R>::epsilon();
+  for (const Vector3<T>& v : directions) {
+    const AVector3<R> p = perp(v);
+    EXPECT_NEAR(norm(p), static_cast<R>(1), tol) << "perp(" << v << ") is not unit.";
+    EXPECT_NEAR(dot(p, v) / norm(v), static_cast<R>(0), tol) << "perp(" << v << ") is not orthogonal to its input.";
+  }
 }
 //@}
 

@@ -938,6 +938,37 @@ KOKKOS_INLINE_FUNCTION constexpr auto axis_angle_to_quaternion(const AVector3<T,
                                  static_cast<CommonType>(sin_half_angle) * static_cast<CommonType>(axis[2]));
 }
 
+/// \brief Get the rotation vector (axis scaled by angle) of a unit quaternion.
+///
+/// The inverse of axis_angle_to_quaternion, returned packed into one vector so that it stays well
+/// defined at zero rotation, where the axis on its own is arbitrary.
+///
+/// The angle is always taken in [0, pi]. A quaternion and its negation are the same rotation, and
+/// the branch with a non-negative scalar part is the shorter way round, so a rotation given as
+/// 3 pi / 2 about an axis comes back as pi / 2 about the opposite one.
+///
+/// Only quat's direction matters: atan2 is invariant to a common positive scaling of its arguments,
+/// so a non-unit quaternion yields the same vector its normalization would.
+///
+/// \param[in] quat The quaternion.
+/// \pre quat is nonzero.
+template <typename T, ValidAccessor<T> Accessor>
+KOKKOS_INLINE_FUNCTION constexpr AVector3<std::remove_const_t<T>> quaternion_to_rotation_vector(
+    const AQuaternion<T, Accessor>& quat) {
+  using Scalar = std::remove_const_t<T>;
+  const Scalar sign = (quat.w() < Scalar(0)) ? Scalar(-1) : Scalar(1);
+  const Scalar scalar_part = sign * quat.w();
+  const AVector3<Scalar> vector_part{sign * quat.x(), sign * quat.y(), sign * quat.z()};
+
+  // The angle is 2 atan2(|v|, w), which stays accurate at both ends of [0, pi] where acos and asin
+  // each lose it. Scaling the axis by it needs the |v| -> 0 limit, 2 atan2(|v|, w) / |v| -> 2 / w.
+  const Scalar vector_norm = norm(vector_part);
+  if (vector_norm < get_zero_tolerance<Scalar>()) {
+    return (Scalar(2) / scalar_part) * vector_part;
+  }
+  return (Scalar(2) * atan2(vector_norm, scalar_part) / vector_norm) * vector_part;
+}
+
 /// \brief Get the quaternion from a rotation matrix
 /// \param[in] rot_mat The rotation matrix.
 template <typename T, ValidAccessor<T> Accessor>

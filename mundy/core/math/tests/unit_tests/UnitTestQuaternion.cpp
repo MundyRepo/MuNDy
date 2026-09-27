@@ -23,6 +23,7 @@
 
 // C++ core libs
 #include <algorithm>    // for std::max
+#include <limits>       // for std::numeric_limits
 #include <map>          // for std::map
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <stdexcept>    // for std::logic_error, std::invalid_argument
@@ -347,6 +348,31 @@ TYPED_TEST(QuaternionSingleTypeTest, Setters) {
 
 //! \name Quaternion Special vectors
 //@{
+
+TYPED_TEST(QuaternionSingleTypeTest, RotationVectorRoundTrip) {
+  using T = TypeParam;
+  const AVector3<T> axis{static_cast<T>(2.0 / 3.0), static_cast<T>(-1.0 / 3.0), static_cast<T>(2.0 / 3.0)};  // unit
+  const T pi = Kokkos::numbers::pi_v<T>;
+  const T tol = static_cast<T>(64) * std::numeric_limits<T>::epsilon();
+
+  // Round trip over the whole principal range, including both ends: near zero the axis is arbitrary
+  // but the rotation vector is not, and near pi the scalar part goes to zero.
+  for (const T angle : {static_cast<T>(0), static_cast<T>(1e-7), static_cast<T>(0.35), pi / 2,
+                        pi - static_cast<T>(1e-6)}) {
+    const AVector3<T> expected = angle * axis;
+    is_close_debug(quaternion_to_rotation_vector(axis_angle_to_quaternion(axis, angle)), expected,
+                   "Rotation vector round trip failed.");
+
+    // A quaternion and its negation are the same rotation, so they must give the same vector.
+    const AQuaternion<T> negated = static_cast<T>(-1) * axis_angle_to_quaternion(axis, angle);
+    is_close_debug(quaternion_to_rotation_vector(negated), expected, "Negated quaternion disagreed.");
+  }
+
+  // Past pi the shorter way round is the other direction: 3 pi / 2 about the axis is pi / 2 about
+  // its opposite. Asserting this pins the canonicalization rather than leaving it implicit.
+  const AVector3<T> shorter_way = quaternion_to_rotation_vector(axis_angle_to_quaternion(axis, static_cast<T>(1.5) * pi));
+  EXPECT_NEAR(norm(shorter_way - (-(pi / 2) * axis)), static_cast<T>(0), tol);
+}
 
 TYPED_TEST(QuaternionSingleTypeTest, SpecialVectors) {
   ASSERT_NO_THROW(Quaternion<TypeParam>::identity());
