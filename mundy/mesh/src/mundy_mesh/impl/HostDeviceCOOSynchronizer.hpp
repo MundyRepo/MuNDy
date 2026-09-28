@@ -114,9 +114,12 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void update_post_mesh_mod() override {
-    stk::mesh::NgpMesh& ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
+    std::cout << "LinkCOODataSynchronizerT::update_post_mesh_mod" << std::endl;
     NgpLinkMetaDataT<NgpMemSpace>& ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);
     LinkMetaData& link_meta_data = coo_data_.link_meta_data();
+
+    // The internal copy of the NGP mesh stored by the coo data must be updated to reflect any changes to the host mesh.
+    stk::mesh::NgpMesh& ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
     ngp_mesh.update_mesh();
 
     ngp_link_meta_data.ngp_linked_entities_field() =

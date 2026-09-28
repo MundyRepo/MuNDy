@@ -32,9 +32,11 @@
 #include <stk_mesh/base/BulkData.hpp>          // for stk::mesh::BulkData
 #include <stk_mesh/base/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/base/NgpForEachEntity.hpp>  // for stk::mesh::for_each_entity_run
+#include <stk_util/ngp/NgpSpaces.hpp>          // for stk::ngp::TeamPolicy
 
 // Mundy
-#include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
+#include <mundy_mesh/EntityIndices.hpp>  // for mundy::mesh::get_local_bucket_ids
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -48,18 +50,35 @@ inline constexpr bool always_false_v = false;
 
 }  // namespace impl
 
-template <typename Mesh, typename AlgorithmPerEntity>
-MUNDY_REQUIRES(!std::is_base_of_v<stk::mesh::BulkData, Mesh> && !std::is_base_of_v<::mundy::mesh::BulkData, Mesh>)
-inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
-                                const AlgorithmPerEntity& functor) {
-  stk::mesh::for_each_entity_run(mesh, rank, selector, functor);
-}
-
+/// \brief NGP for_each_entity_run over the entities of a (rank, selector) chunk.
+///
+/// Equivalent to stk::mesh::for_each_entity_run, except that the selector's bucket ids come from the memoized
+/// get_local_bucket_ids rather than being rebuilt (allocated, filled, and copied to device) on every call.
 template <typename Mesh, typename AlgorithmPerEntity, typename EXEC_SPACE>
 MUNDY_REQUIRES(!std::is_base_of_v<stk::mesh::BulkData, Mesh>)
 inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
                                 const AlgorithmPerEntity& functor, const EXEC_SPACE& exec_space) {
-  stk::mesh::for_each_entity_run(mesh, rank, selector, functor, exec_space);
+  auto ngp_bucket_ids = get_local_bucket_ids(mesh.get_bulk_on_host(), rank, selector, exec_space);
+  ngp_bucket_ids.sync_to_device();
+  const auto bucket_ids = ngp_bucket_ids.view_device();
+  const unsigned num_buckets = static_cast<unsigned>(bucket_ids.extent(0));
+
+  using team_handle_t = typename stk::ngp::TeamPolicy<EXEC_SPACE>::member_type;
+  Kokkos::parallel_for(
+      stk::ngp::TeamPolicy<EXEC_SPACE>(exec_space, num_buckets, Kokkos::AUTO),
+      KOKKOS_LAMBDA(const team_handle_t& team) {
+        const typename Mesh::BucketType& bucket = mesh.get_bucket(rank, bucket_ids(team.league_rank()));
+        const unsigned num_entities = bucket.size();
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, num_entities),
+                             [&](const unsigned& i) { functor(stk::mesh::FastMeshIndex{bucket.bucket_id(), i}); });
+      });
+}
+
+template <typename Mesh, typename AlgorithmPerEntity>
+MUNDY_REQUIRES(!std::is_base_of_v<stk::mesh::BulkData, Mesh> && !std::is_base_of_v<::mundy::mesh::BulkData, Mesh>)
+inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
+                                const AlgorithmPerEntity& functor) {
+  for_each_entity_run(mesh, rank, selector, functor, typename Mesh::MeshExecSpace{});
 }
 
 template <typename Mesh, typename AlgorithmPerEntity>

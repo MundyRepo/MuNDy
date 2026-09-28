@@ -62,6 +62,7 @@ List of available field operations:
   - field_min
   - field_amin
   - field_print
+  - for_each_entity_reduce
 */
 
 /// \brief Fill a component of a field with a scalar value
@@ -482,6 +483,27 @@ template <typename Scalar, typename ExecSpace>
 inline void field_print(stk::mesh::FieldBase& x,  //
                         const ExecSpace& exec_space) {
   impl::ngp_field_print<Scalar>(x, nullptr, exec_space);
+}
+
+/// \brief Reduce a functor over the entities of a (rank, selector) chunk
+template <typename Mesh, typename ReductionOp, typename AlgorithmPerEntity, typename ExecSpace>
+inline void for_each_entity_reduce(Mesh& mesh,                           //
+                                   stk::topology::rank_t rank,           //
+                                   const stk::mesh::Selector& selector,  //
+                                   ReductionOp& reduction,               //
+                                   const AlgorithmPerEntity& functor,    //
+                                   const ExecSpace& exec_space) {
+  impl::for_each_entity_reduce_impl(mesh, rank, selector, reduction, functor, exec_space);
+}
+
+/// \brief Reduce a functor over the entities of a (rank, selector) chunk using the mesh's execution space
+template <typename Mesh, typename ReductionOp, typename AlgorithmPerEntity>
+inline void for_each_entity_reduce(Mesh& mesh,                           //
+                                   stk::topology::rank_t rank,           //
+                                   const stk::mesh::Selector& selector,  //
+                                   ReductionOp& reduction,               //
+                                   const AlgorithmPerEntity& functor) {
+  impl::for_each_entity_reduce_impl(mesh, rank, selector, reduction, functor);
 }
 
 /// We currently do not support arg-min/max operations. This is because we are not sure how to handle entity conflicts

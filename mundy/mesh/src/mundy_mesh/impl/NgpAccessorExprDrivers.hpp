@@ -30,6 +30,8 @@
 #include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>
 #include <mundy_utils/StringLiteral.hpp>
 #include <mundy_utils/requires.hpp>
+#include <mundy_mesh/NgpFieldBLAS.hpp>
+#include <mundy_mesh/ForEachEntity.hpp>
 
 namespace mundy {
 
@@ -129,7 +131,7 @@ class NgpForEachEntityExprDriver {
     // but owned by another) are not double-counted across MPI ranks.
     const stk::mesh::Selector owned_selector = selector_ & bulk_data().mesh_meta_data().locally_owned_part();
     using value_type = typename ReductionOp::value_type;
-    stk::mesh::for_each_entity_reduce(
+    ::mundy::mesh::for_each_entity_reduce(
         ngp_mesh, rank_, owned_selector, reduction,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index, value_type& value) {
           // Perform the eval

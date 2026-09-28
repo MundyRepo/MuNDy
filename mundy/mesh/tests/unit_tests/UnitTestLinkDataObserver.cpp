@@ -162,7 +162,9 @@ LinkQuad create_connected_dim3_link(LinkDataObserverFixture& fixture,  //
 }
 
 NgpLinkData& expect_rebuild_then_update(LinkDataObserverFixture& fixture) {
+  std::cout << "expect_rebuild_then_update" << std::endl;
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(*fixture.link_data);
+  std::cout << "expect_rebuild_then_update: post get" << std::endl;
   EXPECT_FALSE(ngp_link_data.is_crs_up_to_date());
   EXPECT_NO_THROW(ngp_link_data.update_crs_from_coo());
   EXPECT_NO_THROW(ngp_link_data.check_crs_coo_consistency());

@@ -25,8 +25,9 @@
 /// \brief Memoized helpers that enumerate the entities of a (rank, selector) chunk into device-usable views.
 ///
 /// These pair a selector with a dense, deterministically-ordered enumeration of its entities:
-///   - `get_local_entity_indices` returns the per-entity `FastMeshIndex` (for NGP field / component access),
-///   - `get_local_entities`       returns the matching `stk::mesh::Entity` (for entity keys, ghosting, etc.).
+///   - `get_local_entity_indices` returns the per-entity `FastMeshIndex`
+///   - `get_local_entities`       returns the matching `stk::mesh::Entity`
+///   - `get_local_bucket_ids`     returns the ids of the buckets in the chunk
 ///
 /// Both use `stk::mesh::get_entities(bulk, rank, selector, ...)` ordering, so the i-th `FastMeshIndex`
 /// and the i-th `Entity` refer to the same entity.
@@ -87,6 +88,20 @@ NgpViewT<stk::mesh::Entity*, OurExecSpace> get_local_entities(const stk::mesh::B
   auto& cache = impl::get_or_create_local_entity_index_cache<OurExecSpace>(bulk_data);
   return impl::get_or_refresh_cached_view(cache.entities, rank, selector, bulk_data.synchronized_count(), [&]() {
     return impl::build_local_entities<OurExecSpace>(bulk_data, rank, selector);
+  });
+}
+
+/// \brief Get the ids of the buckets of a (rank, selector) chunk as an NgpView (memoized).
+///
+/// The returned view follows `BulkData::get_buckets(rank, selector)` order and is host-modified (call
+/// `.sync_to_device()` before device use). The result is cached per the file note on memoization.
+template <typename OurExecSpace>
+NgpViewT<unsigned*, OurExecSpace> get_local_bucket_ids(const stk::mesh::BulkData& bulk_data, stk::mesh::EntityRank rank,
+                                                       const stk::mesh::Selector& selector,
+                                                       const OurExecSpace& /*exec_space*/) {
+  auto& cache = impl::get_or_create_local_entity_index_cache<OurExecSpace>(bulk_data);
+  return impl::get_or_refresh_cached_view(cache.bucket_ids, rank, selector, bulk_data.synchronized_count(), [&]() {
+    return impl::build_local_bucket_ids<OurExecSpace>(bulk_data, rank, selector);
   });
 }
 

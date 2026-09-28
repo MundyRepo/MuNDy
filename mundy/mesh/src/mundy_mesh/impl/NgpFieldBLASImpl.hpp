@@ -54,7 +54,9 @@
 
 // Mundy
 #include <mundy_math/cmath.hpp>
-#include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
+#include <mundy_mesh/EntityIndices.hpp>  // for mundy::mesh::get_local_bucket_ids
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpUtils.hpp>  // is_(ngp|device|host)_field, is_(ngp|device|host)_mesh, ngp_ngp_field_and_mesh_compatible
 #include <mundy_utils/rng.hpp>           // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
@@ -64,6 +66,41 @@ namespace mundy {
 namespace mesh {
 
 namespace impl {
+
+template <typename Mesh, typename ReductionOp, typename AlgorithmPerEntity, typename ExecSpace>
+struct TeamReductionFunctor {
+  using value_type = typename ReductionOp::value_type;
+  using team_handle_t = typename stk::ngp::TeamPolicy<ExecSpace>::member_type;
+  using bucket_ids_t = typename NgpViewT<unsigned*, ExecSpace>::t_dev;
+  static_assert(is_ngp_mesh<Mesh>, "TeamReductionFunctor requires an stk::mesh::NgpMesh");
+
+  KOKKOS_FUNCTION
+  TeamReductionFunctor(const Mesh& mesh, stk::mesh::EntityRank rank, const bucket_ids_t& bucket_ids,
+                       const ReductionOp& reduction, const AlgorithmPerEntity& functor)
+      : mesh_(mesh), rank_(rank), bucket_ids_(bucket_ids), reduction_(reduction), functor_(functor) {
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const team_handle_t& team, value_type& team_value) const {
+    const typename Mesh::BucketType& bucket = mesh_.get_bucket(rank_, bucket_ids_(team.league_rank()));
+    const unsigned num_entities = bucket.size();
+
+    value_type bucket_value;
+    reduction_.init(bucket_value);
+    Kokkos::parallel_reduce(
+        Kokkos::TeamThreadRange(team, 0u, num_entities),
+        [&](const unsigned& i, value_type& value) { functor_(stk::mesh::FastMeshIndex{bucket.bucket_id(), i}, value); },
+        ReductionOp(bucket_value));
+    Kokkos::single(Kokkos::PerTeam(team), [&]() { reduction_.join(team_value, bucket_value); });
+  }
+
+ private:
+  const Mesh mesh_;
+  const stk::mesh::EntityRank rank_;
+  const bucket_ids_t bucket_ids_;
+  const ReductionOp reduction_;
+  const AlgorithmPerEntity functor_;
+};
 
 template <class Field>
 struct FieldFill {
@@ -585,6 +622,32 @@ stk::mesh::Selector if_nullptr_select_fields(const stk::mesh::Selector* const se
   }
 }
 
+/// \brief Reduce a functor over the entities of a (rank, selector) chunk
+///
+/// Equivalent to stk::mesh::for_each_entity_reduce, except that the selector's bucket ids come from the memoized
+/// get_local_bucket_ids rather than being rebuilt on every call.
+template <typename Mesh, typename ReductionOp, typename AlgorithmPerEntity, typename ExecSpace>
+void for_each_entity_reduce_impl(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
+                                 ReductionOp& reduction, const AlgorithmPerEntity& functor,
+                                 const ExecSpace& exec_space) {
+  auto ngp_bucket_ids = get_local_bucket_ids(mesh.get_bulk_on_host(), rank, selector, exec_space);
+  ngp_bucket_ids.sync_to_device();
+  const auto bucket_ids = ngp_bucket_ids.view_device();
+  const unsigned num_buckets = static_cast<unsigned>(bucket_ids.extent(0));
+
+  TeamReductionFunctor<Mesh, ReductionOp, AlgorithmPerEntity, ExecSpace> team_functor(mesh, rank, bucket_ids, reduction,
+                                                                                      functor);
+  Kokkos::parallel_reduce(stk::ngp::TeamPolicy<ExecSpace>(exec_space, num_buckets, Kokkos::AUTO), team_functor,
+                          reduction);
+}
+
+/// \brief Reduce a functor over the entities of a (rank, selector) chunk using the mesh's execution space
+template <typename Mesh, typename ReductionOp, typename AlgorithmPerEntity>
+void for_each_entity_reduce_impl(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
+                                 ReductionOp& reduction, const AlgorithmPerEntity& functor) {
+  for_each_entity_reduce_impl(mesh, rank, selector, reduction, functor, typename Mesh::MeshExecSpace{});
+}
+
 /// \brief Fill a component of a field with a scalar value
 template <typename Scalar, typename ExecSpace>
 void ngp_field_fill_component(const Scalar alpha,                             //
@@ -599,7 +662,7 @@ void ngp_field_fill_component(const Scalar alpha,                             //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
 
   FieldFillComponent<NgpScalarField> functor(ngp_field, alpha, component);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field, exec_space);
 }
@@ -617,7 +680,7 @@ void ngp_field_fill(const Scalar alpha,                             //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
 
   FieldFill<NgpScalarField> functor(ngp_field, alpha);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field, exec_space);
 }
@@ -641,7 +704,7 @@ void ngp_field_randomize_component(const size_t seed,                           
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
 
   FieldRandomizeComponent<NgpScalarField, NgpCounterField> functor(ngp_field, seed, ngp_counter_field, component);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field, exec_space);
   mark_field_modified_on_space(counter_field, exec_space);
@@ -668,7 +731,7 @@ void ngp_field_randomize_component(const size_t seed,                           
 
   FieldRandomizeComponentMinMax<NgpScalarField, NgpCounterField> functor(ngp_field, seed, ngp_counter_field, component,
                                                                          min, max);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field, exec_space);
   mark_field_modified_on_space(counter_field, exec_space);
@@ -692,7 +755,7 @@ void ngp_field_randomize(const size_t seed,                              //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
 
   FieldRandomize<NgpScalarField, NgpCounterField> functor(ngp_field, seed, ngp_counter_field);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field, exec_space);
   mark_field_modified_on_space(counter_field, exec_space);
@@ -717,7 +780,7 @@ void ngp_field_randomize(const size_t seed,                              //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
 
   FieldRandomizeMinMax<NgpScalarField, NgpCounterField> functor(ngp_field, seed, ngp_counter_field, min, max);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field, exec_space);
   mark_field_modified_on_space(counter_field, exec_space);
@@ -737,7 +800,7 @@ void ngp_field_copy(stk::mesh::FieldBase& field_x,                  //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field_x.get_mesh());
 
   FieldCopy<NgpScalarField> functor(ngp_field_x, ngp_field_y);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field_y, exec_space);
 }
@@ -757,7 +820,7 @@ void ngp_field_swap(stk::mesh::FieldBase& field_x,                  //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field_x.get_mesh());
 
   FieldSwapFunctor<NgpScalarField> functor(ngp_field_x, ngp_field_y);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field_x, exec_space);
   mark_field_modified_on_space(field_y, exec_space);
@@ -776,7 +839,7 @@ void ngp_field_scale(const Scalar alpha,                             //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field_x.get_mesh());
 
   FieldScaleFunctor<NgpScalarField> functor(ngp_field_x, alpha);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field_x, exec_space);
 }
@@ -800,7 +863,7 @@ void ngp_field_product(stk::mesh::FieldBase& field_x,                  //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field_x.get_mesh());
 
   FieldProductFunctor<NgpScalarField> functor(ngp_field_x, ngp_field_y, ngp_field_z);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field_z, exec_space);
 }
@@ -826,7 +889,7 @@ void ngp_field_axpbyz(const Scalar alpha,                             //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field_x.get_mesh());
 
   FieldAXPBYZFunctor<NgpScalarField> functor(alpha, ngp_field_x, beta, ngp_field_y, ngp_field_z);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field_z, exec_space);
 }
@@ -853,7 +916,7 @@ void ngp_field_axpbygz(const Scalar alpha,                             //
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field_x.get_mesh());
 
   FieldAXPBYGZFunctor<NgpScalarField> functor(alpha, ngp_field_x, beta, ngp_field_y, gamma, ngp_field_z);
-  stk::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
+  ::mundy::mesh::for_each_entity_run(ngp_mesh, ngp_field_x.get_rank(), field_selector, functor);
 
   mark_field_modified_on_space(field_z, exec_space);
 }
@@ -875,7 +938,7 @@ inline Scalar ngp_field_dot(stk::mesh::FieldBase& field_x,                  //
   Scalar local_dot;
   Kokkos::Sum<Scalar> sum_reduction(local_dot);
   FieldDotReductionFunctor<NgpScalarField> functor(ngp_field_x, ngp_field_y, sum_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, sum_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, sum_reduction, functor);
 
   // MPI reduction to get the global dot product
   Scalar global_dot = 0;
@@ -905,7 +968,7 @@ inline Scalar ngp_field_sum(stk::mesh::FieldBase& field_x,                  //
   Scalar local_sum;
   Kokkos::Sum<Scalar> sum_reduction(local_sum);
   FieldSumReductionFunctor<NgpScalarField> functor(ngp_field_x, sum_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, sum_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, sum_reduction, functor);
 
   // MPI reduction to get the global sum
   Scalar global_sum = 0;
@@ -927,7 +990,7 @@ inline Scalar ngp_field_asum(stk::mesh::FieldBase& field_x,                  //
   Scalar local_sum;
   Kokkos::Sum<Scalar> sum_reduction(local_sum);
   FieldAbsSumReductionFunctor<NgpScalarField> functor(ngp_field_x, sum_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, sum_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, sum_reduction, functor);
 
   // MPI reduction to get the global sum
   Scalar global_sum = 0;
@@ -949,7 +1012,7 @@ inline Scalar ngp_field_max(stk::mesh::FieldBase& field_x,                  //
   Scalar local_max;
   Kokkos::Max<Scalar> max_reduction(local_max);
   FieldMaxReductionFunctor<NgpScalarField> functor(ngp_field_x, max_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, max_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, max_reduction, functor);
 
   // MPI reduction to get the global max
   Scalar global_max = 0;
@@ -971,7 +1034,7 @@ inline Scalar ngp_field_amax(stk::mesh::FieldBase& field_x,                  //
   Scalar local_max;
   Kokkos::Max<Scalar> max_reduction(local_max);
   FieldAbsMaxReductionFunctor<NgpScalarField> functor(ngp_field_x, max_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, max_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, max_reduction, functor);
 
   // MPI reduction to get the global max
   Scalar global_max = 0;
@@ -993,7 +1056,7 @@ inline Scalar ngp_field_min(stk::mesh::FieldBase& field_x,                  //
   Scalar local_min;
   Kokkos::Min<Scalar> min_reduction(local_min);
   FieldMinReductionFunctor<NgpScalarField> functor(ngp_field_x, min_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, min_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, min_reduction, functor);
 
   // MPI reduction to get the global min
   Scalar global_min = 0;
@@ -1015,7 +1078,7 @@ inline Scalar ngp_field_amin(stk::mesh::FieldBase& field_x,                  //
   Scalar local_min;
   Kokkos::Min<Scalar> min_reduction(local_min);
   FieldAbsMinReductionFunctor<NgpScalarField> functor(ngp_field_x, min_reduction);
-  stk::mesh::for_each_entity_reduce(ngp_mesh, ngp_field_x.get_rank(), field_selector, min_reduction, functor);
+  for_each_entity_reduce_impl(ngp_mesh, ngp_field_x.get_rank(), field_selector, min_reduction, functor);
 
   // MPI reduction to get the global min
   Scalar global_min = 0;
@@ -1035,7 +1098,7 @@ void ngp_field_print(stk::mesh::FieldBase& field,                    //
   NgpScalarField ngp_field = stk::mesh::get_updated_ngp_field<Scalar>(field);
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(field.get_mesh());
 
-  stk::mesh::for_each_entity_run(
+  ::mundy::mesh::for_each_entity_run(
       ngp_mesh, ngp_field.get_rank(), field_selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& fmi) {
         unsigned num_components = ngp_field.get_num_components_per_entity(fmi);
         Kokkos::printf("EntityID: %d, values: ", ngp_mesh.identifier(ngp_mesh.get_entity(ngp_field.get_rank(), fmi)));

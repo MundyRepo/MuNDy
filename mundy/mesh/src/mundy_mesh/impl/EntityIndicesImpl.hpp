@@ -85,6 +85,23 @@ NgpViewT<stk::mesh::Entity*, OurExecSpace> build_local_entities(const stk::mesh:
   return ngp_local_entities;
 }
 
+/// \brief Enumerate the buckets of a (rank, selector) chunk into a host-modified bucket id view (no caching).
+///
+/// Bucket ids follow `BulkData::get_buckets(rank, selector)` order, matching `stk::mesh::get_bucket_ids`.
+template <typename OurExecSpace>
+NgpViewT<unsigned*, OurExecSpace> build_local_bucket_ids(const stk::mesh::BulkData& bulk_data,
+                                                         stk::mesh::EntityRank rank,
+                                                         const stk::mesh::Selector& selector) {
+  const stk::mesh::BucketVector& buckets = bulk_data.get_buckets(rank, selector);
+
+  NgpViewT<unsigned*, OurExecSpace> ngp_local_bucket_ids("local_bucket_ids", buckets.size());
+  for (size_t i = 0; i < buckets.size(); ++i) {
+    ngp_local_bucket_ids.view_host()(i) = buckets[i]->bucket_id();
+  }
+  ngp_local_bucket_ids.modify_on_host();
+  return ngp_local_bucket_ids;
+}
+
 /// \brief One cached enumeration: the `(rank, selector)` it was built for, the view, and the build-time sync count.
 template <typename ViewType>
 struct CachedSelectorView {
@@ -94,7 +111,7 @@ struct CachedSelectorView {
   size_t sync_count;
 };
 
-/// \brief Per-`MetaData`, per-execution-space cache holding the two memoized maps (entities and indices).
+/// \brief Per-`MetaData`, per-execution-space cache holding the memoized maps (entities, indices, and bucket ids).
 ///
 /// Stored as a `MetaData` attribute (like `get_or_create_class_map`). Each map is scanned linearly by
 /// `(rank, selector)` equality — a selector set is small, so the scan is cheap.
@@ -102,6 +119,7 @@ template <typename OurExecSpace>
 struct LocalEntityIndexCache {
   std::vector<CachedSelectorView<NgpViewT<stk::mesh::Entity*, OurExecSpace>>> entities;
   std::vector<CachedSelectorView<NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace>>> indices;
+  std::vector<CachedSelectorView<NgpViewT<unsigned*, OurExecSpace>>> bucket_ids;
 };
 
 /// \brief Fetch (creating if needed) the per-execution-space enumeration cache on a mesh's `MetaData`.

@@ -61,6 +61,7 @@ NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) 
   std::any& any_ngp_link_data = impl::get_ngp_link_data(link_data);
 
   if (!any_ngp_link_data.has_value()) {
+    std::cout << "get_updated_ngp_link_data: Creating new NgpLinkDataT<NgpMemSpace> for link data." << std::endl;
     any_ngp_link_data = NgpLinkDataT<NgpMemSpace>(link_data);  // Let LinkData manage the lifetime of the NGP data.
     NgpLinkDataT<NgpMemSpace>& ngp_link_data = std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data);
 
@@ -75,6 +76,7 @@ NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) 
     impl::set_coo_synchronizer(
         link_data, std::move(std::make_shared<impl::LinkCOODataSynchronizerT<NgpMemSpace>>(coo_data, ngp_coo_data)));
   } else {
+    std::cout << "get_updated_ngp_link_data: Reusing existing NgpLinkDataT<NgpMemSpace> for link data." << std::endl;
     std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data).update_post_mesh_mod();
   }
 

@@ -163,6 +163,10 @@ class NgpCOOToCSRSynchronizerT {
     const auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data);
     const auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data);
 
+    linked_entities_field.sync_to_host();
+    linked_entity_ids_field.sync_to_host();
+    linked_entity_ranks_field.sync_to_host();
+
     const stk::mesh::BucketVector& link_buckets =
         bulk_data.get_buckets(link_meta_data.link_rank(), link_subset_selector);
     for (const stk::mesh::Bucket* bucket : link_buckets) {
@@ -909,7 +913,7 @@ class NgpCOOToCSRSynchronizerT {
       const unsigned dimensionality = partition.link_dimensionality();
       stk::mesh::EntityRank link_rank = crs_data.link_meta_data().link_rank();
 
-      stk::mesh::for_each_entity_run(
+      ::mundy::mesh::for_each_entity_run(
           ngp_mesh, link_rank, partition.selector(), KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& linker_index) {
             // Loop over each linked entity in the linker
             for (unsigned d = 0; d < dimensionality; ++d) {

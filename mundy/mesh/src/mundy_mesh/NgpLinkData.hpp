@@ -309,11 +309,15 @@ class NgpLinkDataT {
   ///
   /// \note The checks performed in this function are performed even in RELEASE mode.
   void check_crs_coo_consistency(const stk::mesh::Selector& selector) {
+    coo_sync_to_device();
+    crs_sync_to_device();
     impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_, selector);
   }
 
   /// \brief Check consistency between the COO and CSR connectivity for all links
   void check_crs_coo_consistency() {
+    coo_sync_to_device();
+    crs_sync_to_device();
     impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_);
   }
 

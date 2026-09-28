@@ -232,7 +232,7 @@ namespace mesh {
 ///    });
 ///
 ///    // Directly use accessors without an aggregate
-///    stk::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, selector,
+///    mundy::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, selector,
 ///       [center_accessor, radius_accessor](const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &entity) {
 ///           Vector3View<double> c = center_accessor(entity);
 ///           double& r = radius_accessor(entity);
