@@ -31,7 +31,7 @@
 ///     N particles, each with a single image (zero shift). The periodic infrastructure
 ///     must produce the same pairs as the non-periodic oracle. This validates that owner
 ///     mapping, shift storage, and the build pipeline are correct end-to-end.
-///   Group 4 — Debug-only bound-check tests (NDEBUG guard).
+///   Group 4 — Bounds invariants: in-range queries stay within the list's extents and yield valid entities.
 ///
 /// Periodic geometry used in Group 2:
 ///   Domain length L = 10, particle radius r = 1.5.
@@ -92,6 +92,7 @@
 #include <stk_mesh/base/MetaData.hpp>  // for declare_field, put_field_on_mesh
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_topology/topology.hpp>
+#include <stk_util/ngp/NgpSpaces.hpp>
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy search
@@ -128,8 +129,8 @@ static_assert(NeighborListType<PeriodicArborX2dNeighborList<Kokkos::HostSpace>>,
 // Type aliases
 // =============================================================================
 
-using TestMemSpace = Kokkos::HostSpace;
-using TestExecSpace = Kokkos::DefaultHostExecutionSpace;
+using TestMemSpace = stk::ngp::MemSpace;
+using TestExecSpace = stk::ngp::ExecSpace;
 using ImageShiftType = mundy::Vector3<float>;
 
 // Self-contained host oracle-reference boxes: per-image (box, owner ordinal, shift) plus the dense owner entities.
@@ -463,20 +464,65 @@ struct PeriodicPair {
 
 // The lists expose only the two per-object shifts; a consumer derives the pairwise relative shift itself.
 template <typename ListType>
-ImageShiftType list_relative_shift(const ListType& list, size_t t, size_t k) {
+KOKKOS_INLINE_FUNCTION ImageShiftType list_relative_shift(const ListType& list, size_t t, size_t k) {
   return list.source_image_shift(t, k) - list.target_image_shift(t);
 }
 
-// Collect periodic pairs from a built list via direct iteration.
+// Collect periodic pairs in (target, neighbor-ordinal) order, read through the direct accessors on device.
 template <typename ListType>
 std::vector<PeriodicPair> collect_periodic_pairs(const ListType& list) {
+  const size_t nt = list.num_targets();
+  Kokkos::View<size_t*, TestMemSpace> offsets("pair_offsets", nt);
+  size_t total = 0;
+  Kokkos::parallel_scan(
+      "pair_offsets", Kokkos::RangePolicy<TestExecSpace>(0, nt),
+      KOKKOS_LAMBDA(const size_t t, size_t& partial, const bool is_final) {
+        if (is_final) offsets(t) = partial;
+        partial += list.num_neighbors(t);
+      },
+      total);
+
+  Kokkos::View<size_t*, TestMemSpace> sources("pair_sources", total);
+  Kokkos::View<ImageShiftType*, TestMemSpace> shifts("pair_shifts", total);
+  Kokkos::parallel_for(
+      "collect_periodic_pairs", Kokkos::RangePolicy<TestExecSpace>(0, nt), KOKKOS_LAMBDA(const size_t t) {
+        for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+          sources(offsets(t) + k) = list.source_index(t, k);
+          shifts(offsets(t) + k) = list_relative_shift(list, t, k);
+        }
+      });
+  const auto offsets_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, offsets);
+  const auto sources_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sources);
+  const auto shifts_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, shifts);
+
   std::vector<PeriodicPair> result;
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      result.push_back({t, list.source_index(t, k), list_relative_shift(list, t, k)});
-    }
+  result.reserve(total);
+  for (size_t t = 0; t < nt; ++t) {
+    const size_t end = (t + 1 < nt) ? offsets_host(t + 1) : total;
+    for (size_t i = offsets_host(t); i < end; ++i) result.push_back({t, sources_host(i), shifts_host(i)});
   }
   return result;
+}
+
+// Per-owner target image shifts, read on device.
+template <typename ListType>
+std::vector<ImageShiftType> collect_target_image_shifts(const ListType& list) {
+  Kokkos::View<ImageShiftType*, TestMemSpace> shifts("target_shifts", list.num_targets());
+  Kokkos::parallel_for(
+      "collect_target_image_shifts", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t) { shifts(t) = list.target_image_shift(t); });
+  const auto shifts_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, shifts);
+  return std::vector<ImageShiftType>(shifts_host.data(), shifts_host.data() + shifts_host.extent(0));
+}
+
+// True when `pred(list)` holds, evaluated once on device.
+template <typename ListType, typename Pred>
+bool holds_on_device(const ListType& list, const Pred& pred) {
+  bool failed = false;
+  Kokkos::parallel_reduce(
+      "holds_on_device", Kokkos::RangePolicy<TestExecSpace>(0, 1),
+      KOKKOS_LAMBDA(const int, bool& f) { f = f || !pred(list); }, Kokkos::LOr<bool>(failed));
+  return !failed;
 }
 
 // For the single-image N² test: (target_ordinal, source_ordinal) set with self-excluded.
@@ -494,16 +540,12 @@ std::set<std::pair<size_t, size_t>> oracle_pairs_no_self(const std::vector<Arbor
 template <typename ListType>
 std::set<std::pair<size_t, size_t>> collect_index_pairs(const ListType& list) {
   std::set<std::pair<size_t, size_t>> result;
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      result.insert({t, list.source_index(t, k)});
-    }
-  }
+  for (const auto& p : collect_periodic_pairs(list)) result.insert({p.target_owner, p.source_owner});
   return result;
 }
 
-bool shifts_approx_eq(const ImageShiftType& a, const ImageShiftType& b) {
-  return std::abs(a[0] - b[0]) < 1e-4f && std::abs(a[1] - b[1]) < 1e-4f && std::abs(a[2] - b[2]) < 1e-4f;
+KOKKOS_INLINE_FUNCTION bool shifts_approx_eq(const ImageShiftType& a, const ImageShiftType& b) {
+  return Kokkos::abs(a[0] - b[0]) < 1e-4f && Kokkos::abs(a[1] - b[1]) < 1e-4f && Kokkos::abs(a[2] - b[2]) < 1e-4f;
 }
 
 // All valid image shifts for an owner at position p (half-extent r) under the metric — i.e. the owner's possible
@@ -528,26 +570,44 @@ std::vector<ImageShiftType> owner_image_shifts(const std::array<float, 3>& p, fl
 template <typename ListType, typename Metric>
 void check_target_image_shifts(const ListType& list, const std::vector<std::array<float, 3>>& positions, float r,
                                const Metric& metric) {
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    const AABB<float> taabb = make_aabb(positions[t][0], positions[t][1], positions[t][2], r);
-    const ImageShiftType expected = oracle_image_shift(taabb, mundy::Vector3<int>{0, 0, 0}, metric);
-    const ImageShiftType got = list.target_image_shift(t);
-    EXPECT_TRUE(shifts_approx_eq(got, expected)) << "target_image_shift mismatch for owner " << t;
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const size_t s = list.source_index(t, k);
-      const ImageShiftType rel = list_relative_shift(list, t, k);
-      const ImageShiftType abs_src{got[0] + rel[0], got[1] + rel[1], got[2] + rel[2]};
-      const auto candidates = owner_image_shifts(positions[s], r, metric);
-      bool found = false;
-      for (const auto& c : candidates)
-        if (shifts_approx_eq(abs_src, c)) {
-          found = true;
-          break;
-        }
-      EXPECT_TRUE(found) << "target_image_shift+relative is not a valid source image for pair (" << t << "," << s
-                         << ")";
-    }
+  ASSERT_EQ(list.num_targets(), positions.size());
+
+  // Host oracle tables: each owner's expected target shift and all of its valid image shifts.
+  const size_t num_owners = positions.size();
+  const size_t num_images = owner_image_shifts(positions[0], r, metric).size();
+  Kokkos::View<ImageShiftType*, Kokkos::HostSpace> expected_host("expected_target_shifts", num_owners);
+  Kokkos::View<ImageShiftType**, Kokkos::HostSpace> images_host("owner_image_shifts", num_owners, num_images);
+  for (size_t i = 0; i < num_owners; ++i) {
+    const AABB<float> aabb = make_aabb(positions[i][0], positions[i][1], positions[i][2], r);
+    expected_host(i) = oracle_image_shift(aabb, mundy::Vector3<int>{0, 0, 0}, metric);
+    const auto shifts = owner_image_shifts(positions[i], r, metric);
+    for (size_t j = 0; j < num_images; ++j) images_host(i, j) = shifts[j];
   }
+  const auto expected = Kokkos::create_mirror_view_and_copy(TestMemSpace{}, expected_host);
+  const auto images = Kokkos::create_mirror_view_and_copy(TestMemSpace{}, images_host);
+
+  bool bad = false;
+  Kokkos::parallel_reduce(
+      "target_image_shifts", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, bool& any_bad) {
+        const ImageShiftType got = list.target_image_shift(t);
+        any_bad = any_bad || !shifts_approx_eq(got, expected(t));
+        for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+          const size_t s = list.source_index(t, k);
+          if (s >= images.extent(0)) {
+            any_bad = true;
+            continue;
+          }
+          const ImageShiftType rel = list_relative_shift(list, t, k);
+          const ImageShiftType abs_src{got[0] + rel[0], got[1] + rel[1], got[2] + rel[2]};
+          bool found = false;
+          for (size_t j = 0; j < images.extent(1) && !found; ++j) found = shifts_approx_eq(abs_src, images(s, j));
+          any_bad = any_bad || !found;
+        }
+      },
+      Kokkos::LOr<bool>(bad));
+  EXPECT_FALSE(bad) << "A target_image_shift differs from the oracle, or target + relative shift is not a valid "
+                       "image shift of the source owner.";
 }
 
 // =============================================================================
@@ -583,6 +643,25 @@ PerSTKList build_per_stk_list(const stk::mesh::BulkData& bulk, const PerInput& i
       .build(bulk);
 }
 
+// Named build functors: validation templates that launch device kernels must not be instantiated on lambda types.
+struct BuildPer1dList {
+  PerList1d operator()(const stk::mesh::BulkData& bulk, const PerInput& input) const {
+    return build_per1d_list(bulk, input);
+  }
+};
+
+struct BuildPer2dList {
+  PerList2d operator()(const stk::mesh::BulkData& bulk, const PerInput& input) const {
+    return build_per2d_list(bulk, input);
+  }
+};
+
+struct BuildPerSTKList {
+  PerSTKList operator()(const stk::mesh::BulkData& bulk, const PerInput& input) const {
+    return build_per_stk_list(bulk, input);
+  }
+};
+
 // =============================================================================
 // Shared iteration-count checks
 // =============================================================================
@@ -593,8 +672,8 @@ void check_for_each_pair_count(const ListType& list) {
   Kokkos::deep_copy(count, size_t(0));
   mundy::search::for_each_neighbor_pair(
       TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<ListType>&) { Kokkos::atomic_inc(&count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(count(0), list.size()) << "for_each_neighbor_pair count does not match list.size().";
+  const auto count_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, count);
+  EXPECT_EQ(count_host(0), list.size()) << "for_each_neighbor_pair count does not match list.size().";
 }
 
 template <typename ListType>
@@ -603,8 +682,9 @@ void check_for_each_target_count(const ListType& list) {
   Kokkos::deep_copy(count, size_t(0));
   mundy::search::for_each_target_with_neighbors(
       TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_inc(&count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(count(0), list.num_targets()) << "for_each_target_with_neighbors count does not match list.num_targets().";
+  const auto count_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, count);
+  EXPECT_EQ(count_host(0), list.num_targets())
+      << "for_each_target_with_neighbors count does not match list.num_targets().";
 }
 
 // =============================================================================
@@ -760,9 +840,10 @@ void run_target_image_shift_test() {
                   .build(*mesh.bulk);
 
   ASSERT_EQ(list.num_targets(), 2u);
-  EXPECT_TRUE(shifts_approx_eq(list.target_image_shift(0), ImageShiftType{-kL, 0.0f, 0.0f}))
+  const auto target_shifts = collect_target_image_shifts(list);
+  EXPECT_TRUE(shifts_approx_eq(target_shifts[0], ImageShiftType{-kL, 0.0f, 0.0f}))
       << "owner 0 (out of cell, +x) should report wrap shift -L.";
-  EXPECT_TRUE(shifts_approx_eq(list.target_image_shift(1), ImageShiftType{0.0f, 0.0f, 0.0f}))
+  EXPECT_TRUE(shifts_approx_eq(target_shifts[1], ImageShiftType{0.0f, 0.0f, 0.0f}))
       << "owner 1 (in cell) should report zero wrap shift.";
   check_target_image_shifts(list, positions, kR, metric);
 }
@@ -996,29 +1077,37 @@ void verify_periodic_2particle(const ListType& list, stk::mesh::Entity node_a, s
   ASSERT_EQ(list.num_sources(), 2u);
   EXPECT_EQ(list.size(), 2u);
 
-  EXPECT_EQ(list.num_neighbors(0), 1u);  // owner A sees owner B
-  EXPECT_EQ(list.num_neighbors(1), 1u);  // owner B sees owner A
+  // Each owner sees the other: A (idx 0) -> B, B (idx 1) -> A.
+  EXPECT_TRUE(holds_on_device(list, KOKKOS_LAMBDA(const ListType& l) {
+    return l.num_neighbors(0) == 1 && l.num_neighbors(1) == 1;
+  })) << "each owner must have exactly one neighbor.";
+  EXPECT_TRUE(holds_on_device(list, KOKKOS_LAMBDA(const ListType& l) {
+    return l.target_entity(0) == node_a && l.target_entity(1) == node_b;
+  })) << "target entities must be (node_a, node_b).";
+  EXPECT_TRUE(holds_on_device(list, KOKKOS_LAMBDA(const ListType& l) {
+    return l.num_neighbors(0) > 0 && l.num_neighbors(1) > 0 && l.get_neighbor(0, 0) == node_b &&
+           l.get_neighbor(1, 0) == node_a;
+  })) << "owner A's neighbor must be node_b and owner B's must be node_a.";
 
-  // Entity accessors.
-  EXPECT_EQ(list.target_entity(0), node_a);
-  EXPECT_EQ(list.target_entity(1), node_b);
+  const auto pairs = collect_periodic_pairs(list);
+  ASSERT_EQ(pairs.size(), 2u);
 
   // --- Owner A (idx 0) ---
-  // Source owner ordinal must be 1 (owner B), entity must be node_b.
-  EXPECT_EQ(list.source_index(0, 0), size_t(1));
-  EXPECT_EQ(list.get_neighbor(0, 0), node_b);
+  // Source owner ordinal must be 1 (owner B).
+  EXPECT_EQ(pairs[0].target_owner, size_t(0));
+  EXPECT_EQ(pairs[0].source_owner, size_t(1));
   // Relative shift: source B_im1 shift (-10) minus target A_im0 shift (0) = -10.
-  const ImageShiftType shift_A = list_relative_shift(list, 0, 0);
+  const ImageShiftType shift_A = pairs[0].relative_shift;
   EXPECT_FLOAT_EQ(shift_A[0], -kL);
   EXPECT_FLOAT_EQ(shift_A[1], 0.0f);
   EXPECT_FLOAT_EQ(shift_A[2], 0.0f);
 
   // --- Owner B (idx 1) ---
-  // Source owner ordinal must be 0 (owner A), entity must be node_a.
-  EXPECT_EQ(list.source_index(1, 0), size_t(0));
-  EXPECT_EQ(list.get_neighbor(1, 0), node_a);
+  // Source owner ordinal must be 0 (owner A).
+  EXPECT_EQ(pairs[1].target_owner, size_t(1));
+  EXPECT_EQ(pairs[1].source_owner, size_t(0));
   // Relative shift: source A_im0 shift (0) minus target B_im1 shift (-10) = +10.
-  const ImageShiftType shift_B = list_relative_shift(list, 1, 0);
+  const ImageShiftType shift_B = pairs[1].relative_shift;
   EXPECT_FLOAT_EQ(shift_B[0], kL);
   EXPECT_FLOAT_EQ(shift_B[1], 0.0f);
   EXPECT_FLOAT_EQ(shift_B[2], 0.0f);
@@ -1075,14 +1164,17 @@ void run_single_image_n2_validation(BuildFn build_fn, NodeMeshWithAABB& mesh, co
   EXPECT_EQ(actual, expected) << "Large-cell periodic list does not match non-periodic oracle.";
 
   // All relative shifts (source − target) must be (0,0,0): the only surviving image is the n=0 (unshifted) one.
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const ImageShiftType shift = list_relative_shift(list, t, k);
-      EXPECT_FLOAT_EQ(shift[0], 0.0f) << "Non-zero x-shift for pair (target=" << t << ", neighbor=" << k << ").";
-      EXPECT_FLOAT_EQ(shift[1], 0.0f) << "Non-zero y-shift for pair (target=" << t << ", neighbor=" << k << ").";
-      EXPECT_FLOAT_EQ(shift[2], 0.0f) << "Non-zero z-shift for pair (target=" << t << ", neighbor=" << k << ").";
-    }
-  }
+  bool nonzero = false;
+  Kokkos::parallel_reduce(
+      "zero_relative_shifts", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, bool& any_nonzero) {
+        for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+          const ImageShiftType shift = list_relative_shift(list, t, k);
+          any_nonzero = any_nonzero || shift[0] != 0.0f || shift[1] != 0.0f || shift[2] != 0.0f;
+        }
+      },
+      Kokkos::LOr<bool>(nonzero));
+  EXPECT_FALSE(nonzero) << "A pair has a non-zero relative shift; only the unshifted image should survive.";
 }
 
 TEST(PeriodicArborX1dNeighborList, SingleImageN2Validation) {
@@ -1090,8 +1182,7 @@ TEST(PeriodicArborX1dNeighborList, SingleImageN2Validation) {
   constexpr int kN = 50;
   auto mesh = make_node_mesh_with_aabb(kN);
   const stk::mesh::Selector selector = mesh.meta->universal_part();
-  run_single_image_n2_validation<PerList1d>(
-      [](stk::mesh::BulkData& b, const PerInput& in) { return build_per1d_list(b, in); }, mesh, selector, kN);
+  run_single_image_n2_validation<PerList1d>(BuildPer1dList{}, mesh, selector, kN);
 }
 
 TEST(PeriodicArborX2dNeighborList, SingleImageN2Validation) {
@@ -1099,8 +1190,7 @@ TEST(PeriodicArborX2dNeighborList, SingleImageN2Validation) {
   constexpr int kN = 50;
   auto mesh = make_node_mesh_with_aabb(kN);
   const stk::mesh::Selector selector = mesh.meta->universal_part();
-  run_single_image_n2_validation<PerList2d>(
-      [](stk::mesh::BulkData& b, const PerInput& in) { return build_per2d_list(b, in); }, mesh, selector, kN);
+  run_single_image_n2_validation<PerList2d>(BuildPer2dList{}, mesh, selector, kN);
 }
 
 // =============================================================================
@@ -1271,8 +1361,7 @@ TEST(PeriodicSTKSearchNeighborList, SingleImageN2Validation) {
   constexpr int kN = 50;
   auto mesh = make_node_mesh_with_aabb(kN);
   const stk::mesh::Selector selector = mesh.meta->universal_part();
-  run_single_image_n2_validation<PerSTKList>(
-      [](stk::mesh::BulkData& b, const PerInput& in) { return build_per_stk_list(b, in); }, mesh, selector, kN);
+  run_single_image_n2_validation<PerSTKList>(BuildPerSTKList{}, mesh, selector, kN);
 }
 
 TEST(PeriodicSTKSearchNeighborList, BoundaryN2Validation) {
@@ -1354,13 +1443,13 @@ void run_multirank_periodic_stk_validation(const std::vector<std::array<float, 3
   }
 
   // The list's rows for this rank's owned targets, mapped to global ids (valid for ghosted sources too).
+  const auto target_entities = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, list.target_entities());
+  const auto source_entities = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, list.source_entities());
   std::vector<PeriodicPair> actual_vec;
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    const size_t tgid = static_cast<size_t>(bulk.identifier(list.target_entity(t))) - 1;
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const size_t sgid = static_cast<size_t>(bulk.identifier(list.get_neighbor(t, k))) - 1;
-      actual_vec.push_back({tgid, sgid, list_relative_shift(list, t, k)});
-    }
+  for (const auto& p : collect_periodic_pairs(list)) {
+    const size_t tgid = static_cast<size_t>(bulk.identifier(target_entities(p.target_owner))) - 1;
+    const size_t sgid = static_cast<size_t>(bulk.identifier(source_entities(p.source_owner))) - 1;
+    actual_vec.push_back({tgid, sgid, p.relative_shift});
   }
   const std::set<PeriodicPair> actual(actual_vec.begin(), actual_vec.end());
 
@@ -1392,32 +1481,41 @@ TEST(PeriodicSTKSearchNeighborList, MultiRankRandomN2Validation) {
 }
 
 // =============================================================================
-// Group 4 — Debug-only bound-check tests
+// Group 4 — Bounds invariants
+//
+// Every in-range query stays inside the list's extents and yields valid entities.
 // =============================================================================
 
-#ifndef NDEBUG
+template <typename ListType>
+void check_bounds(const ListType& list) {
+  ASSERT_GT(list.size(), 0u);
 
-TEST_F(PeriodicFixture, OutOfBounds_1d) {
-  auto list = build_per1d_list(*bulk_, periodic_input_);
-
-  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
-  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
-  EXPECT_THROW(list.source_image_shift(0, list.num_neighbors(0)), std::out_of_range);
+  bool bad = false;
+  Kokkos::parallel_reduce(
+      "bounds", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, bool& any_bad) {
+        const size_t num_nbrs = list.num_neighbors(t);
+        any_bad = any_bad || num_nbrs > list.size() || list.target_entity(t) == stk::mesh::Entity();
+        for (size_t k = 0; k < num_nbrs; ++k) {
+          const size_t s = list.source_index(t, k);
+          if (s >= list.num_sources()) {
+            any_bad = true;
+            continue;
+          }
+          any_bad = any_bad || list.source_entity(s) == stk::mesh::Entity();
+        }
+      },
+      Kokkos::LOr<bool>(bad));
+  EXPECT_FALSE(bad) << "An in-range query left the list's extents or returned an invalid entity.";
 }
 
-TEST_F(PeriodicFixture, OutOfBounds_2d) {
-  auto list = build_per2d_list(*bulk_, periodic_input_);
-
-  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
-  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
-  EXPECT_THROW(list.source_image_shift(0, list.num_neighbors(0)), std::out_of_range);
+TEST_F(PeriodicFixture, Bounds_1d) {
+  check_bounds(build_per1d_list(*bulk_, periodic_input_));
 }
 
-#endif  // NDEBUG
+TEST_F(PeriodicFixture, Bounds_2d) {
+  check_bounds(build_per2d_list(*bulk_, periodic_input_));
+}
 
 }  // namespace
 }  // namespace search
