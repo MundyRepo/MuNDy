@@ -324,7 +324,7 @@ class NgpLinkDataT {
   /// \brief Rectify potentially stale data post-mesh modification.
   void update_post_mesh_mod() {
     link_data().update_post_mesh_mod();
-    ngp_mesh_.update_mesh();
+    ngp_mesh_ = stk::mesh::get_updated_ngp_mesh(bulk_data());
   }
   //@}
 
