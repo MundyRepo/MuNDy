@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_PERFORMANCE_TESTS_KOKKOS_MBODY_TYPES_HPP_
-#define MUNDY_MESH_PERFORMANCE_TESTS_KOKKOS_MBODY_TYPES_HPP_
+#ifndef MUNDY_MBODY_KOKKOSMBODYTYPES_HPP_
+#define MUNDY_MBODY_KOKKOSMBODYTYPES_HPP_
 
 /// \file
 /// \brief Plain data model for the rod/spring/contact MCQPP solver (mundy::mbody::solve).
@@ -30,6 +30,9 @@
 /// lambda(p), ...) return a mundy view over the flat storage, not a copy, so
 /// `rods.center(i) += dt * rods.velocity(i)` writes straight through. Whole-array accessors (*_view())
 /// return the raw Kokkos::View.
+
+// C++ core
+#include <type_traits>
 
 // Kokkos
 #include <Kokkos_Core.hpp>
@@ -582,8 +585,173 @@ struct SolveConfig {
   double cg_tol = 1e-8;
 };
 
+//! \name Copying between memory spaces
+//@{
+// The Kokkos view idioms, lifted to the containers above. A mirror's Space is an execution space, and a mirror
+// aliases its source when the two share a memory space, as a Kokkos view mirror does.
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const RodViews<DstSpace>& dst, const RodViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.center_view(), src.center_view());
+  Kokkos::deep_copy(dst.orientation_view(), src.orientation_view());
+  Kokkos::deep_copy(dst.radius_view(), src.radius_view());
+  Kokkos::deep_copy(dst.length_view(), src.length_view());
+  Kokkos::deep_copy(dst.force_torque_view(), src.force_torque_view());
+  Kokkos::deep_copy(dst.velocity_omega_view(), src.velocity_omega_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const LinearSpringViews<DstSpace>& dst, const LinearSpringViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
+  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
+  Kokkos::deep_copy(dst.rest_length_view(), src.rest_length_view());
+  Kokkos::deep_copy(dst.spring_constant_view(), src.spring_constant_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const AngularSpringViews<DstSpace>& dst, const AngularSpringViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
+  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
+  Kokkos::deep_copy(dst.rest_angle_view(), src.rest_angle_view());
+  Kokkos::deep_copy(dst.spring_constant_view(), src.spring_constant_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const TriplePointAngularSpringViews<DstSpace>& dst,
+               const TriplePointAngularSpringViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
+  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
+  Kokkos::deep_copy(dst.rod_k_view(), src.rod_k_view());
+  Kokkos::deep_copy(dst.rest_angle_view(), src.rest_angle_view());
+  Kokkos::deep_copy(dst.spring_constant_view(), src.spring_constant_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const FixedPositionViews<DstSpace>& dst, const FixedPositionViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_view(), src.rod_view());
+  Kokkos::deep_copy(dst.target_point_view(), src.target_point_view());
+  Kokkos::deep_copy(dst.body_offset_view(), src.body_offset_view());
+  Kokkos::deep_copy(dst.compliance_view(), src.compliance_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const FixedPoseViews<DstSpace>& dst, const FixedPoseViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_view(), src.rod_view());
+  Kokkos::deep_copy(dst.target_point_view(), src.target_point_view());
+  Kokkos::deep_copy(dst.target_orientation_view(), src.target_orientation_view());
+  Kokkos::deep_copy(dst.body_offset_view(), src.body_offset_view());
+  Kokkos::deep_copy(dst.compliance_view(), src.compliance_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const ContactViews<DstSpace>& dst, const ContactViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
+  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every family of src into dst; each pair of families must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const ConstraintSet<DstSpace>& dst, const ConstraintSet<SrcSpace>& src) {
+  deep_copy(dst.linear_springs, src.linear_springs);
+  deep_copy(dst.angular_springs, src.angular_springs);
+  deep_copy(dst.triple_springs, src.triple_springs);
+  deep_copy(dst.fixed_positions, src.fixed_positions);
+  deep_copy(dst.fixed_poses, src.fixed_poses);
+  deep_copy(dst.contacts, src.contacts);
+}
+
+/// \brief Whether T is one of the *Views specializations.
+template <typename T>
+struct is_views_container : std::false_type {};
+template <typename E>
+struct is_views_container<RodViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<LinearSpringViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<AngularSpringViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<TriplePointAngularSpringViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<FixedPositionViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<FixedPoseViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<ContactViews<E>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_views_container_v = is_views_container<T>::value;
+
+/// \brief Whether T is a ConstraintSet specialization.
+template <typename T>
+struct is_constraint_set : std::false_type {};
+template <typename E>
+struct is_constraint_set<ConstraintSet<E>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_constraint_set_v = is_constraint_set<T>::value;
+
+/// \brief Matches exactly the containers that can be copied between memory spaces.
+template <typename T>
+concept MirrorableType = is_views_container_v<T> || is_constraint_set_v<T>;
+
+/// \brief A container shaped like src in Space's memory: src itself when the memory spaces match, else a new
+/// (zero-initialized) allocation.
+template <typename Space, template <typename> class Views, typename SrcSpace>
+  requires is_views_container_v<Views<SrcSpace>>
+auto create_mirror_view(const Space& /*space*/, const Views<SrcSpace>& src) {
+  static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror_view: Space must be an execution space.");
+  if constexpr (std::is_same_v<typename Space::memory_space, typename SrcSpace::memory_space>) {
+    return src;
+  } else {
+    return Views<Space>(src.size());
+  }
+}
+
+/// \brief A constraint set shaped like src in Space's memory: src itself when the memory spaces match, else a
+/// family-by-family mirror.
+template <typename Space, typename SrcSpace>
+auto create_mirror_view(const Space& space, const ConstraintSet<SrcSpace>& src) {
+  static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror_view: Space must be an execution space.");
+  if constexpr (std::is_same_v<typename Space::memory_space, typename SrcSpace::memory_space>) {
+    return src;
+  } else {
+    ConstraintSet<Space> mirror;
+    mirror.linear_springs = create_mirror_view(space, src.linear_springs);
+    mirror.angular_springs = create_mirror_view(space, src.angular_springs);
+    mirror.triple_springs = create_mirror_view(space, src.triple_springs);
+    mirror.fixed_positions = create_mirror_view(space, src.fixed_positions);
+    mirror.fixed_poses = create_mirror_view(space, src.fixed_poses);
+    mirror.contacts = create_mirror_view(space, src.contacts);
+    return mirror;
+  }
+}
+
+/// \brief create_mirror_view(space, src), holding a copy of src's contents.
+template <typename Space, MirrorableType T>
+auto create_mirror_view_and_copy(const Space& space, const T& src) {
+  auto mirror = create_mirror_view(space, src);
+  if constexpr (!std::is_same_v<decltype(mirror), T>) {
+    deep_copy(mirror, src);
+  }
+  return mirror;
+}
+//@}
+
 }  // namespace mbody
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_PERFORMANCE_TESTS_KOKKOS_MBODY_TYPES_HPP_
+#endif  // MUNDY_MBODY_KOKKOSMBODYTYPES_HPP_
