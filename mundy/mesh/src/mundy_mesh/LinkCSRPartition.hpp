@@ -121,8 +121,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
   //@{
 
   /// \brief Fetch the partition key.
-  KOKKOS_INLINE_FUNCTION
-  const impl::PartitionKey& key() const noexcept {
+  inline const impl::PartitionKey& key() const noexcept {
     return *key_ptr_;
   }
 

@@ -372,6 +372,16 @@ TYPED_TEST(QuaternionSingleTypeTest, RotationVectorRoundTrip) {
   // its opposite. Asserting this pins the canonicalization rather than leaving it implicit.
   const AVector3<T> shorter_way = quaternion_to_rotation_vector(axis_angle_to_quaternion(axis, static_cast<T>(1.5) * pi));
   EXPECT_NEAR(norm(shorter_way - (-(pi / 2) * axis)), static_cast<T>(0), tol);
+
+  // Only the direction matters, down to scales where the squared components underflow.
+  const T tiny = std::is_same_v<T, float> ? static_cast<T>(1e-25) : static_cast<T>(1e-170);
+  const AQuaternion<T> small_angle = axis_angle_to_quaternion(axis, static_cast<T>(1e-3));
+  for (const T scale : {static_cast<T>(1), static_cast<T>(1e-8), tiny}) {
+    is_close_debug(quaternion_to_rotation_vector(AQuaternion<T>{0, scale, 0, 0}), AVector3<T>{pi, 0, 0},
+                   "Scaled half-turn disagreed.");
+    is_close_debug(quaternion_to_rotation_vector(scale * small_angle), static_cast<T>(1e-3) * axis,
+                   "Scaled small angle disagreed.");
+  }
 }
 
 TYPED_TEST(QuaternionSingleTypeTest, SpecialVectors) {

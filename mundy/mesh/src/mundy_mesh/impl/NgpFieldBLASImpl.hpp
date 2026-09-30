@@ -1101,7 +1101,7 @@ void ngp_field_print(stk::mesh::FieldBase& field,                    //
   ::mundy::mesh::for_each_entity_run(
       ngp_mesh, ngp_field.get_rank(), field_selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& fmi) {
         unsigned num_components = ngp_field.get_num_components_per_entity(fmi);
-        Kokkos::printf("EntityID: %d, values: ", ngp_mesh.identifier(ngp_mesh.get_entity(ngp_field.get_rank(), fmi)));
+        Kokkos::printf("EntityID: %llu, values: ", static_cast<unsigned long long>(ngp_mesh.identifier(ngp_mesh.get_entity(ngp_field.get_rank(), fmi))));
         for (unsigned d = 0; d < num_components; ++d) {
           if constexpr (std::is_same_v<Scalar, int>) {
             Kokkos::printf("%i ", ngp_field(fmi, d));
@@ -1114,13 +1114,12 @@ void ngp_field_print(stk::mesh::FieldBase& field,                    //
           } else if constexpr (std::is_same_v<Scalar, double>) {
             Kokkos::printf("%lf ", ngp_field(fmi, d));
           } else {
+            // Fallback for other types, print as float
             Kokkos::printf("%f ", ngp_field(fmi, d));
           }
         }
         Kokkos::printf("\n");
       });
-
-  mark_field_modified_on_space(field, exec_space);
 }
 
 }  // namespace impl

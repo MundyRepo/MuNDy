@@ -956,7 +956,9 @@ template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr AVector3<std::remove_const_t<T>> quaternion_to_rotation_vector(
     const AQuaternion<T, Accessor>& quat) {
   using Scalar = std::remove_const_t<T>;
-  const Scalar sign = (quat.w() < Scalar(0)) ? Scalar(-1) : Scalar(1);
+  // Dividing by the largest magnitude keeps the branch test scale-free and the norm from underflowing.
+  const Scalar largest = max(max(abs(quat.w()), abs(quat.x())), max(abs(quat.y()), abs(quat.z())));
+  const Scalar sign = ((quat.w() < Scalar(0)) ? Scalar(-1) : Scalar(1)) / largest;
   const Scalar scalar_part = sign * quat.w();
   const AVector3<Scalar> vector_part{sign * quat.x(), sign * quat.y(), sign * quat.z()};
 
