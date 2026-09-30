@@ -18,17 +18,16 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_PERFORMANCE_TESTS_KOKKOS_MBODY_HPP_
-#define MUNDY_MESH_PERFORMANCE_TESTS_KOKKOS_MBODY_HPP_
+#ifndef MUNDY_MBODY_KOKKOSMBODY_HPP_
+#define MUNDY_MBODY_KOKKOSMBODY_HPP_
 
 // Mundy
 #include <mundy_math/convex_spaces.hpp>
 #include <mundy_math/cqpp.hpp>
 #include <mundy_math/linear_ops.hpp>
 #include <mundy_math/linear_system.hpp>
-
-#include "KokkosMbodyImpl.hpp"
-#include "KokkosMbodyTypes.hpp"
+#include <mundy_mbody/impl/KokkosMbodyImpl.hpp>
+#include <mundy_mbody/KokkosMbodyTypes.hpp>
 
 namespace mundy {
 
@@ -205,4 +204,4 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_PERFORMANCE_TESTS_KOKKOS_MBODY_HPP_
+#endif  // MUNDY_MBODY_KOKKOSMBODY_HPP_
