@@ -1,0 +1,6 @@
+#ifndef MUNDYMBODY_CONFIG_HPP_
+#define MUNDYMBODY_CONFIG_HPP_
+
+// Declare special variables, especially those related to optional features, TPLs, and workarounds.
+
+#endif  // MUNDYMBODY_CONFIG_HPP_

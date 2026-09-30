@@ -16,5 +16,6 @@ tribits_package_define_dependencies(
   Mech core/mech PT OPTIONAL
   Mesh mesh PT OPTIONAL
   Search search PT OPTIONAL
+  MBody mbody PT OPTIONAL
   REGRESSION_EMAIL_LIST brycepalmer96@gmail.com
 )

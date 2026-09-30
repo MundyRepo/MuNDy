@@ -90,13 +90,6 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
-
-# tribits_add_executable(
-# KokkosMbodyTest
-# SOURCES KokkosMbody.cpp
-# INSTALLABLE
-# CATEGORIES PERFORMANCE
-# )
 else()
   message(STATUS
     "MundyMesh: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
