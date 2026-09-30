@@ -23,28 +23,26 @@
 if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   message(STATUS "MundySearch: Setting up unit tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
 
-  if(Mundy_ENABLE_ArborX)
-    mundy_tribits_add_executable_and_test(
-      UnitTestNeighborList
-      SOURCES UnitTestNeighborList.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-      MPI_PROC_RANGE 1-4
-      INSTALLABLE
-    )
+  mundy_tribits_add_executable_and_test(
+    UnitTestNeighborList
+    SOURCES UnitTestNeighborList.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    MPI_PROC_RANGE 1-4
+    INSTALLABLE
+  )
 
-    mundy_tribits_add_executable_and_test(
-      UnitTestPeriodicNeighborList
-      SOURCES UnitTestPeriodicNeighborList.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-      MPI_PROC_RANGE 1-4
-      INSTALLABLE
-    )
+  mundy_tribits_add_executable_and_test(
+    UnitTestPeriodicNeighborList
+    SOURCES UnitTestPeriodicNeighborList.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    MPI_PROC_RANGE 1-4
+    INSTALLABLE
+  )
 
-    mundy_tribits_add_executable_and_test(
-      UnitTestExcluder
-      SOURCES UnitTestExcluder.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-      MPI_PROC_RANGE 1
-      INSTALLABLE
-    )
-  endif()
+  mundy_tribits_add_executable_and_test(
+    UnitTestExcluder
+    SOURCES UnitTestExcluder.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    MPI_PROC_RANGE 1
+    INSTALLABLE
+  )
 
 else()
   message(STATUS "MundySearch: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
