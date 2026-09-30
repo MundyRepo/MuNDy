@@ -121,7 +121,11 @@ struct KokkosBackend {
       using mem_space = typename op_t::memory_space;
       using layout_t = typename Kokkos::View<value_type*, mem_space>::array_layout;
       using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
-      return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "domain_vector"), domain_size(op));
+      KOKKOS_IF_ON_HOST(
+          (return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "domain_vector"), domain_size(op));));
+      KOKKOS_IF_ON_DEVICE((MUNDY_THROW_REQUIRE(false, std::logic_error,
+                                               "KokkosBackend::make_domain_vector: cannot be called from device code.");
+                           return vector_t("domain_vector", domain_size(op));));
     } else {
       static_assert(dependent_false_v<LinearOp>,
                     "KokkosBackend::make_domain_vector requires DenseMatView or op.make_domain_vector().");
@@ -138,7 +142,11 @@ struct KokkosBackend {
       using mem_space = typename op_t::memory_space;
       using layout_t = typename Kokkos::View<value_type*, mem_space>::array_layout;
       using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
-      return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "range_vector"), range_size(op));
+      KOKKOS_IF_ON_HOST(
+          (return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "range_vector"), range_size(op));));
+      KOKKOS_IF_ON_DEVICE((MUNDY_THROW_REQUIRE(false, std::logic_error,
+                                               "KokkosBackend::make_range_vector: cannot be called from device code.");
+                           return vector_t("range_vector", range_size(op));));
     } else {
       static_assert(dependent_false_v<LinearOp>,
                     "KokkosBackend::make_range_vector requires DenseMatView or op.make_range_vector().");

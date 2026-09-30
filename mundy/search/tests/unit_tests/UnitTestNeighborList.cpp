@@ -36,7 +36,7 @@
 ///   Group 3 — Random N²: oracle comparison on 50 Philox-generated random spheres.
 ///   Group 4 — Iteration protocol: for_each_target_with_neighbors must visit every target
 ///     even when it has zero neighbors.
-///   Group 5 — Debug bounds: MUNDY_THROW_ASSERT out-of-range checks (guarded by #ifndef NDEBUG).
+///   Group 5 — Bounds invariants: in-range queries stay within the list's extents and yield valid entities.
 ///   Group 6 — Reduction functions: for_each_neighbor_pair_reduce and
 ///     for_each_target_with_neighbors_reduce.
 ///   Group 7 — Rebuilder system: RebuilderType concept checks, AlwaysRebuild, NeverRebuild,
@@ -49,6 +49,7 @@
 #include <gtest/gtest.h>
 
 // C++ core
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <memory>
@@ -69,6 +70,7 @@
 #include <stk_mesh/base/MetaData.hpp>  // for declare_field, put_field_on_mesh
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_topology/topology.hpp>
+#include <stk_util/ngp/NgpSpaces.hpp>
 #include <stk_util/parallel/Parallel.hpp>
 
 // STK search
@@ -117,21 +119,21 @@ namespace {
 // Execution / memory space aliases
 // =============================================================================
 
-using TestMemSpace = Kokkos::HostSpace;
-using TestExecSpace = Kokkos::DefaultHostExecutionSpace;
+using TestMemSpace = stk::ngp::MemSpace;
+using TestExecSpace = stk::ngp::ExecSpace;
 
 // =============================================================================
 // List type aliases and compile-time concept checks (Group 0)
 // =============================================================================
 
 using STKList = STKSearchNeighborList<TestMemSpace>;
-static_assert(NeighborListType<STKList>, "STKSearchNeighborList<HostSpace> must satisfy NeighborListType.");
+static_assert(NeighborListType<STKList>, "STKSearchNeighborList<TestMemSpace> must satisfy NeighborListType.");
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 using List1d = ArborX1dNeighborList<TestMemSpace>;
 using List2d = ArborX2dNeighborList<TestMemSpace>;
-static_assert(NeighborListType<List1d>, "ArborX1dNeighborList<HostSpace> must satisfy NeighborListType.");
-static_assert(NeighborListType<List2d>, "ArborX2dNeighborList<HostSpace> must satisfy NeighborListType.");
+static_assert(NeighborListType<List1d>, "ArborX1dNeighborList<TestMemSpace> must satisfy NeighborListType.");
+static_assert(NeighborListType<List2d>, "ArborX2dNeighborList<TestMemSpace> must satisfy NeighborListType.");
 #endif
 
 using PairSet = std::set<std::pair<size_t, size_t>>;
@@ -161,7 +163,7 @@ inline TestAABB make_aabb(double cx, double cy, double cz, double h) {
 }
 
 /// AABB overlap predicate (the N^2 oracle's comparison).
-inline bool aabb_overlap(const TestAABB& a, const TestAABB& b) {
+KOKKOS_INLINE_FUNCTION bool aabb_overlap(const TestAABB& a, const TestAABB& b) {
   for (int d = 0; d < 3; ++d) {
     if (a.max_corner()[d] < b.min_corner()[d]) return false;
     if (b.max_corner()[d] < a.min_corner()[d]) return false;
@@ -269,11 +271,26 @@ inline NodeMeshWithAABB make_distributed_node_mesh_with_aabb(int num_nodes) {
 // Pair collection and oracle
 // =============================================================================
 
+/// The list's (target, source) pairs, read through the direct accessors on device and gathered to host.
 template <typename ListType>
 PairSet collect_pairs(const ListType& list) {
+  using index_pair = Kokkos::pair<size_t, size_t>;
+  Kokkos::View<index_pair*, TestMemSpace> pairs("pairs", list.size());
+  Kokkos::View<size_t, TestMemSpace> cursor("cursor");
+  Kokkos::parallel_for(
+      "collect_pairs", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()), KOKKOS_LAMBDA(const size_t t) {
+        for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+          const size_t slot = Kokkos::atomic_fetch_inc(&cursor());
+          if (slot < pairs.extent(0)) pairs(slot) = index_pair(t, list.source_index(t, k));
+        }
+      });
+  const auto pairs_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, pairs);
+  const auto cursor_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, cursor);
+
+  // A count mismatch with size() leaves slots unwritten or pairs dropped; either shows up in the set comparison.
   PairSet result;
-  for (size_t t = 0; t < list.num_targets(); ++t)
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) result.insert({t, list.source_index(t, k)});
+  const size_t n = std::min(cursor_host(), pairs_host.extent(0));
+  for (size_t i = 0; i < n; ++i) result.insert({pairs_host(i).first, pairs_host(i).second});
   return result;
 }
 
@@ -293,38 +310,52 @@ inline PairSet oracle_pairs_no_self(const std::vector<TestAABB>& boxes) {
 template <typename ListType>
 void check_size_equals_neighbor_sum(const ListType& list) {
   size_t manual_sum = 0;
-  for (size_t t = 0; t < list.num_targets(); ++t) manual_sum += list.num_neighbors(t);
+  Kokkos::parallel_reduce(
+      "neighbor_sum", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, size_t& sum) { sum += list.num_neighbors(t); }, manual_sum);
   EXPECT_EQ(list.size(), manual_sum) << "list.size() != sum of per-target neighbor counts.";
 }
 
 template <typename ListType>
 void check_neighbor_pair_accessors(const ListType& list) {
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      NeighborPair<ListType> pair(list, t, k);
-      EXPECT_EQ(pair.target_index(), t);
-      const size_t si = list.source_index(t, k);
-      EXPECT_EQ(pair.source_index(), si) << "target " << t << " neighbor " << k;
-      EXPECT_EQ(pair.target_entity(), list.target_entity(t)) << "target " << t << " neighbor " << k;
-      EXPECT_EQ(pair.source_entity(), list.source_entity(si)) << "target " << t << " neighbor " << k;
-      EXPECT_LT(si, list.num_sources()) << "source_index out of range at target " << t << " neighbor " << k;
-    }
-  }
+  bool bad = false;
+  Kokkos::parallel_reduce(
+      "neighbor_pair_accessors", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, bool& any_bad) {
+        for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+          const NeighborPair<ListType> pair(list, t, k);
+          const size_t si = list.source_index(t, k);
+          if (si >= list.num_sources()) {
+            any_bad = true;
+            continue;
+          }
+          any_bad = any_bad || pair.target_index() != t || pair.source_index() != si ||
+                    pair.target_entity() != list.target_entity(t) || pair.source_entity() != list.source_entity(si);
+        }
+      },
+      Kokkos::LOr<bool>(bad));
+  EXPECT_FALSE(bad) << "NeighborPair disagrees with the list's accessors, or a source_index is out of range.";
 }
 
 template <typename ListType>
 void check_neighbors_accessors(const ListType& list) {
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    Neighbors<ListType> nbrs(list, t);
-    EXPECT_EQ(nbrs.size(), list.num_neighbors(t)) << "target " << t;
-    EXPECT_EQ(nbrs.target_entity(), list.target_entity(t)) << "target " << t;
-    EXPECT_EQ(nbrs.target_index(), t) << "target " << t;
-    for (size_t k = 0; k < nbrs.size(); ++k) {
-      EXPECT_EQ(nbrs[k], list.get_neighbor(t, k)) << "target " << t << " neighbor " << k;
-      EXPECT_EQ(nbrs(k), list.get_neighbor(t, k)) << "target " << t << " neighbor " << k;
-      EXPECT_EQ(nbrs.source_index(k), list.source_index(t, k)) << "target " << t << " neighbor " << k;
-    }
-  }
+  bool bad = false;
+  Kokkos::parallel_reduce(
+      "neighbors_accessors", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, bool& any_bad) {
+        const Neighbors<ListType> nbrs(list, t);
+        if (nbrs.size() != list.num_neighbors(t)) {
+          any_bad = true;
+          return;
+        }
+        any_bad = any_bad || nbrs.target_entity() != list.target_entity(t) || nbrs.target_index() != t;
+        for (size_t k = 0; k < nbrs.size(); ++k) {
+          any_bad = any_bad || nbrs[k] != list.get_neighbor(t, k) || nbrs(k) != list.get_neighbor(t, k) ||
+                    nbrs.source_index(k) != list.source_index(t, k);
+        }
+      },
+      Kokkos::LOr<bool>(bad));
+  EXPECT_FALSE(bad) << "Neighbors disagrees with the list's accessors.";
 }
 
 /// Verifies that for_each_neighbor_pair emits exactly the same pairs as the direct accessor,
@@ -343,11 +374,11 @@ void check_foreach_pair_matches_direct(const ListType& list) {
       TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<ListType>& pair) {
         Kokkos::atomic_inc(&visit_count(pair.target_index(), pair.source_index()));
       });
-  Kokkos::fence();
+  const auto visit_count_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, visit_count);
   PairSet fe_set;
   for (size_t t = 0; t < nt; ++t)
     for (size_t s = 0; s < ns; ++s) {
-      const int cnt = visit_count(t, s);
+      const int cnt = visit_count_host(t, s);
       if (cnt > 0) {
         EXPECT_EQ(cnt, 1) << "Pair (" << t << "," << s << ") visited " << cnt << " times (expected 1).";
         fe_set.insert({t, s});
@@ -1037,14 +1068,20 @@ void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double
                   .broad_phase(ExcludeSelfInteraction{})
                   .build(bulk);
 
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const size_t s = list.source_index(t, k);
-      EXPECT_TRUE(aabb_overlap(boxes[t], boxes[s]))
-          << "Spurious pair (target=" << t << ", source=" << s << "): boxes do not overlap.";
-      EXPECT_NE(t, s) << "Self-pair (target==source==" << t << ") despite ExcludeSelfInteraction.";
-    }
-  }
+  const Kokkos::View<TestAABB*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>> boxes_host(boxes.data(),
+                                                                                                      boxes.size());
+  const auto boxes_dev = Kokkos::create_mirror_view_and_copy(TestMemSpace{}, boxes_host);
+  bool bad = false;
+  Kokkos::LOr<bool> reducer(bad);
+  mundy::search::for_each_neighbor_pair_reduce(
+      TestExecSpace{}, list,
+      KOKKOS_LAMBDA(const NeighborPair<ListType>& pair, bool& any_bad) {
+        const size_t t = pair.target_index();
+        const size_t s = pair.source_index();
+        any_bad = any_bad || t == s || !aabb_overlap(boxes_dev(t), boxes_dev(s));
+      },
+      reducer);
+  EXPECT_FALSE(bad) << "A pair is a self-pair despite ExcludeSelfInteraction, or its boxes do not overlap.";
 
   EXPECT_EQ(collect_pairs(list), oracle_pairs_no_self(boxes))
       << "Neighbor list is missing oracle pairs or contains extra pairs.";
@@ -1111,8 +1148,8 @@ void test_all_isolated_visits_all_targets() {
   Kokkos::deep_copy(tgt_count, size_t(0));
   mundy::search::for_each_target_with_neighbors(
       TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_inc(&tgt_count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(tgt_count(0), static_cast<size_t>(kN))
+  const auto tgt_count_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, tgt_count);
+  EXPECT_EQ(tgt_count_host(0), static_cast<size_t>(kN))
       << "for_each_target_with_neighbors must visit all " << kN << " targets even with zero neighbors.";
 }
 
@@ -1134,43 +1171,53 @@ TEST(IterationProtocol, AllIsolated_VisitsAllTargets_2d) {
 #endif  // HAVE_MUNDYSEARCH_ARBORX
 
 // =============================================================================
-// Group 5 — Debug bounds
+// Group 5 — Bounds invariants
 //
-// MUNDY_THROW_ASSERT fires only when NDEBUG is not defined.
+// Every in-range query stays inside the list's extents and yields valid entities.
 // =============================================================================
 
-#ifndef NDEBUG
-
 template <typename ListType, typename FixtureType>
-void test_out_of_bounds(FixtureType& f) {
+void test_bounds(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
                   .exec_space(TestExecSpace{})
                   .target_input(f.universal_boxes_)
                   .source_input(f.universal_boxes_)
                   .broad_phase(ExcludeSelfInteraction{})
                   .build(*f.bulk_);
+  ASSERT_GT(list.size(), 0u);
 
-  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
-  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
+  bool bad = false;
+  Kokkos::parallel_reduce(
+      "bounds", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+      KOKKOS_LAMBDA(const size_t t, bool& any_bad) {
+        const size_t num_nbrs = list.num_neighbors(t);
+        any_bad = any_bad || num_nbrs > list.num_sources() || list.target_entity(t) == stk::mesh::Entity();
+        for (size_t k = 0; k < num_nbrs; ++k) {
+          const size_t s = list.source_index(t, k);
+          if (s >= list.num_sources()) {
+            any_bad = true;
+            continue;
+          }
+          any_bad = any_bad || list.source_entity(s) == stk::mesh::Entity();
+        }
+      },
+      Kokkos::LOr<bool>(bad));
+  EXPECT_FALSE(bad) << "An in-range query left the list's extents or returned an invalid entity.";
 }
 
-TEST_F(STKDeterministicFixture, OutOfBounds_stk) {
-  test_out_of_bounds<STKList, STKDeterministicFixture>(*this);
+TEST_F(STKDeterministicFixture, Bounds_stk) {
+  test_bounds<STKList, STKDeterministicFixture>(*this);
 }
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
-TEST_F(DeterministicFixture, OutOfBounds_1d) {
-  test_out_of_bounds<List1d, DeterministicFixture>(*this);
+TEST_F(DeterministicFixture, Bounds_1d) {
+  test_bounds<List1d, DeterministicFixture>(*this);
 }
 
-TEST_F(DeterministicFixture, OutOfBounds_2d) {
-  test_out_of_bounds<List2d, DeterministicFixture>(*this);
+TEST_F(DeterministicFixture, Bounds_2d) {
+  test_bounds<List2d, DeterministicFixture>(*this);
 }
 #endif  // HAVE_MUNDYSEARCH_ARBORX
-
-#endif  // NDEBUG
 
 // =============================================================================
 // Group 6 — Reduction functions
@@ -1200,8 +1247,12 @@ void check_reduce_functions(const ListType& list) {
   // 2. Sum of source ordinals via pair reducer must match direct iteration.
   {
     size_t direct_sum = 0;
-    for (size_t t = 0; t < list.num_targets(); ++t)
-      for (size_t k = 0; k < list.num_neighbors(t); ++k) direct_sum += list.source_index(t, k);
+    Kokkos::parallel_reduce(
+        "direct_source_sum", Kokkos::RangePolicy<TestExecSpace>(0, list.num_targets()),
+        KOKKOS_LAMBDA(const size_t t, size_t& s) {
+          for (size_t k = 0; k < list.num_neighbors(t); ++k) s += list.source_index(t, k);
+        },
+        direct_sum);
 
     size_t reduce_sum = 0;
     Kokkos::Sum<size_t> reducer(reduce_sum);
@@ -1323,11 +1374,11 @@ TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_2d) {
 static_assert(RebuilderType<AlwaysRebuild>, "AlwaysRebuild must satisfy RebuilderType.");
 static_assert(RebuilderType<NeverRebuild>, "NeverRebuild must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnEntityChange<TestMemSpace>>,
-              "RebuildOnEntityChange<HostSpace> must satisfy RebuilderType.");
+              "RebuildOnEntityChange<TestMemSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnAABBDisplacement<double, TestMemSpace>>,
-              "RebuildOnAABBDisplacement<double, HostSpace> must satisfy RebuilderType.");
+              "RebuildOnAABBDisplacement<double, TestMemSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnOBBDisplacement<double, TestMemSpace>>,
-              "RebuildOnOBBDisplacement<double, HostSpace> must satisfy RebuilderType.");
+              "RebuildOnOBBDisplacement<double, TestMemSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuilderChain<AlwaysRebuild, NeverRebuild>>,
               "RebuilderChain<AlwaysRebuild,NeverRebuild> must satisfy RebuilderType.");
 
@@ -2194,13 +2245,13 @@ void run_multirank_stk_validation(const std::vector<std::array<double, 3>>& posi
     if (static_cast<int>(p.first % static_cast<size_t>(nprocs)) == my_rank) expected.insert(p);
 
   // The list's rows for this rank's owned targets, mapped to global ids (valid for ghosted sources too).
+  const auto target_entities = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, list.target_entities());
+  const auto source_entities = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, list.source_entities());
   PairSet actual;
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    const size_t tgid = static_cast<size_t>(bulk.identifier(list.target_entity(t))) - 1;
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const size_t sgid = static_cast<size_t>(bulk.identifier(list.get_neighbor(t, k))) - 1;
-      actual.insert({tgid, sgid});
-    }
+  for (const auto& [t, s] : collect_pairs(list)) {
+    const size_t tgid = static_cast<size_t>(bulk.identifier(target_entities(t))) - 1;
+    const size_t sgid = static_cast<size_t>(bulk.identifier(source_entities(s))) - 1;
+    actual.insert({tgid, sgid});
   }
 
   EXPECT_EQ(actual.size(), expected.size())

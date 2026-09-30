@@ -138,7 +138,7 @@ namespace mesh {
 ///
 ///   // Stage 1: Claim tickets
 ///   reqs.activate_device();
-///   stk::mesh::for_each_entity_run(
+///   mundy::mesh::for_each_entity_run(
 ///       ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
 ///       KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
 ///         double centerline_length = ngp_bacteria_data.get<LENGTH>(bacteria_index);
@@ -157,7 +157,7 @@ namespace mesh {
 ///
 ///   // Stage 2: Request
 ///   reqs.activate_device();
-///   stk::mesh::for_each_entity_run(
+///   mundy::mesh::for_each_entity_run(
 ///       ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
 ///       KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
 ///         double centerline_length = ngp_bacteria_data.get<LENGTH>(bacteria_index);
@@ -174,7 +174,7 @@ namespace mesh {
 ///   reqs.process_requests(bulk_data);
 ///
 ///   // Stage 3: Fetch
-///   stk::mesh::for_each_entity_run(
+///   mundy::mesh::for_each_entity_run(
 ///       ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
 ///       KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
 ///         double centerline_length = ngp_bacteria_data.get<LENGTH>(bacteria_index);

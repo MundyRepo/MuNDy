@@ -468,18 +468,16 @@ namespace impl {
 // impl getters
 
 // clang-format off
-inline       stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(                LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
-inline       stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(              LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
-inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(                  LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
-inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(              LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
-
-inline       stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(           LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
-inline const stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(          const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
-inline const stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(        const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
-inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(            const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
-inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(        const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
-
-inline const stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(     const LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
+inline       stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(      LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
+inline const stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
+inline       stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(      LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
+inline const stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
+inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(      LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
+inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
+inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(      LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
+inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
+inline       stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(      LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
+inline const stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(const LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
 // clang-format on
 
 }  // namespace impl

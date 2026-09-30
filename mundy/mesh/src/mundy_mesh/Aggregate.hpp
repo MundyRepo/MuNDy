@@ -232,7 +232,7 @@ namespace mesh {
 ///    });
 ///
 ///    // Directly use accessors without an aggregate
-///    stk::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, selector,
+///    mundy::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, selector,
 ///       [center_accessor, radius_accessor](const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &entity) {
 ///           Vector3View<double> c = center_accessor(entity);
 ///           double& r = radius_accessor(entity);
@@ -330,7 +330,7 @@ class Aggregate {
   }
   template <typename Tag>
   MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
-  const void get_component() const {
+  void get_component() const {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
   }
@@ -555,7 +555,7 @@ class NgpAggregate {
   }
   template <typename Tag>
   MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
-  KOKKOS_INLINE_FUNCTION const void get_component() const {
+  KOKKOS_INLINE_FUNCTION void get_component() const {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
   }

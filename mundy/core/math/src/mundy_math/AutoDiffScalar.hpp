@@ -308,11 +308,55 @@ template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> abs(const AutoDiffScalar<T, N>& x) {
   return {abs(x.value()), x.derivatives() * (x.value() < T(0) ? T(-1) : T(1))};
 }
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> tan(const AutoDiffScalar<T, N>& x) {
+  const T v = tan(x.value());
+  return {v, x.derivatives() * (T(1) + v * v)};
+}
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> asin(const AutoDiffScalar<T, N>& x) {
+  return {asin(x.value()), x.derivatives() * (T(1) / sqrt(T(1) - x.value() * x.value()))};
+}
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> atan(const AutoDiffScalar<T, N>& x) {
+  return {atan(x.value()), x.derivatives() * (T(1) / (T(1) + x.value() * x.value()))};
+}
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> cbrt(const AutoDiffScalar<T, N>& x) {
+  const T v = cbrt(x.value());
+  return {v, x.derivatives() * (T(1) / (T(3) * v * v))};
+}
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> log10(const AutoDiffScalar<T, N>& x) {
+  return {log10(x.value()), x.derivatives() * (T(1) / (x.value() * log(T(10))))};
+}
+
+/// \brief Piecewise-constant rounding: the derivative is zero almost everywhere.
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> floor(const AutoDiffScalar<T, N>& x) {
+  return AutoDiffScalar<T, N>(floor(x.value()));
+}
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> ceil(const AutoDiffScalar<T, N>& x) {
+  return AutoDiffScalar<T, N>(ceil(x.value()));
+}
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> round(const AutoDiffScalar<T, N>& x) {
+  return AutoDiffScalar<T, N>(round(x.value()));
+}
 
 /// \brief Power with a passive exponent: d/dx x^p = p x^(p-1).
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> pow(const AutoDiffScalar<T, N>& x, const T& p) {
   return {pow(x.value(), p), x.derivatives() * (p * pow(x.value(), p - T(1)))};
+}
+
+/// \brief Power with an active exponent: d x^y = x^y (dy ln x + y dx / x).
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> pow(const AutoDiffScalar<T, N>& x,
+                                                          const AutoDiffScalar<T, N>& y) {
+  const T v = pow(x.value(), y.value());
+  return {v, (y.derivatives() * log(x.value()) + x.derivatives() * (y.value() / x.value())) * v};
 }
 
 /// \brief Two-argument arctangent: d atan2(y,x) = (x dy - y dx) / (x^2 + y^2).

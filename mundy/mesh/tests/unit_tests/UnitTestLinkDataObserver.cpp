@@ -60,6 +60,7 @@ struct LinkDataObserverFixture {
   stk::mesh::Part* link_part_dim2{nullptr};
   stk::mesh::Part* link_part_dim3{nullptr};
   stk::mesh::Part* linked_node_part{nullptr};
+  stk::mesh::Part* linked_elem_part{nullptr};
   std::vector<stk::mesh::EntityId> next_ids;
 
   explicit LinkDataObserverFixture(unsigned bucket_capacity = default_bucket_capacity, bool commit_mesh = true)
@@ -77,6 +78,7 @@ struct LinkDataObserverFixture {
     link_part_dim2 = &link_meta_data->declare_link_part("OBS_LINK_PART_DIM2", 2u);
     link_part_dim3 = &link_meta_data->declare_link_part("OBS_LINK_PART_DIM3", 3u);
     linked_node_part = &meta_data->declare_part("OBS_LINKED_NODE_PART", stk::topology::NODE_RANK);
+    linked_elem_part = &meta_data->declare_part("OBS_LINKED_ELEM_PART", stk::topology::ELEM_RANK);
 
     if (commit_mesh) {
       meta_data->commit();
@@ -278,7 +280,7 @@ TEST(UnitTestLinkDataObserver, EntireBucketDeleted) {
 TEST(UnitTestLinkDataObserver, LinkedEntityChangedParts_CsrRebuildSucceeds) {
   for (bool commit_mesh : {false, true}) {
     LinkDataObserverFixture fixture(default_bucket_capacity, commit_mesh);
-    LinkTriple baseline = create_connected_dim2_link(fixture, stk::topology::NODE_RANK, stk::topology::NODE_RANK);
+    LinkTriple baseline = create_connected_dim2_link(fixture, stk::topology::ELEM_RANK, stk::topology::ELEM_RANK);
     stk::mesh::Entity linked_entity = baseline[1];
 
     fixture.bulk_data->modification_begin();

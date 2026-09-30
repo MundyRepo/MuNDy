@@ -37,6 +37,8 @@ class HostDeviceSynchronizer {
   virtual void sync_to_host() = 0;
   virtual void modify_on_host() = 0;
   virtual void modify_on_device() = 0;
+  virtual void clear_host_sync_state() = 0;
+  virtual void clear_device_sync_state() = 0;
   virtual void update_post_mesh_mod() = 0;
 };
 

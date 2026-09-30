@@ -163,6 +163,10 @@ class NgpCOOToCSRSynchronizerT {
     const auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data);
     const auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data);
 
+    linked_entities_field.sync_to_host();
+    linked_entity_ids_field.sync_to_host();
+    linked_entity_ranks_field.sync_to_host();
+
     const stk::mesh::BucketVector& link_buckets =
         bulk_data.get_buckets(link_meta_data.link_rank(), link_subset_selector);
     for (const stk::mesh::Bucket* bucket : link_buckets) {
@@ -487,11 +491,11 @@ class NgpCOOToCSRSynchronizerT {
             const unsigned d = work % dimensionality;
             const stk::mesh::Entity link = bucket[i];
             const stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
-            if (!coo_data.get_link_crs_needs_updated(link_index)) {
+            if (!impl::get_link_crs_needs_updated(coo_data, link_index)) {
               return;
             }
 
-            const stk::mesh::Entity linked_entity_crs = coo_data.get_linked_entity_crs(link_index, d);
+            const stk::mesh::Entity linked_entity_crs = impl::get_linked_entity_crs(coo_data, link_index, d);
             const stk::mesh::Entity linked_entity = coo_data.get_linked_entity(link_index, d);
             if (linked_entity_crs == linked_entity) {
               return;
@@ -836,6 +840,9 @@ class NgpCOOToCSRSynchronizerT {
     ::mundy::mesh::field_copy<entity_value_t>(impl::get_linked_entities_field(crs_data.link_meta_data()),
                                               impl::get_linked_entities_crs_field(crs_data.link_meta_data()),
                                               link_subset_selector, stk::ngp::ExecSpace());
+
+    // Return the COO to a uniform state of up-to-dateness
+    impl::get_linked_entities_crs_field(crs_data.link_meta_data()).sync_to_host();
   }
 
   /// \brief Check consistency between the COO and CSR connectivity for the given selector
@@ -906,7 +913,7 @@ class NgpCOOToCSRSynchronizerT {
       const unsigned dimensionality = partition.link_dimensionality();
       stk::mesh::EntityRank link_rank = crs_data.link_meta_data().link_rank();
 
-      stk::mesh::for_each_entity_run(
+      ::mundy::mesh::for_each_entity_run(
           ngp_mesh, link_rank, partition.selector(), KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& linker_index) {
             // Loop over each linked entity in the linker
             for (unsigned d = 0; d < dimensionality; ++d) {

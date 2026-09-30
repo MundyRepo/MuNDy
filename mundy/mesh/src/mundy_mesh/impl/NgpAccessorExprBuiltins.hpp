@@ -49,21 +49,27 @@ namespace mesh {
 ///
 /// Usage: MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Norm, norm, ::mundy::norm)
 /// Defines: NormFunc (callable struct), NormExpr<Exprs...> (type alias), norm(args...) (free function).
-#define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(ExprClassName, FuncName, FuncCall)                                  \
-  namespace impl {                                                                                           \
-  struct ExprClassName##Func {                                                                               \
-    template <typename... Values>                                                                            \
-    KOKKOS_INLINE_FUNCTION auto operator()(const Values&... values) const -> decltype(FuncCall(values...)) { \
-      return FuncCall(values...);                                                                            \
-    }                                                                                                        \
-  };                                                                                                         \
-  template <typename... Exprs>                                                                               \
-  using ExprClassName##Expr = ApplyValueExpr<ExprClassName##Func, Exprs...>;                                 \
-  }                                                                                                          \
-  template <typename... Args>                                                                                \
-  MUNDY_REQUIRES((impl::is_math_expr_arg_v<Args> || ...))                                                    \
-  auto FuncName(const Args&... args) {                                                                       \
-    return impl::apply_expr_impl(impl::ExprClassName##Func{}, args...);                                      \
+#define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(ExprClassName, FuncName, FuncCall)                                            \
+  namespace impl {                                                                                                     \
+  struct ExprClassName##Func {                                                                                         \
+    template <typename... Values>                                                                                      \
+    KOKKOS_INLINE_FUNCTION constexpr auto operator()(const Values&... values) const -> decltype(FuncCall(values...)) { \
+      return FuncCall(values...);                                                                                      \
+    }                                                                                                                  \
+  };                                                                                                                   \
+  template <typename... Exprs>                                                                                         \
+  using ExprClassName##Expr = ApplyValueExpr<ExprClassName##Func, Exprs...>;                                           \
+  }                                                                                                                    \
+  template <typename... Args>                                                                                          \
+  MUNDY_REQUIRES((impl::is_math_expr_arg_v<Args> || ...) ||                                                            \
+                 (std::is_invocable_v<const impl::ExprClassName##Func&, const Args&...>))                              \
+  KOKKOS_INLINE_FUNCTION constexpr auto                                                                                \
+  FuncName(const Args&... args) {                                                                                      \
+    if constexpr ((impl::is_math_expr_arg_v<Args> || ...)) {                                                           \
+      return impl::apply_expr_impl(impl::ExprClassName##Func{}, args...);                                              \
+    } else {                                                                                                           \
+      return impl::ExprClassName##Func{}(args...);                                                                     \
+    }                                                                                                                  \
   }
 
 /// \brief SinkAccessMode constant aliases for use with MUNDY_ACCESSOR_EXPR_FORWARD_SINK_FUNC.
@@ -105,8 +111,8 @@ namespace mesh {
 //@{
 
 // Vector/Matrix/Quaternion functions
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Copy, copy, copy)                                             // v, q, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sum, sum, sum)                                                // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Copy, copy, ::mundy::copy)                                    // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sum, sum, ::mundy::sum)                                       // v, q, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Product, product, ::mundy::product)                           // v, q, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Min, min, ::mundy::min)                                       // v, q, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Max, max, ::mundy::max)                                       // v, q, m
@@ -144,16 +150,16 @@ MUNDY_ACCESSOR_EXPR_FORWARD_SINK_FUNC(RotateQuaternion, rotate_quaternion, ::mun
                                       MUNDY_ACCESSOR_EXPR_SINK_READ_ONLY)  // q, v, s
 
 // Scalar functions
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Abs, abs, Kokkos::abs)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sqrt, sqrt, Kokkos::sqrt)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Exp, exp, Kokkos::exp)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Log, log, Kokkos::log)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sin, sin, Kokkos::sin)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Cos, cos, Kokkos::cos)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Tan, tan, Kokkos::tan)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Asin, asin, Kokkos::asin)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Acos, acos, Kokkos::acos)
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Atan, atan, Kokkos::atan)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Abs, abs, ::mundy::abs)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sqrt, sqrt, ::mundy::sqrt)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Exp, exp, ::mundy::exp)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Log, log, ::mundy::log)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sin, sin, ::mundy::sin)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Cos, cos, ::mundy::cos)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Tan, tan, ::mundy::tan)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Asin, asin, ::mundy::asin)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Acos, acos, ::mundy::acos)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Atan, atan, ::mundy::atan)
 //@}
 
 }  // namespace mesh

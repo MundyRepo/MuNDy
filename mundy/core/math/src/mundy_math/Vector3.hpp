@@ -28,6 +28,7 @@
 #include <cmath>
 #include <concepts>
 #include <initializer_list>
+#include <stdexcept>  // for std::invalid_argument
 #include <iostream>
 #include <type_traits>  // for std::decay_t
 #include <utility>
@@ -96,6 +97,40 @@ KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a, con
   result[1] = static_cast<R>(a[2] * b[0] - a[0] * b[2]);
   result[2] = static_cast<R>(a[0] * b[1] - a[1] * b[0]);
   return result;
+}
+
+/// \brief A unit vector perpendicular to v, chosen deterministically.
+///
+/// Every nonzero v admits infinitely many perpendiculars; this returns the same one every time for a
+/// given v, and never a badly-conditioned one. It crosses v with whichever coordinate axis v is
+/// *least* aligned with: that axis obeys |v . e| <= |v|/sqrt(3), so |v x e| >= sqrt(2/3)|v| and the
+/// normalization below can never divide by a near-cancelled cross product. Crossing with a fixed
+/// axis instead would collapse whenever v approached it.
+///
+/// v need not be unit; only its direction matters. The result is unit whenever v is nonzero.
+///
+/// \param[in] v The vector to find a perpendicular of.
+/// \pre v is nonzero.
+template <typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
+KOKKOS_INLINE_FUNCTION AVector3<OutputType> perp(const AVector3<T, Accessor>& v) {
+  const AVector3<OutputType> v_out{static_cast<OutputType>(v[0]), static_cast<OutputType>(v[1]),
+                                   static_cast<OutputType>(v[2])};
+  const OutputType abs_x = Kokkos::abs(v_out[0]);
+  const OutputType abs_y = Kokkos::abs(v_out[1]);
+  const OutputType abs_z = Kokkos::abs(v_out[2]);
+
+  const AVector3<OutputType> least_aligned_axis =
+      (abs_x <= abs_y && abs_x <= abs_z)
+          ? AVector3<OutputType>{static_cast<OutputType>(1), static_cast<OutputType>(0), static_cast<OutputType>(0)}
+      : (abs_y <= abs_z)
+          ? AVector3<OutputType>{static_cast<OutputType>(0), static_cast<OutputType>(1), static_cast<OutputType>(0)}
+          : AVector3<OutputType>{static_cast<OutputType>(0), static_cast<OutputType>(0), static_cast<OutputType>(1)};
+
+  const AVector3<OutputType> result = cross(v_out, least_aligned_axis);
+  const OutputType result_norm = norm(result);
+  MUNDY_THROW_ASSERT(result_norm > get_zero_tolerance<OutputType>(), std::invalid_argument,
+                     "perp: v has zero length, so it has no well-defined perpendicular.");
+  return result / result_norm;
 }
 //@}
 

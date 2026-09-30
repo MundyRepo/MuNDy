@@ -240,18 +240,19 @@ class LinkData {
     return crs_data_;
   }
   void crs_modify_on_host() {
-    MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "The host CSR is a read-only copy of the device CSR and may not be modified directly.");
     if (crs_has_device_data()) {
+      crs_modified_on_host_ = true;
       crs_synchronizer_->modify_on_host();
     }
   }
   void crs_modify_on_device() {
-    MUNDY_THROW_REQUIRE(crs_modified_on_host_ == false, std::invalid_argument,
+    MUNDY_THROW_REQUIRE(crs_modified_on_host_ == false, std::logic_error,
                         "The device CSR may not be modified while the host CSR is modified."
                         "Either sync the host CSR to device or clear the host modification state.");
-    crs_modified_on_device_ = true;
     if (crs_has_device_data()) {
+      crs_modified_on_device_ = true;
       crs_synchronizer_->modify_on_device();
     }
   }
@@ -290,9 +291,15 @@ class LinkData {
   }
   void crs_clear_host_sync_state() {
     crs_modified_on_host_ = false;
+    if (crs_has_device_data()) {
+      crs_synchronizer_->clear_host_sync_state();
+    }
   }
   void crs_clear_device_sync_state() {
     crs_modified_on_device_ = false;
+    if (crs_has_device_data()) {
+      crs_synchronizer_->clear_device_sync_state();
+    }
   }
   bool crs_has_device_data() const {
     return crs_synchronizer_ != nullptr;
@@ -302,6 +309,12 @@ class LinkData {
   }
   void crs_increment_num_syncs_to_device() {
     ++crs_num_syncs_to_device_;
+  }
+  size_t crs_num_syncs_to_host() const {
+    return crs_num_syncs_to_host_;
+  }
+  size_t crs_num_syncs_to_device() const {
+    return crs_num_syncs_to_device_;
   }
   //@}
 
@@ -315,20 +328,20 @@ class LinkData {
     return coo_data_;
   }
   void coo_modify_on_host() {
-    MUNDY_THROW_REQUIRE(coo_modified_on_device_ == false, std::invalid_argument,
+    MUNDY_THROW_REQUIRE(coo_modified_on_device_ == false, std::logic_error,
                         "The host COO may not be modified while the device COO is also modified."
                         "Either sync the device COO to host or clear the device modification state.");
-    coo_modified_on_host_ = true;
     if (coo_has_device_data()) {
+      coo_modified_on_host_ = true;
       coo_synchronizer_->modify_on_host();
     }
   }
   void coo_modify_on_device() {
-    MUNDY_THROW_REQUIRE(coo_modified_on_host_ == false, std::invalid_argument,
+    MUNDY_THROW_REQUIRE(coo_modified_on_host_ == false, std::logic_error,
                         "The device COO may not be modified while the host COO is also modified."
                         "Either sync the host COO to device or clear the host modification state.");
-    coo_modified_on_device_ = true;
     if (coo_has_device_data()) {
+      coo_modified_on_device_ = true;
       coo_synchronizer_->modify_on_device();
     }
   }
@@ -366,9 +379,15 @@ class LinkData {
   }
   void coo_clear_host_sync_state() {
     coo_modified_on_host_ = false;
+    if (coo_has_device_data()) {
+      coo_synchronizer_->clear_host_sync_state();
+    }
   }
   void coo_clear_device_sync_state() {
     coo_modified_on_device_ = false;
+    if (coo_has_device_data()) {
+      coo_synchronizer_->clear_device_sync_state();
+    }
   }
   bool coo_has_device_data() const {
     return coo_synchronizer_ != nullptr;
@@ -379,6 +398,12 @@ class LinkData {
   void coo_increment_num_syncs_to_device() {
     ++coo_num_syncs_to_device_;
   }
+  size_t coo_num_syncs_to_host() const {
+    return coo_num_syncs_to_host_;
+  }
+  size_t coo_num_syncs_to_device() const {
+    return coo_num_syncs_to_device_;
+  }
   //@}
 
   //! \name CSR/COO interactions
@@ -386,8 +411,12 @@ class LinkData {
 
   /// \brief Rectify potentially stale data post-mesh modification.
   void update_post_mesh_mod() {
-    coo_synchronizer_->update_post_mesh_mod();
-    crs_synchronizer_->update_post_mesh_mod();
+    if (coo_has_device_data()) {
+      coo_synchronizer_->update_post_mesh_mod();
+    }
+    if (crs_has_device_data()) {
+      crs_synchronizer_->update_post_mesh_mod();
+    }
   }
   //@}
 

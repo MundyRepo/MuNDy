@@ -57,16 +57,16 @@ namespace mesh {
 
 namespace {
 
-void seed_by_entity_id(const stk::mesh::BulkData& bulk_data, const stk::mesh::Field<size_t>& seed_field,
-                       const stk::mesh::EntityRank& rank, const stk::mesh::Selector& selector) {
+void fill_field_with_entity_id(const stk::mesh::BulkData& bulk_data, const stk::mesh::Field<size_t>& field,
+                               const stk::mesh::EntityRank& rank, const stk::mesh::Selector& selector) {
   auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
-  auto ngp_seed_field = stk::mesh::get_updated_ngp_field<size_t>(seed_field);
+  auto ngp_field = stk::mesh::get_updated_ngp_field<size_t>(field);
   ::mundy::mesh::for_each_entity_run(
       ngp_mesh, rank, selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& fmi) {
         stk::mesh::Entity e = ngp_mesh.get_entity(rank, fmi);
-        ngp_seed_field(fmi, 0) = static_cast<size_t>(ngp_mesh.identifier(e));
+        ngp_field(fmi, 0) = static_cast<size_t>(ngp_mesh.identifier(e));
       });
-  ngp_seed_field.modify_on_device();
+  ngp_field.modify_on_device();
 }
 
 class UnitTestRngAccessorExprFixture : public ::testing::Test {
@@ -107,7 +107,19 @@ class UnitTestRngAccessorExprFixture : public ::testing::Test {
 
   void reset_field_values() {
     stk::mesh::Selector all_blocks = block1_selector_ | block2_selector_ | block3_selector_;
-    seed_by_entity_id(get_bulk(), *seed_field_ptr_, stk::topology::NODE_RANK, all_blocks);
+    fill_field_with_entity_id(get_bulk(), *seed_field_ptr_, stk::topology::NODE_RANK, all_blocks);
+    fill_field_with_entity_id(get_bulk(), *counter_field_ptr_, stk::topology::NODE_RANK, all_blocks);
+    seed_field_ptr_->sync_to_host();
+    counter_field_ptr_->sync_to_host();
+    auto& seed_field = *seed_field_ptr_;
+    auto& counter_field = *counter_field_ptr_;
+    auto& bulk_data = get_bulk();
+    ::mundy::mesh::for_each_entity_run(
+        bulk_data, stk::topology::NODE_RANK, all_blocks,
+        [&seed_field, &counter_field](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& e) {
+          ASSERT_EQ(bulk_data.identifier(e), stk::mesh::field_data(seed_field, e)[0]);
+          ASSERT_EQ(bulk_data.identifier(e), stk::mesh::field_data(counter_field, e)[0]);
+        });
   }
 
   void validate_initial_five_hex_mesh() {
@@ -365,9 +377,9 @@ template <bool use_seed_expr, bool use_counter_expr>
 void randomize_test(stk::mesh::BulkData& bulk_data,           //
                     stk::mesh::Field<size_t>& seed_field,     //
                     stk::mesh::Field<size_t>& counter_field,  //
-                    stk::mesh::Field<double>& double_field,
-                    stk::mesh::Field<float>& float_field,  //
-                    stk::mesh::Field<int>& int_field,      //
+                    stk::mesh::Field<double>& double_field,   //
+                    stk::mesh::Field<float>& float_field,     //
+                    stk::mesh::Field<int>& int_field,         //
                     stk::mesh::Selector& selector) {
   auto seed = make_tagged_component<SeedFieldTag>(ScalarFieldComponent(seed_field));
   auto counter = make_tagged_component<CounterFieldTag>(ScalarFieldComponent(counter_field));
@@ -398,6 +410,8 @@ void randomize_test(stk::mesh::BulkData& bulk_data,           //
                   "Test will not compile unless at least one of use_seed_expr or use_counter_expr is true.");
   }
 
+  seed.sync_to_host();
+  counter.sync_to_host();
   double_accessor.sync_to_host();
   float_accessor.sync_to_host();
   int_accessor.sync_to_host();

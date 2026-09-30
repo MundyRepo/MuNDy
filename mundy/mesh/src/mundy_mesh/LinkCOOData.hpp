@@ -267,6 +267,12 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
     auto& link_crs_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
+    linked_entities_field.sync_to_host();
+    linked_entities_crs_field.sync_to_host();
+    linked_entity_ids_field.sync_to_host();
+    linked_entity_ranks_field.sync_to_host();
+    link_crs_needs_updated_field.sync_to_host();
+
     bool modified_any_link = false;
     const stk::mesh::Selector link_selector = link_meta_data().universal_link_class();
     const stk::mesh::BucketVector& link_buckets = bulk_data().get_buckets(link_rank(), link_selector);
@@ -329,30 +335,6 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   }
   //@}
 
- protected:
-  /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
-  ///
-  /// \param linker [in] The linker (must be valid and of the correct rank).
-  /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
-    MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
-                       "Linker is not of the correct rank.");
-    MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
-
-    auto& linked_es_crs_field = impl::get_linked_entities_crs_field(link_meta_data());
-    return stk::mesh::Entity(stk::mesh::field_data(linked_es_crs_field, linker)[link_ordinal]);
-  }
-
-  /// \brief Get if the CSR connectivity for a link needs to be updated.
-  inline bool get_link_crs_needs_updated(const stk::mesh::Entity& linker) const {
-    MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
-                       "Linker is not of the correct rank.");
-    MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
-
-    auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
-    return static_cast<bool>(stk::mesh::field_data(link_needs_updated_field, linker)[0]);
-  }
-
  private:
   //! \name Internal members (host only)
   //@{
@@ -364,20 +346,39 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
 
 namespace impl {
 
-/// Return the CRS-snapshot entity stored for `linker` at `link_ordinal`.
-/// This is the value last written by the CSR synchronizer and is intentionally
-/// NOT cleared by destroy_relation() — the synchronizer uses the stale value
-/// to detect removals.
-inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo_data, const stk::mesh::Entity& linker,
+/// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
+///
+/// \param linker [in] The linker (must be valid and of the correct rank).
+/// \param link_ordinal [in] The ordinal of the linked entity.
+inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo, const stk::mesh::Entity& linker,
                                                unsigned link_ordinal) {
-  auto& field = get_linked_entities_crs_field(coo_data.link_meta_data());
-  return stk::mesh::Entity(stk::mesh::field_data(field, linker)[link_ordinal]);
+  MUNDY_THROW_ASSERT(coo.link_meta_data().link_rank() == coo.bulk_data().entity_rank(linker), std::invalid_argument,
+                     "Linker is not of the correct rank.");
+  MUNDY_THROW_ASSERT(coo.bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
+
+  auto& linked_es_crs_field = impl::get_linked_entities_crs_field(coo.link_meta_data());
+  return stk::mesh::Entity(stk::mesh::field_data(linked_es_crs_field, linker)[link_ordinal]);
+}
+inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo, const stk::mesh::FastMeshIndex& linker_fmi,
+                                               unsigned link_ordinal) {
+  stk::mesh::EntityRank linker_rank = coo.link_meta_data().link_rank();
+  stk::mesh::Entity linker = (*(coo.bulk_data().buckets(linker_rank)[linker_fmi.bucket_id]))[linker_fmi.bucket_ord];
+  return get_linked_entity_crs(coo, linker, link_ordinal);
 }
 
-/// Return whether the CSR connectivity for `linker` is marked as needing an update.
-inline bool get_link_crs_needs_updated(const LinkCOOData& coo_data, const stk::mesh::Entity& linker) {
-  auto& field = get_link_crs_needs_updated_field(coo_data.link_meta_data());
-  return static_cast<bool>(stk::mesh::field_data(field, linker)[0]);
+/// \brief Get if the CSR connectivity for a link needs to be updated.
+inline bool get_link_crs_needs_updated(const LinkCOOData& coo, const stk::mesh::Entity& linker) {
+  MUNDY_THROW_ASSERT(coo.link_meta_data().link_rank() == coo.bulk_data().entity_rank(linker), std::invalid_argument,
+                     "Linker is not of the correct rank.");
+  MUNDY_THROW_ASSERT(coo.bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
+
+  auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(coo.link_meta_data());
+  return static_cast<bool>(stk::mesh::field_data(link_needs_updated_field, linker)[0]);
+}
+inline bool get_link_crs_needs_updated(const LinkCOOData& coo, const stk::mesh::FastMeshIndex& linker_fmi) {
+  stk::mesh::EntityRank linker_rank = coo.link_meta_data().link_rank();
+  stk::mesh::Entity linker = (*(coo.bulk_data().buckets(linker_rank)[linker_fmi.bucket_id]))[linker_fmi.bucket_ord];
+  return get_link_crs_needs_updated(coo, linker);
 }
 
 }  // namespace impl
@@ -606,30 +607,9 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     return ngp_mesh_;
   }
 
-  /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
-  ///
-  /// \param linker [in] The linker (must be valid and of the correct rank).
-  /// \param link_ordinal [in] The ordinal of the linked entity.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::FastMeshIndex& linker_index, unsigned link_ordinal) const {
-    return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_crs_field()(linker_index, link_ordinal));
-  }
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
-    return get_linked_entity_crs(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
-  }
-
-  /// \brief Get if the CSR connectivity for a link needs to be updated.
-  KOKKOS_INLINE_FUNCTION
-  bool get_link_crs_needs_updated(const stk::mesh::FastMeshIndex& linker_index) const {
-    return ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0);
-  }
-  KOKKOS_INLINE_FUNCTION
-  bool get_link_crs_needs_updated(const stk::mesh::Entity& linker) const {
-    return get_link_crs_needs_updated(ngp_mesh_.fast_mesh_index(linker));
-  }
-
  private:
+  //! \name Friends <3
+  //@{
   template <typename T>
   friend impl::NgpLinkMetaDataT<T>& impl::get_ngp_link_meta_data(NgpLinkCOODataT<T>& ngp_coo_data);
 
@@ -637,7 +617,14 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   friend stk::mesh::NgpMesh& impl::get_ngp_mesh(NgpLinkCOODataT<T>& ngp_coo_data);
 
   template <typename T>
+  friend const impl::NgpLinkMetaDataT<T>& impl::get_ngp_link_meta_data(const NgpLinkCOODataT<T>& ngp_coo_data);
+
+  template <typename T>
+  friend const stk::mesh::NgpMesh& impl::get_ngp_mesh(const NgpLinkCOODataT<T>& ngp_coo_data);
+
+  template <typename T>
   friend class impl::NgpCOOToCSRSynchronizerT;
+  //@}
 
   //! \name Internal members (host only)
   //@{
@@ -658,6 +645,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
 using NgpLinkCOOData = NgpLinkCOODataT<stk::ngp::MemSpace>;
 
 namespace impl {
+
 template <typename NgpMemSpace>
 NgpLinkMetaDataT<NgpMemSpace>& get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
   return ngp_coo_data.ngp_link_meta_data_;
@@ -666,6 +654,44 @@ template <typename NgpMemSpace>
 stk::mesh::NgpMesh& get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
   return ngp_coo_data.ngp_mesh_;
 }
+
+template <typename NgpMemSpace>
+const NgpLinkMetaDataT<NgpMemSpace>& get_ngp_link_meta_data(const NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
+  return ngp_coo_data.ngp_link_meta_data_;
+}
+template <typename NgpMemSpace>
+const stk::mesh::NgpMesh& get_ngp_mesh(const NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
+  return ngp_coo_data.ngp_mesh_;
+}
+
+/// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
+///
+/// \param linker [in] The linker (must be valid and of the correct rank).
+/// \param link_ordinal [in] The ordinal of the linked entity.
+template <typename NgpMemSpace>
+KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_linked_entity_crs(const NgpLinkCOODataT<NgpMemSpace>& ngp_coo,
+                                                               const stk::mesh::FastMeshIndex& linker_index,
+                                                               unsigned link_ordinal) {
+  return stk::mesh::Entity(get_ngp_link_meta_data(ngp_coo).ngp_linked_entities_crs_field()(linker_index, link_ordinal));
+}
+template <typename NgpMemSpace>
+KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_linked_entity_crs(const NgpLinkCOODataT<NgpMemSpace>& ngp_coo,
+                                                               const stk::mesh::Entity& linker, unsigned link_ordinal) {
+  return get_linked_entity_crs(ngp_coo, get_ngp_mesh(ngp_coo).fast_mesh_index(linker), link_ordinal);
+}
+
+/// \brief Get if the CSR connectivity for a link needs to be updated.
+template <typename NgpMemSpace>
+KOKKOS_INLINE_FUNCTION bool get_link_crs_needs_updated(const NgpLinkCOODataT<NgpMemSpace>& ngp_coo,
+                                                       const stk::mesh::FastMeshIndex& linker_index) {
+  return get_ngp_link_meta_data(ngp_coo).ngp_link_crs_needs_updated_field()(linker_index, 0);
+}
+template <typename NgpMemSpace>
+KOKKOS_INLINE_FUNCTION bool get_link_crs_needs_updated(const NgpLinkCOODataT<NgpMemSpace>& ngp_coo,
+                                                       const stk::mesh::Entity& linker) {
+  return get_link_crs_needs_updated(ngp_coo, get_ngp_mesh(ngp_coo).fast_mesh_index(linker));
+}
+
 }  // namespace impl
 
 }  // namespace mesh

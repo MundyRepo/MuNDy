@@ -72,8 +72,9 @@ void basic_usage_test() {
   // Declare and reserve pools //
   ///////////////////////////////
   // Reserve does not change the size of the pool, only the capacity.
-  NgpEntityPool node_pool(bulk_data, stk::topology::NODE_RANK);       // Size 0. Capacity 0.
-  NgpEntityPool elem_pool(bulk_data, stk::topology::ELEM_RANK, 100);  // Size 0. Capacity 100.
+  using HostEntityPool = NgpEntityPoolT<Kokkos::HostSpace, long int>;
+  HostEntityPool node_pool(bulk_data, stk::topology::NODE_RANK);       // Size 0. Capacity 0.
+  HostEntityPool elem_pool(bulk_data, stk::topology::ELEM_RANK, 100);  // Size 0. Capacity 100.
   node_pool.reserve(100);                                             // Size 0. Capacity 100.
   EXPECT_EQ(node_pool.size(), 0);
   EXPECT_EQ(node_pool.capacity(), 100);
@@ -173,7 +174,7 @@ void thread_safety_test() {
   bulk_data.modification_end();
 
   NgpEntityPool node_pool(bulk_data, stk::topology::NODE_RANK, num_entities);
-  EXPECT_EQ(node_pool.size(), 0);
+  EXPECT_EQ(node_pool.size_host(), 0);
 
   // Add entities to the pool in parallel (it's better to use a batch add, but sometimes using single adds is necessary)
   // Note, we use a lambda to avoid capturing the bulk_data, which doesn't have a copy constructor
@@ -184,8 +185,6 @@ void thread_safety_test() {
           node_pool.add(node);
         });
     node_pool.modify_on_device();
-    EXPECT_EQ(node_pool.size(), num_entities);
-    EXPECT_EQ(node_pool.capacity(), num_entities);
 
 // Notice that we modified on the device, but we never synced to the host. This is because we didn't really need to.
 // We can perform a sync and see that the host is updated correctly.
@@ -196,6 +195,7 @@ void thread_safety_test() {
 #endif
     node_pool.sync_to_host();
     EXPECT_EQ(node_pool.size_host(), num_entities);
+    EXPECT_EQ(node_pool.capacity_host(), num_entities);
   };
   perform_add();
 
@@ -208,14 +208,12 @@ void thread_safety_test() {
     Kokkos::parallel_for(
         "UnitTestEntityPool:ThreadSafety", num_entities, KOKKOS_LAMBDA(const size_t /*i*/) {
           stk::mesh::Entity node = node_pool.acquire();
-          ASSERT_TRUE(node != stk::mesh::Entity());
+          MUNDY_THROW_REQUIRE(node != stk::mesh::Entity(), std::runtime_error, "Acquired entity should exist.");
 
           stk::mesh::EntityId id = ngp_mesh.identifier(node);
           node_exists.view_device()(id - 1) = true;
         });
     node_pool.modify_on_device();
-    EXPECT_EQ(node_pool.size(), 0);
-    EXPECT_EQ(node_pool.capacity(), num_entities);
 
     // Sum the node_exists array to ensure that all nodes were acquired
     size_t sum = 0;
@@ -231,6 +229,7 @@ void thread_safety_test() {
 #endif
     node_pool.sync_to_host();
     EXPECT_EQ(node_pool.size_host(), 0);
+    EXPECT_EQ(node_pool.capacity_host(), num_entities);
   };
   perform_fetch();
 }

@@ -95,30 +95,32 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_link_crs_needs_updated_field(lmd).sync_to_device();
   }
 
-  virtual void update_post_mesh_mod() override {
-    stk::mesh::NgpMesh& ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
-    NgpLinkMetaDataT<NgpMemSpace>& ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);
-    LinkMetaData& link_meta_data = coo_data_.link_meta_data();
-    ngp_mesh.update_mesh();
+  virtual void clear_host_sync_state() override {
+    LinkMetaData& lmd = coo_data_.link_meta_data();
+    impl::get_linked_entities_field(lmd).clear_host_sync_state();
+    impl::get_linked_entities_crs_field(lmd).clear_host_sync_state();
+    impl::get_linked_entity_ids_field(lmd).clear_host_sync_state();
+    impl::get_linked_entity_ranks_field(lmd).clear_host_sync_state();
+    impl::get_link_crs_needs_updated_field(lmd).clear_host_sync_state();
+  }
 
-    ngp_link_meta_data.ngp_linked_entities_field() =
-        our_get_updated_ngp_field(impl::get_linked_entities_field(link_meta_data));
-    ngp_link_meta_data.ngp_linked_entities_crs_field() =
-        our_get_updated_ngp_field(impl::get_linked_entities_crs_field(link_meta_data));
-    ngp_link_meta_data.ngp_linked_entity_ids_field() =
-        our_get_updated_ngp_field(impl::get_linked_entity_ids_field(link_meta_data));
-    ngp_link_meta_data.ngp_linked_entity_ranks_field() =
-        our_get_updated_ngp_field(impl::get_linked_entity_ranks_field(link_meta_data));
-    ngp_link_meta_data.ngp_link_crs_needs_updated_field() =
-        our_get_updated_ngp_field(impl::get_link_crs_needs_updated_field(link_meta_data));
+  virtual void clear_device_sync_state() override {
+    LinkMetaData& lmd = coo_data_.link_meta_data();
+    impl::get_linked_entities_field(lmd).clear_device_sync_state();
+    impl::get_linked_entities_crs_field(lmd).clear_device_sync_state();
+    impl::get_linked_entity_ids_field(lmd).clear_device_sync_state();
+    impl::get_linked_entity_ranks_field(lmd).clear_device_sync_state();
+    impl::get_link_crs_needs_updated_field(lmd).clear_device_sync_state();
+  }
+
+  virtual void update_post_mesh_mod() override {   
+    // The internal copy of the NGP mesh and NGP link meta data must be updated to reflect any changes to the host mesh.
+    impl::get_ngp_mesh(ngp_coo_data_) = stk::mesh::get_updated_ngp_mesh(coo_data_.bulk_data());
+    NgpLinkMetaDataT<NgpMemSpace>& ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);
+    ngp_link_meta_data.update();
   }
 
  private:
-  template <typename T>
-  auto& our_get_updated_ngp_field(const stk::mesh::Field<T>& field) {
-    return stk::mesh::get_updated_ngp_field<T>(field);
-  }
-
   LinkCOOData& coo_data_;
   NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data_;
 };  // LinkCSRDataSynchronizerT

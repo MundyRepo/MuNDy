@@ -75,7 +75,8 @@ NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) 
     impl::set_coo_synchronizer(
         link_data, std::move(std::make_shared<impl::LinkCOODataSynchronizerT<NgpMemSpace>>(coo_data, ngp_coo_data)));
   } else {
-    std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data).update_post_mesh_mod();
+    NgpLinkDataT<NgpMemSpace>& ngp_link_data = std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data);
+    ngp_link_data.update_post_mesh_mod();
   }
 
   return std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data);

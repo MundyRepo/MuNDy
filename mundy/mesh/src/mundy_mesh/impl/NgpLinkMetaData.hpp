@@ -82,15 +82,15 @@ class NgpLinkMetaDataT {
   NgpLinkMetaDataT(LinkMetaData& link_meta_data)
       : link_meta_data_ptr_(&link_meta_data),
         link_rank_(link_meta_data.link_rank()),
-        ngp_linked_entities_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
+        ngp_linked_entities_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type, NgpMemSpace>(
             impl::get_linked_entities_field(link_meta_data))),
-        ngp_linked_entities_crs_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
+        ngp_linked_entities_crs_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type, NgpMemSpace>(
             impl::get_linked_entities_crs_field(link_meta_data))),
-        ngp_linked_entity_ids_field_(stk::mesh::get_updated_ngp_field<linked_entity_ids_field_t::value_type>(
+        ngp_linked_entity_ids_field_(stk::mesh::get_updated_ngp_field<linked_entity_ids_field_t::value_type, NgpMemSpace>(
             impl::get_linked_entity_ids_field(link_meta_data))),
-        ngp_linked_entity_ranks_field_(stk::mesh::get_updated_ngp_field<linked_entity_ranks_field_t::value_type>(
+        ngp_linked_entity_ranks_field_(stk::mesh::get_updated_ngp_field<linked_entity_ranks_field_t::value_type, NgpMemSpace>(
             impl::get_linked_entity_ranks_field(link_meta_data))),
-        ngp_link_crs_needs_updated_field_(stk::mesh::get_updated_ngp_field<link_crs_needs_updated_field_t::value_type>(
+        ngp_link_crs_needs_updated_field_(stk::mesh::get_updated_ngp_field<link_crs_needs_updated_field_t::value_type, NgpMemSpace>(
             impl::get_link_crs_needs_updated_field(link_meta_data))),
         universal_link_class_ordinal_(link_meta_data.universal_link_class().class_ordinal()) {
   }
@@ -199,7 +199,25 @@ class NgpLinkMetaDataT {
   ngp_link_crs_needs_updated_field_t& ngp_link_crs_needs_updated_field() noexcept {
     return ngp_link_crs_needs_updated_field_;
   }
+  //@}
 
+  //! \name Actions
+  //@{
+
+  /// @brief Update the field handles to reflect any changes to the underlying host fields.
+  void update() {
+    auto& linked_entities_field = impl::get_linked_entities_field(link_meta_data());
+    auto& linked_entities_crs_field = impl::get_linked_entities_crs_field(link_meta_data());
+    auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
+    auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
+    auto& link_crs_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
+
+    ngp_linked_entities_field_ = stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type, NgpMemSpace>(linked_entities_field);
+    ngp_linked_entities_crs_field_ = stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type, NgpMemSpace>(linked_entities_crs_field);
+    ngp_linked_entity_ids_field_ = stk::mesh::get_updated_ngp_field<linked_entity_ids_field_t::value_type, NgpMemSpace>(linked_entity_ids_field);
+    ngp_linked_entity_ranks_field_ = stk::mesh::get_updated_ngp_field<linked_entity_ranks_field_t::value_type, NgpMemSpace>(linked_entity_ranks_field);
+    ngp_link_crs_needs_updated_field_ = stk::mesh::get_updated_ngp_field<link_crs_needs_updated_field_t::value_type, NgpMemSpace>(link_crs_needs_updated_field);
+  }
   //@}
 
  private:

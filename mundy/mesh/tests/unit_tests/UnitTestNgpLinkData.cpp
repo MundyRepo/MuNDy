@@ -432,6 +432,162 @@ void basic_usage_test() {
   validate_crs_connectivity(context, link_init_data_b, link_data);
 }
 
+TEST(UnitTestNgpLinkData, SyncHostDeviceLogic) {
+  // Stock setup
+  TestContext context;
+  context.link_rank = stk::topology::NODE_RANK;
+  setup_mesh_and_metadata(context);
+  LinkMetaData link_meta_data = declare_and_validate_link_metadata(context, "ALL_LINKS");
+  setup_parts_and_links(context, link_meta_data);
+  LinkData& link_data = declare_link_data(*context.bulk_data, link_meta_data);
+
+  ///////////////////////////////////////////////////////////////////////////////////////////
+  // Before an NGP link data is created, no sync state is tracked between host and device  //
+  ASSERT_FALSE(link_data.coo_has_device_data());
+  ASSERT_FALSE(link_data.crs_has_device_data());
+  ASSERT_FALSE(link_data.coo_need_sync_to_host());
+  ASSERT_FALSE(link_data.coo_need_sync_to_device());
+  ASSERT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  ASSERT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // HOST
+  // Mark dirty on host
+  link_data.coo_modify_on_host();
+  EXPECT_NO_THROW(link_data.coo_modify_on_device());
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // Sync to device
+  link_data.coo_sync_to_device();
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // No-op (already sync)
+  link_data.coo_sync_to_device();
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // Mark and then reset on host
+  link_data.coo_modify_on_host();
+  link_data.coo_clear_host_sync_state();
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // DEVICE
+  // Mark dirty on device
+  link_data.coo_modify_on_device();
+  EXPECT_NO_THROW(link_data.coo_modify_on_device());
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // Sync to host
+  link_data.coo_sync_to_host();
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // No-op (already sync)
+  link_data.coo_sync_to_host();
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  // Mark and then reset on device
+  link_data.coo_modify_on_device();
+  link_data.coo_clear_device_sync_state();
+  EXPECT_FALSE(link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(link_data.coo_need_sync_to_device());
+  EXPECT_EQ(link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(link_data.coo_num_syncs_to_device(), 0u);
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // After an NGP link data is created, the link data has device data and tracks sync state between host and device.  //
+  // This holds true even if the device and host are the same memory space (e.g., OpenMP or Serial execution spaces). //
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
+  ASSERT_TRUE(link_data.coo_has_device_data());
+  ASSERT_TRUE(link_data.crs_has_device_data());
+
+  // Dev != Host
+  ASSERT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  ASSERT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  ASSERT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+  ASSERT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+  // HOST
+  // Mark dirty on host
+  ngp_link_data.coo_modify_on_host();
+  EXPECT_THROW(link_data.coo_modify_on_device(), std::logic_error);
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_TRUE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 0u);
+
+  // Sync to device
+  ngp_link_data.coo_sync_to_device();
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+  // No-op (already sync)
+  ngp_link_data.coo_sync_to_device();
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+  // Mark and then reset on host
+  ngp_link_data.coo_modify_on_host();
+  ngp_link_data.coo_clear_host_sync_state();
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+  // DEVICE
+  // Mark dirty on device
+  ngp_link_data.coo_modify_on_device();
+  EXPECT_THROW(link_data.coo_modify_on_host(), std::logic_error);
+  EXPECT_TRUE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 0u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+  // Sync to host
+  ngp_link_data.coo_sync_to_host();
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 1u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+  // No-op (already sync)
+  ngp_link_data.coo_sync_to_host();
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 1u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+
+  // Mark and then reset on device
+  ngp_link_data.coo_modify_on_device();
+  ngp_link_data.coo_clear_device_sync_state();
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_host());
+  EXPECT_FALSE(ngp_link_data.coo_need_sync_to_device());
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_host(), 1u);
+  EXPECT_EQ(ngp_link_data.coo_num_syncs_to_device(), 1u);
+}
+
 TEST(UnitTestNgpLinkData, BasicUsage) {
   basic_usage_test();
 }
@@ -917,23 +1073,6 @@ TEST(UnitTestNgpLinkData, DeclareLinkData_Idempotent) {
 TEST(UnitTestNgpLinkData, GetLinkData_ReturnsNullBeforeDeclaration) {
   LinkDataApiFixture f;
   EXPECT_EQ(get_link_data(*f.bulk, *f.link_meta), nullptr);
-}
-
-// The host-side CSR is a read-only snapshot of the device CSR; attempting to
-// mark it modified always throws.
-TEST(UnitTestNgpLinkData, CrsModifyOnHost_Throws) {
-  LinkDataApiFixture f;
-  LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
-  EXPECT_THROW(link_data.crs_modify_on_host(), std::exception);
-}
-
-// Host and device COO modification are mutually exclusive: marking the host as
-// modified and then trying to mark the device as modified throws.
-TEST(UnitTestNgpLinkData, CooModifyOnDevice_ThrowsWhenHostAlreadyModified) {
-  LinkDataApiFixture f;
-  LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
-  link_data.coo_modify_on_host();
-  EXPECT_THROW(link_data.coo_modify_on_device(), std::exception);
 }
 
 }  // namespace

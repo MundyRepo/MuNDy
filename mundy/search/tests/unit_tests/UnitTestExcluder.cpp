@@ -44,6 +44,9 @@
 #include <utility>
 #include <vector>
 
+// Kokkos
+#include <Kokkos_Core.hpp>
+
 // STK mesh
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
@@ -51,6 +54,7 @@
 #include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_topology/topology.hpp>
+#include <stk_util/ngp/NgpSpaces.hpp>
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy geom
@@ -140,6 +144,16 @@ TwoPartMesh make_two_part_mesh() {
   return m;
 }
 
+// Evaluate an excluder on one candidate in the NGP execution space; the result is returned to the host.
+template <typename Excluder, typename Candidate>
+bool check_excluder_on_device(const Excluder& ex, const Candidate& cand) {
+  bool excluded = false;
+  Kokkos::parallel_reduce(
+      "CheckExcluderOnDevice", Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1),
+      KOKKOS_LAMBDA(int, bool& r) { r = ex(cand); }, Kokkos::LOr<bool>(excluded));
+  return excluded;
+}
+
 // Build a NeighborSearchCandidate from array ordinals and explicit entities.
 Cand make_cand(size_t t_ord, size_t s_ord, stk::mesh::Entity t_ent, stk::mesh::Entity s_ent) {
   return Cand(t_ord, s_ord, t_ent, s_ent);
@@ -221,11 +235,11 @@ TEST(NoExcluderTest, NeverExcludes) {
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // Same entity (would be self-interaction).
-  EXPECT_FALSE(ex(make_cand(0, 0, m.node[1], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 0, m.node[1], m.node[1])));
   // Different entities.
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));
-  EXPECT_FALSE(ex(make_cand(1, 0, m.node[2], m.node[1])));
-  EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.node[1], m.node[3])));
 }
 
 TEST(NoExcluderTest, ChainReturnsSelf) {
@@ -248,8 +262,8 @@ TEST(ExcludeSelfInteractionTest, ExcludesSameEntity) {
   ExcludeSelfInteraction ex;
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(ex(make_cand(0, 0, m.node[1], m.node[1]))) << "same entity should be excluded.";
-  EXPECT_TRUE(ex(make_cand(2, 2, m.node[3], m.node[3])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 0, m.node[1], m.node[1]))) << "same entity should be excluded.";
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(2, 2, m.node[3], m.node[3])));
 }
 
 TEST(ExcludeSelfInteractionTest, RetainsDifferentEntities) {
@@ -257,9 +271,9 @@ TEST(ExcludeSelfInteractionTest, RetainsDifferentEntities) {
   ExcludeSelfInteraction ex;
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));
-  EXPECT_FALSE(ex(make_cand(1, 0, m.node[2], m.node[1])));
-  EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.node[1], m.node[3])));
 }
 
 TEST(ExcludeSelfInteractionTest, SetupIsIdempotent) {
@@ -268,8 +282,8 @@ TEST(ExcludeSelfInteractionTest, SetupIsIdempotent) {
   // Calling setup twice should not change behavior.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   ex.setup(*m.bulk, *m.part_a, *m.part_b);
-  EXPECT_TRUE(ex(make_cand(0, 0, m.node[1], m.node[1])));
-  EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 0, m.node[1], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.node[1], m.node[3])));
 }
 
 // Periodic self: same entity AND zero shift -> excluded.
@@ -281,15 +295,15 @@ TEST(ExcludeSelfInteractionTest, PeriodicSelfRequiresZeroShift) {
 
   // zero relative shift (target shift == source shift): self -> exclude
   PeriodicCand self_zero(0, 0, m.node[1], m.node[1], Vec3f{0.f, 0.f, 0.f}, Vec3f{0.f, 0.f, 0.f});
-  EXPECT_TRUE(ex(self_zero));
+  EXPECT_TRUE(check_excluder_on_device(ex, self_zero));
 
   // nonzero relative shift (source imaged away from target): same entity but different image -> retain
   PeriodicCand self_nonzero(0, 0, m.node[1], m.node[1], Vec3f{0.f, 0.f, 0.f}, Vec3f{1.f, 0.f, 0.f});
-  EXPECT_FALSE(ex(self_nonzero));
+  EXPECT_FALSE(check_excluder_on_device(ex, self_nonzero));
 
   // different entity, zero relative shift -> not self -> retain
   PeriodicCand cross_zero(0, 1, m.node[1], m.node[2], Vec3f{0.f, 0.f, 0.f}, Vec3f{0.f, 0.f, 0.f});
-  EXPECT_FALSE(ex(cross_zero));
+  EXPECT_FALSE(check_excluder_on_device(ex, cross_zero));
 }
 
 // =============================================================================
@@ -301,9 +315,9 @@ TEST(ExcluderChainTest, ORSemantics_NoExcluderPlusSelf) {
   auto chain = NoExcluder{}.exclude(ExcludeSelfInteraction{});
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(chain(make_cand(0, 0, m.node[1], m.node[1]))) << "self should be excluded.";
-  EXPECT_FALSE(chain(make_cand(0, 1, m.node[1], m.node[2])));
-  EXPECT_FALSE(chain(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(chain, make_cand(0, 0, m.node[1], m.node[1]))) << "self should be excluded.";
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(1, 0, m.node[2], m.node[1])));
 }
 
 TEST(ExcluderChainTest, ORSemantics_BothExclude) {
@@ -312,8 +326,8 @@ TEST(ExcluderChainTest, ORSemantics_BothExclude) {
   auto chain = NoExcluder{}.exclude(ExcludeSelfInteraction{}).exclude(ExcludeSelfInteraction{});
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(chain(make_cand(0, 0, m.node[1], m.node[1])));
-  EXPECT_FALSE(chain(make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_TRUE(check_excluder_on_device(chain, make_cand(0, 0, m.node[1], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(0, 1, m.node[1], m.node[2])));
 }
 
 TEST(ExcluderChainTest, ORSemantics_NeitherExcludes) {
@@ -321,8 +335,8 @@ TEST(ExcluderChainTest, ORSemantics_NeitherExcludes) {
   auto chain = NoExcluder{}.exclude(NoExcluder{});
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(chain(make_cand(0, 0, m.node[1], m.node[1])));
-  EXPECT_FALSE(chain(make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(0, 0, m.node[1], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(0, 1, m.node[1], m.node[2])));
 }
 
 TEST(ExcluderChainTest, MultiLevelChaining) {
@@ -334,11 +348,11 @@ TEST(ExcluderChainTest, MultiLevelChaining) {
   chain.setup(*m.bulk, universal, universal);
 
   // Self pair: excluded by ExcludeSelf.
-  EXPECT_TRUE(chain(make_cand(0, 0, m.node[1], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(chain, make_cand(0, 0, m.node[1], m.node[1])));
   // (t=node2, s=node1): src=node1 < trg=node2 and both in intersection -> excluded by ExcludeSymDup.
-  EXPECT_TRUE(chain(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(chain, make_cand(1, 0, m.node[2], m.node[1])));
   // (t=node1, s=node2): src=node2 > trg=node1 -> retained.
-  EXPECT_FALSE(chain(make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(0, 1, m.node[1], m.node[2])));
 }
 
 TEST(ExcluderChainTest, SetupPropagatesIntoChain) {
@@ -350,12 +364,12 @@ TEST(ExcluderChainTest, SetupPropagatesIntoChain) {
   // Setup 1: disjoint selectors -> intersection empty -> ExcludeSymDup never fires.
   chain.setup(*m.bulk, *m.part_a, *m.part_b);
   // (t=node2, s=node1): even though src<trg, neither is in intersection -> NOT excluded.
-  EXPECT_FALSE(chain(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(1, 0, m.node[2], m.node[1])));
 
   // Setup 2: universal selector -> all nodes in intersection.
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   // Same pair now should be excluded.
-  EXPECT_TRUE(chain(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(chain, make_cand(1, 0, m.node[2], m.node[1])));
 }
 
 // =============================================================================
@@ -377,12 +391,12 @@ TEST(ExcludeSymmetricDuplicatesTest, Universal_SuppressesLowerSrcEntity) {
   auto ex = make_symdups(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // src < trg -> suppressed.
-  EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
-  EXPECT_TRUE(ex(make_cand(2, 0, m.node[3], m.node[1])));
-  EXPECT_TRUE(ex(make_cand(3, 0, m.node[4], m.node[1])));
-  EXPECT_TRUE(ex(make_cand(2, 1, m.node[3], m.node[2])));
-  EXPECT_TRUE(ex(make_cand(3, 1, m.node[4], m.node[2])));
-  EXPECT_TRUE(ex(make_cand(3, 2, m.node[4], m.node[3])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(2, 0, m.node[3], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(3, 0, m.node[4], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(2, 1, m.node[3], m.node[2])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(3, 1, m.node[4], m.node[2])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(3, 2, m.node[4], m.node[3])));
 }
 
 TEST(ExcludeSymmetricDuplicatesTest, Universal_RetainsHigherSrcEntity) {
@@ -390,12 +404,12 @@ TEST(ExcludeSymmetricDuplicatesTest, Universal_RetainsHigherSrcEntity) {
   auto ex = make_symdups(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // src > trg -> retained.
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));
-  EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
-  EXPECT_FALSE(ex(make_cand(0, 3, m.node[1], m.node[4])));
-  EXPECT_FALSE(ex(make_cand(1, 2, m.node[2], m.node[3])));
-  EXPECT_FALSE(ex(make_cand(1, 3, m.node[2], m.node[4])));
-  EXPECT_FALSE(ex(make_cand(2, 3, m.node[3], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.node[1], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 3, m.node[1], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 2, m.node[2], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 3, m.node[2], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(2, 3, m.node[3], m.node[4])));
 }
 
 TEST(ExcludeSymmetricDuplicatesTest, Universal_RetainsSelfPairs) {
@@ -403,10 +417,10 @@ TEST(ExcludeSymmetricDuplicatesTest, Universal_RetainsSelfPairs) {
   auto m = make_two_part_mesh();
   auto ex = make_symdups(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 0, m.node[1], m.node[1])));
-  EXPECT_FALSE(ex(make_cand(1, 1, m.node[2], m.node[2])));
-  EXPECT_FALSE(ex(make_cand(2, 2, m.node[3], m.node[3])));
-  EXPECT_FALSE(ex(make_cand(3, 3, m.node[4], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 0, m.node[1], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 1, m.node[2], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(2, 2, m.node[3], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(3, 3, m.node[4], m.node[4])));
 }
 
 // Disjoint selectors: target=part_a, source=part_b -> intersection empty -> never suppresses.
@@ -415,13 +429,13 @@ TEST(ExcludeSymmetricDuplicatesTest, Disjoint_NeverSuppresses) {
   auto ex = make_symdups(*m.bulk, *m.part_a, *m.part_b);
 
   // These would be suppressed under universal, but not with disjoint intersection.
-  EXPECT_FALSE(ex(make_cand(1, 0, m.node[2], m.node[1])));
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[1], m.node[2])));
   // Cross-part pairs: target from part_a, source from part_b.
-  EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
-  EXPECT_FALSE(ex(make_cand(0, 3, m.node[1], m.node[4])));
-  EXPECT_FALSE(ex(make_cand(1, 2, m.node[2], m.node[3])));
-  EXPECT_FALSE(ex(make_cand(1, 3, m.node[2], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.node[1], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 3, m.node[1], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 2, m.node[2], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 3, m.node[2], m.node[4])));
 }
 
 // Overlapping selectors: target=part_a|part_b, source=part_b -> intersection=part_b={node3,node4}.
@@ -433,15 +447,15 @@ TEST(ExcludeSymmetricDuplicatesTest, Overlapping_SuppressesOnlyWithinIntersectio
   auto ex = make_symdups(*m.bulk, tgt_sel, src_sel);
 
   // Both in part_b, src < trg -> suppressed.
-  EXPECT_TRUE(ex(make_cand(2, 1, m.node[4], m.node[3])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(2, 1, m.node[4], m.node[3])));
 
   // Both in part_b, src > trg -> retained.
-  EXPECT_FALSE(ex(make_cand(1, 2, m.node[3], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 2, m.node[3], m.node[4])));
 
   // trg in part_a (not in intersection) -> not suppressed regardless of direction.
-  EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
-  EXPECT_FALSE(ex(make_cand(0, 3, m.node[1], m.node[4])));
-  EXPECT_FALSE(ex(make_cand(1, 2, m.node[2], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.node[1], m.node[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 3, m.node[1], m.node[4])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 2, m.node[2], m.node[3])));
 }
 
 // Identical-subset selectors: target=part_b, source=part_b -> intersection=part_b.
@@ -450,10 +464,10 @@ TEST(ExcludeSymmetricDuplicatesTest, IdenticalSubset_SymmetricSuppression) {
   auto m = make_two_part_mesh();
   auto ex = make_symdups(*m.bulk, *m.part_b, *m.part_b);
 
-  EXPECT_TRUE(ex(make_cand(1, 0, m.node[4], m.node[3])));   // src=node3 < trg=node4
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[3], m.node[4])));  // src=node4 > trg=node3
-  EXPECT_FALSE(ex(make_cand(0, 0, m.node[3], m.node[3])));  // self: src == trg
-  EXPECT_FALSE(ex(make_cand(1, 1, m.node[4], m.node[4])));  // self: src == trg
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(1, 0, m.node[4], m.node[3])));   // src=node3 < trg=node4
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[3], m.node[4])));  // src=node4 > trg=node3
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 0, m.node[3], m.node[3])));  // self: src == trg
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 1, m.node[4], m.node[4])));  // self: src == trg
 }
 
 TEST(ExcludeSymmetricDuplicatesTest, ResetOnSetup) {
@@ -463,15 +477,15 @@ TEST(ExcludeSymmetricDuplicatesTest, ResetOnSetup) {
 
   // First setup: universal -> all nodes in intersection.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
-  EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
 
   // Second setup: disjoint -> empty intersection -> no suppression.
   ex.setup(*m.bulk, *m.part_a, *m.part_b);
-  EXPECT_FALSE(ex(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
 
   // Third setup: universal again -> back to suppressing.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
-  EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(1, 0, m.node[2], m.node[1])));
 }
 
 // =============================================================================
@@ -527,9 +541,9 @@ TEST(ExcludeConnectedEntitiesTest, ExcludesElementsPairSharingANode) {
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // elem[1] and elem[2] share node[2].
-  EXPECT_TRUE(ex(make_cand(0, 1, m.elem[1], m.elem[2])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 1, m.elem[1], m.elem[2])));
   // Symmetric.
-  EXPECT_TRUE(ex(make_cand(1, 0, m.elem[2], m.elem[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(1, 0, m.elem[2], m.elem[1])));
 }
 
 TEST(ExcludeConnectedEntitiesTest, RetainsElementPairsWithNoSharedNode) {
@@ -539,11 +553,11 @@ TEST(ExcludeConnectedEntitiesTest, RetainsElementPairsWithNoSharedNode) {
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // elem[1]{1,2} and elem[3]{4,5} share nothing.
-  EXPECT_FALSE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
-  EXPECT_FALSE(ex(make_cand(2, 0, m.elem[3], m.elem[1])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.elem[1], m.elem[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(2, 0, m.elem[3], m.elem[1])));
   // elem[2]{2,3} and elem[3]{4,5} share nothing.
-  EXPECT_FALSE(ex(make_cand(1, 2, m.elem[2], m.elem[3])));
-  EXPECT_FALSE(ex(make_cand(2, 1, m.elem[3], m.elem[2])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 2, m.elem[2], m.elem[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(2, 1, m.elem[3], m.elem[2])));
 }
 
 TEST(ExcludeConnectedEntitiesTest, SelfPairIsExcluded) {
@@ -553,8 +567,8 @@ TEST(ExcludeConnectedEntitiesTest, SelfPairIsExcluded) {
   ExcludeConnectedEntities ex(stk::topology::NODE_RANK);
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(ex(make_cand(0, 0, m.elem[1], m.elem[1])));
-  EXPECT_TRUE(ex(make_cand(2, 2, m.elem[3], m.elem[3])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 0, m.elem[1], m.elem[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(2, 2, m.elem[3], m.elem[3])));
 }
 
 TEST(ExcludeConnectedEntitiesTest, ReflectsNewConnectivityAfterSetup) {
@@ -565,7 +579,7 @@ TEST(ExcludeConnectedEntitiesTest, ReflectsNewConnectivityAfterSetup) {
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // Before modification: elem[1] and elem[3] do not share nodes.
-  EXPECT_FALSE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 2, m.elem[1], m.elem[3])));
 
   // Reconnect elem[3] to share node[2] with elem[1].
   m.bulk->modification_begin();
@@ -576,7 +590,7 @@ TEST(ExcludeConnectedEntitiesTest, ReflectsNewConnectivityAfterSetup) {
   // Re-snapshot the NGP mesh.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 2, m.elem[1], m.elem[3])));
 }
 
 // =============================================================================
@@ -598,9 +612,9 @@ TEST(ExcludeNonIntersectingOBBsTest, SetupMaterializesFromComponent) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
 
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
-  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // separated -> excluded
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));  // separated -> excluded
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
-  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // re-materialized, unchanged
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));  // re-materialized, unchanged
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, ExcludesSeparatedPair) {
@@ -609,8 +623,8 @@ TEST(ExcludeNonIntersectingOBBsTest, ExcludesSeparatedPair) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs far -> excluded
-  EXPECT_TRUE(ex(make_cand(1, 0, m.node[1], m.node[0])));  // far vs origin -> excluded (symmetric)
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));  // origin vs far -> excluded
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(1, 0, m.node[1], m.node[0])));  // far vs origin -> excluded
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, RetainsIntersectingPair) {
@@ -619,8 +633,8 @@ TEST(ExcludeNonIntersectingOBBsTest, RetainsIntersectingPair) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close -> retained
-  EXPECT_FALSE(ex(make_cand(1, 0, m.node[1], m.node[0])));  // close vs origin -> retained
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close -> retained
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(1, 0, m.node[1], m.node[0])));  // close vs origin -> retained
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, AsymmetricTargetSourceSelectors) {
@@ -632,8 +646,8 @@ TEST(ExcludeNonIntersectingOBBsTest, AsymmetricTargetSourceSelectors) {
   ExcludeNonIntersectingOBBs<double> ex{m.component(), m.component()};
   ex.setup(*m.bulk, *m.part_a, *m.part_b);
 
-  EXPECT_TRUE(ex(make_cand(0, 0, m.node[0], m.node[1])));   // origin vs far   -> excluded
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[2])));  // origin vs close -> retained
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 0, m.node[0], m.node[1])));   // origin vs far   -> excluded
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[2])));  // origin vs close -> retained
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, SymmetricSingleComponentConstructor) {
@@ -644,9 +658,9 @@ TEST(ExcludeNonIntersectingOBBsTest, SymmetricSingleComponentConstructor) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 0, m.node[0], m.node[0])));  // origin vs origin -> retained
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close  -> retained
-  EXPECT_TRUE(ex(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far    -> excluded
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 0, m.node[0], m.node[0])));  // origin vs origin -> retained
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close  -> retained
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far    -> excluded
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
@@ -657,8 +671,8 @@ TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
   auto chain = NoExcluder{}.exclude(ExcludeNonIntersectingOBBs<double>{m.component()});
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(chain(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close -> retained
-  EXPECT_TRUE(chain(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far   -> excluded
+  EXPECT_FALSE(check_excluder_on_device(chain, make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close -> retained
+  EXPECT_TRUE(check_excluder_on_device(chain, make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far   -> excluded
 }
 
 // A periodic candidate carries per-owner image shifts; the excluder must test the source against its
@@ -671,14 +685,14 @@ TEST(ExcludeNonIntersectingOBBsTest, PeriodicImageShiftIsApplied) {
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   // Home positions are separated: both the non-periodic and the zero-shift periodic candidate are excluded.
-  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));
-  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{0, 0, 0})));
+  EXPECT_TRUE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));
+  EXPECT_TRUE(check_excluder_on_device(ex, PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{0, 0, 0})));
 
   // A source image shift of (-2,0,0) maps the source onto the origin: the images intersect -> retained.
-  EXPECT_FALSE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-2, 0, 0})));
+  EXPECT_FALSE(check_excluder_on_device(ex, PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-2, 0, 0})));
 
   // Only the *relative* shift matters: equal target and source shifts leave the separation unchanged.
-  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{-2, 0, 0}, Vec3f{-2, 0, 0})));
+  EXPECT_TRUE(check_excluder_on_device(ex, PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{-2, 0, 0}, Vec3f{-2, 0, 0})));
 }
 
 // The converse direction: a shift can separate a pair that overlaps at its home position.
@@ -688,9 +702,9 @@ TEST(ExcludeNonIntersectingOBBsTest, PeriodicImageShiftCanSeparateHomeOverlap) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // home positions overlap -> retained
+  EXPECT_FALSE(check_excluder_on_device(ex, make_cand(0, 1, m.node[0], m.node[1])));  // home overlap -> retained
   // A source image shift of (-5,0,0) carries the source far from the origin -> separated -> excluded.
-  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-5, 0, 0})));
+  EXPECT_TRUE(check_excluder_on_device(ex, PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-5, 0, 0})));
 }
 
 }  // namespace

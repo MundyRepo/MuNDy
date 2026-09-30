@@ -574,6 +574,50 @@ KOKKOS_INLINE_FUNCTION constexpr auto abs(const AScalar<T, Accessor>& s) {
   return AScalar<T>{abs(s.value())};
 }
 
+/// Unary cmath functions: forward to the mundy dispatch on the underlying value.
+#define MUNDY_MATH_SCALAR_UNARY(func)                                         \
+  template <typename T, ValidAccessor<T> Accessor>                            \
+  KOKKOS_INLINE_FUNCTION constexpr auto func(const AScalar<T, Accessor>& s) { \
+    return AScalar<T>{func(s.value())};                                       \
+  }
+
+/// Binary cmath functions: forward to the mundy dispatch on the underlying values. The same-accessor overload must
+/// exist separately so it is more specialized than the generic func(const T&, const T&) dispatch.
+#define MUNDY_MATH_SCALAR_BINARY(func)                                                                         \
+  template <typename T, ValidAccessor<T> Accessor>                                                             \
+  KOKKOS_INLINE_FUNCTION constexpr auto func(const AScalar<T, Accessor>& a, const AScalar<T, Accessor>& b) {   \
+    return AScalar<T>{func(a.value(), b.value())};                                                             \
+  }                                                                                                            \
+  template <typename T, ValidAccessor<T> Accessor1, ValidAccessor<T> Accessor2>                                \
+  MUNDY_REQUIRES(!std::is_same_v<Accessor1, Accessor2>)                                                        \
+  KOKKOS_INLINE_FUNCTION constexpr auto func(const AScalar<T, Accessor1>& a, const AScalar<T, Accessor2>& b) { \
+    return AScalar<T>{func(a.value(), b.value())};                                                             \
+  }
+
+MUNDY_MATH_SCALAR_UNARY(sqrt)
+MUNDY_MATH_SCALAR_UNARY(cbrt)
+MUNDY_MATH_SCALAR_UNARY(sin)
+MUNDY_MATH_SCALAR_UNARY(cos)
+MUNDY_MATH_SCALAR_UNARY(tan)
+MUNDY_MATH_SCALAR_UNARY(asin)
+MUNDY_MATH_SCALAR_UNARY(acos)
+MUNDY_MATH_SCALAR_UNARY(atan)
+MUNDY_MATH_SCALAR_UNARY(exp)
+MUNDY_MATH_SCALAR_UNARY(log)
+MUNDY_MATH_SCALAR_UNARY(log10)
+MUNDY_MATH_SCALAR_UNARY(floor)
+MUNDY_MATH_SCALAR_UNARY(ceil)
+MUNDY_MATH_SCALAR_UNARY(round)
+
+MUNDY_MATH_SCALAR_BINARY(atan2)
+MUNDY_MATH_SCALAR_BINARY(pow)
+MUNDY_MATH_SCALAR_BINARY(copysign)
+MUNDY_MATH_SCALAR_BINARY(min)
+MUNDY_MATH_SCALAR_BINARY(max)
+
+#undef MUNDY_MATH_SCALAR_UNARY
+#undef MUNDY_MATH_SCALAR_BINARY
+
 /// \brief Deep copy (mirrors the AVector free function)
 template <ValidScalarType ScalarType>
 KOKKOS_INLINE_FUNCTION constexpr auto copy(const ScalarType& s) {
