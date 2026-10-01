@@ -168,6 +168,19 @@ PGDResult<double> step_rods(const RodViews<Space>& rods, const ConstraintSet<Spa
   return result;
 }
 
+// The largest distance or angle any rod moved over its last step: dt * max(|velocity|, |omega|).
+template <typename Space>
+double max_step_displacement(const RodViews<Space>& rods, double dt) {
+  double max_speed = 0.0;
+  Kokkos::parallel_reduce(
+      "max_step_displacement", Kokkos::RangePolicy<Space>(0, rods.size()),
+      KOKKOS_LAMBDA(const int i, double& m) {
+        m = Kokkos::max(m, Kokkos::max(norm(rods.velocity(i)), norm(rods.omega(i))));
+      },
+      Kokkos::Max<double>(max_speed));
+  return dt * max_speed;
+}
+
 // Central finite difference of `value_of(rods)` with respect to (vel,omega)*eps, compared against
 // PairForceOpT's analytical rate at vel_omega.
 void expect_rate_matches_finite_difference(std::function<double(const RodViews<HostExecSpace>&)> value_of,
@@ -1184,6 +1197,20 @@ DenseMat dense_transpose(const DenseMat& A) {
   return T;
 }
 
+std::vector<double> dense_matvec(const DenseMat& A, const std::vector<double>& x) {
+  std::vector<double> y(A.size(), 0.0);
+  for (size_t i = 0; i < A.size(); ++i)
+    for (size_t j = 0; j < x.size(); ++j) y[i] += A[i][j] * x[j];
+  return y;
+}
+
+// [A B]: B's columns appended to A's. Both have the same number of rows.
+DenseMat dense_hcat(const DenseMat& A, const DenseMat& B) {
+  DenseMat C = A;
+  for (size_t i = 0; i < C.size(); ++i) C[i].insert(C[i].end(), B[i].begin(), B[i].end());
+  return C;
+}
+
 // Solve A x = b by Gaussian elimination with partial pivoting (A is square, copied and destroyed).
 std::vector<double> dense_solve(DenseMat A, std::vector<double> b) {
   const size_t n = A.size();
@@ -2008,18 +2035,17 @@ TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
   EXPECT_EQ(index_map.total, 97u);
 }
 
-// Soft anchors, which nothing else drives: every other test holds rigidly, so no compliance entry has
-// ever been nonzero. At a fixed point every body has v = 0, so F_ext + B y = 0 and K^-1 y = -b0, and a
-// centre anchor's B is the identity on its force rows. The steady offset from target is therefore
-// exactly compliance * load, componentwise, and carries no dependence on dt.
+// Soft anchors. At a fixed point every body has v = 0, so F_ext + B y = 0 and K^-1 y = -b0, and a centre
+// anchor's B is the identity on its force rows. Started at its target, each anchored rod therefore settles
+// at an offset of exactly compliance * load, componentwise, with no dependence on dt.
 //
 // The orientation rows are exact only for a torque about a single axis: the rod then turns about that
 // axis, so the rotation vector is parallel to the torque and the inverse left Jacobian acts as the
 // identity on it. Hence the loop over axes rather than one general torque.
 //
-// This is also the only place both single-arity families are non-empty in one solve, so their adjacent
-// y-block ranges are both live. Every compliance here differs from every other, which makes a swap
-// between the two families -- or between rows inside one -- show up as a wrong offset.
+// Both single-arity families are non-empty in one solve, so their adjacent y-block ranges are both live.
+// Every compliance here differs from every other, which makes a swap between the two families -- or
+// between rows inside one -- show up as a wrong offset.
 TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
   const Vector3d position_compliance{0.01, 0.02, 0.04};
   const Vector3d position_load{0.7, -0.4, 0.25};
@@ -2030,6 +2056,10 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
   const Vector3d pose_target{-1.0, 0.75, -0.25};
   const Quaterniond pose_orientation_target{1.0, 0.0, 0.0, 0.0};
   const double torque = 0.3;
+
+  // Settled once no rod moves farther than this, or turns through a larger angle, in one step.
+  constexpr double settled_step = 1e-12;
+  constexpr int max_steps = 1000;
 
   for (int torque_axis = 0; torque_axis < 3; ++torque_axis) {
     Vector3d applied_torque{0.0, 0.0, 0.0};
@@ -2073,9 +2103,15 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
       const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
       const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
       const auto load_d = copy_load(rods_d);
-      for (int step = 0; step < 200; ++step) {
-        step_rods(rods_d, constraints_d, cfg, load_d);
+      int steps = 0;
+      while (steps < max_steps) {
+        ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt << " step " << steps;
+        ++steps;
+        if (max_step_displacement(rods_d, dt) <= settled_step) {
+          break;
+        }
       }
+      ASSERT_LT(steps, max_steps) << "not settled about axis " << torque_axis << " at dt=" << dt;
       deep_copy(rods, rods_d);
 
       const Vector3d position_offset = rods.center(0) - position_target;
@@ -2261,19 +2297,27 @@ TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
   EXPECT_NEAR(finest_scaled_error, 2.0, 1e-4);
 }
 
-// Two anchors on two *different* rods, which is the ordinary multi-anchor case and the one a
-// simply supported beam needs. Both must hold simultaneously and the Schur complement must stay
-// solvable: B's columns here act on two distinct bodies' translational blocks, so it keeps full
-// column rank, unlike two anchors placed on one rod.
+// Two anchors on two *different* rods coupled through the springs between them, which is the ordinary
+// multi-anchor case and the one a simply supported beam needs. B's columns act on two distinct bodies'
+// translational blocks, so it keeps full column rank, unlike two anchors placed on one rod.
+//
+// One solve against a dense solve of the same Schur complement: every multiplier and velocity matches,
+// and both anchored spheres are held at zero velocity. The reference transposes B densely, so it also
+// checks each family's rate operator against its force operator. The chain starts on a shallow arc so
+// every bend angle has a gradient (see solve_static_bend) and the bend rows resist the load.
 TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
   constexpr size_t num_segments = 8;
   constexpr size_t num_spheres = num_segments + 1;
-  const double L = 8.0, EI = 5.0, load = 0.005;
+  const double L = 8.0, EI = 5.0, load = 0.005, pre_bend = 1e-3;
   const double spacing = L / static_cast<double>(num_segments);
 
   for (const double dt : {0.05, 0.5, 5.0}) {
     BendChain chain = make_bend_chain(num_spheres, spacing, EI / spacing);
     RodViews<HostExecSpace> rods = chain.rods;
+    for (size_t k = 0; k < num_spheres; ++k) {
+      const double z = spacing * static_cast<double>(k);
+      rods.center(k) = Vector3d{0.0, pre_bend * z * z, z};
+    }
 
     LinearSpringViews<HostExecSpace> lin_springs(num_segments);
     for (size_t k = 0; k < num_segments; ++k) {
@@ -2306,18 +2350,86 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     cfg.max_outer_iters = 1;
 
     rods.force(num_spheres / 2) = Vector3d{0.0, -load, 0.0};
+
+    // Dense reference, built from the rods and constraints before solve() mutates them. Columns of B follow
+    // the y-block packing order: linear springs, triple springs, fixed positions.
     const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
     const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-    const auto load_d = copy_load(rods_d);
-    for (int step = 0; step < 200; ++step) {
-      ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt << " step " << step;
-    }
-    deep_copy(rods, rods_d);
+    auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
+    auto b0_triple_d = make_constraint_values(constraints_d.triple_springs);
+    auto b0_fixed_d = make_constraint_values(constraints_d.fixed_positions);
+    const impl::PairForceOp<TestExecSpace> B_lin(
+        impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin_d), num_spheres);
+    const impl::TripleForceOp<TestExecSpace> B_triple(
+        impl::compute_triple_point_angular_spring_geometry(rods_d, constraints_d.triple_springs, b0_triple_d),
+        num_spheres);
+    const impl::SingleForceOp<TestExecSpace> B_fixed(
+        impl::compute_fixed_position_geometry(rods_d, constraints_d.fixed_positions, b0_fixed_d), num_spheres);
+    const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
 
-    EXPECT_NEAR(norm(rods.center(0) - left), 0.0, 1e-10) << "dt=" << dt;
-    EXPECT_NEAR(norm(rods.center(num_spheres - 1) - right), 0.0, 1e-10) << "dt=" << dt;
-    // The span sags under the load, so the test is not vacuously satisfied by nothing moving.
-    EXPECT_LT(rods.center(num_spheres / 2)[1], -1e-4) << "dt=" << dt;
+    const DenseMat B_dense =
+        dense_hcat(dense_hcat(materialize_dense(B_lin), materialize_dense(B_triple)), materialize_dense(B_fixed));
+    const DenseMat BT_dense = dense_transpose(B_dense);
+    const DenseMat M_dense = materialize_dense(M);
+    const auto b0_lin = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_lin_d);
+    const auto b0_triple = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_triple_d);
+    const auto b0_fixed = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_fixed_d);
+
+    std::vector<double> b0, kinv;
+    for (size_t k = 0; k < b0_lin.extent(0); ++k) {
+      b0.push_back(b0_lin(k));
+      kinv.push_back(1.0 / constraints.linear_springs.spring_constant(k));
+    }
+    for (size_t k = 0; k < b0_triple.extent(0); ++k) {
+      b0.push_back(b0_triple(k));
+      kinv.push_back(1.0 / constraints.triple_springs.spring_constant(k));
+    }
+    for (size_t k = 0; k < b0_fixed.extent(0); ++k) {
+      b0.push_back(b0_fixed(k));
+      kinv.push_back(0.0);  // rigid
+    }
+
+    // b = b0 + dt B^T M F_ext and (dt B^T M B + K^-1) y = -b, then v = M (F_ext + B y).
+    std::vector<double> force_torque_ext(6 * num_spheres, 0.0);
+    for (size_t i = 0; i < 6 * num_spheres; ++i) {
+      force_torque_ext[i] = rods.force_torque_view()(i);
+    }
+    const std::vector<double> b_rate = dense_matvec(BT_dense, dense_matvec(M_dense, force_torque_ext));
+    std::vector<double> neg_b(b0.size());
+    for (size_t r = 0; r < b0.size(); ++r) {
+      neg_b[r] = -(b0[r] + dt * b_rate[r]);
+    }
+    DenseMat schur = dense_matmul(BT_dense, dense_matmul(M_dense, B_dense));
+    for (size_t r = 0; r < schur.size(); ++r) {
+      for (size_t c = 0; c < schur.size(); ++c) {
+        schur[r][c] *= dt;
+      }
+      schur[r][r] += kinv[r];
+    }
+    const std::vector<double> y_expected = dense_solve(schur, neg_b);
+    std::vector<double> total_force_torque = dense_matvec(B_dense, y_expected);
+    for (size_t i = 0; i < total_force_torque.size(); ++i) {
+      total_force_torque[i] += force_torque_ext[i];
+    }
+    const std::vector<double> vel_omega_expected = dense_matvec(M_dense, total_force_torque);
+
+    ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt;
+
+    std::vector<double> y;
+    for (size_t k = 0; k < constraints.linear_springs.size(); ++k) y.push_back(constraints.linear_springs.lambda(k));
+    for (size_t k = 0; k < constraints.triple_springs.size(); ++k) y.push_back(constraints.triple_springs.lambda(k));
+    for (size_t k = 0; k < 2; ++k) {
+      for (int c = 0; c < 3; ++c) y.push_back(constraints.fixed_positions.lambda(k)[c]);
+    }
+    ASSERT_EQ(y.size(), y_expected.size());
+    for (size_t r = 0; r < y.size(); ++r) {
+      EXPECT_NEAR(y[r], y_expected[r], 1e-9) << "multiplier " << r << " at dt=" << dt;
+    }
+    for (size_t i = 0; i < 6 * num_spheres; ++i) {
+      EXPECT_NEAR(rods.velocity_omega_view()(i), vel_omega_expected[i], 1e-12) << "entry " << i << " at dt=" << dt;
+    }
+    EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-12) << "dt=" << dt;
+    EXPECT_NEAR(norm(rods.velocity(num_spheres - 1)), 0.0, 1e-12) << "dt=" << dt;
   }
 }
 
