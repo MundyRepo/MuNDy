@@ -42,6 +42,7 @@
 
 // Mundy
 #include <mundy_math/Matrix.hpp>
+#include <mundy_math/eigenvalues.hpp>
 #include <mundy_math/lcp.hpp>
 #include <mundy_mbody/KokkosMbody.hpp>
 
@@ -358,8 +359,8 @@ TEST(Mbody, SingleForceOpIsExactAdjoint) {
 // axis-aligned shortcut look sufficient.
 TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   const Quaterniond tilt = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.7);
-  RodViews<HostExecSpace> rods = make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0},
-                                                     Vector3d{0.3, -0.2, 1.4}, tilt);
+  RodViews<HostExecSpace> rods =
+      make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0}, Vector3d{0.3, -0.2, 1.4}, tilt);
   zero_rod_state(rods);
 
   FixedPositionViews<HostExecSpace> anchors(1);
@@ -501,10 +502,10 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
     constexpr double eps = 1e-6;
     auto b0_plus_d = make_constraint_values(anchors);
     auto b0_minus_d = make_constraint_values(anchors);
-    impl::compute_fixed_pose_geometry(
-        create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, eps)), anchors_d, b0_plus_d);
-    impl::compute_fixed_pose_geometry(
-        create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, -eps)), anchors_d, b0_minus_d);
+    impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, eps)),
+                                      anchors_d, b0_plus_d);
+    impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, -eps)),
+                                      anchors_d, b0_minus_d);
     const auto rate = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate_d);
     const auto b0_plus = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_plus_d);
     const auto b0_minus = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_minus_d);
@@ -1005,6 +1006,40 @@ SolveInput make_chain_problem(double spring_constant) {
   return p;
 }
 
+// Sum of 0.5 * k * (stretch or bend-angle)^2 over every spring, computed from rod poses rather than from the solver's
+// multipliers.
+double elastic_energy(const RodViews<HostExecSpace>& rods, const LinearSpringViews<HostExecSpace>& lin_springs,
+                      const AngularSpringViews<HostExecSpace>& ang_springs) {
+  double energy = 0.0;
+  for (size_t k = 0; k < lin_springs.size(); ++k) {
+    const int i = lin_springs.rod_i(k);
+    const int j = lin_springs.rod_j(k);
+    const double stretch = norm(rods.center(j) - rods.center(i)) - lin_springs.rest_length(k);
+    energy += 0.5 * lin_springs.spring_constant(k) * stretch * stretch;
+  }
+  for (size_t k = 0; k < ang_springs.size(); ++k) {
+    const int i = ang_springs.rod_i(k);
+    const int j = ang_springs.rod_j(k);
+    const Vector3d tangent_i = rods.orientation(i) * Vector3d{0.0, 0.0, 1.0};
+    const Vector3d tangent_j = rods.orientation(j) * Vector3d{0.0, 0.0, 1.0};
+    const double bend = minor_angle(tangent_i, tangent_j) - ang_springs.rest_angle(k);
+    energy += 0.5 * ang_springs.spring_constant(k) * bend * bend;
+  }
+  return energy;
+}
+
+// Advance every rod over dt: center += dt * velocity, orientation rotated by omega * dt.
+void advance_rods(const RodViews<HostExecSpace>& rods, double dt) {
+  for (size_t i = 0; i < rods.size(); ++i) {
+    rods.center(i) = rods.center(i) + dt * rods.velocity(i);
+    const Vector3d omega = rods.omega(i);
+    const double omega_norm = norm(omega);
+    if (omega_norm > 1e-14) {
+      rods.orientation(i) = axis_angle_to_quaternion(omega / omega_norm, omega_norm * dt) * rods.orientation(i);
+    }
+  }
+}
+
 // Materialize any operator's action as a dense (row-major) matrix via repeated unit-vector applies.
 template <typename Op>
 std::vector<std::vector<double>> materialize_dense(const Op& op) {
@@ -1171,16 +1206,70 @@ TEST(Mbody, StiffChainStaysStable) {
   }
 }
 
-// T6(b): sweeping dt and viscosity keeps the solve converged (no blow-up as the problem is scaled).
-TEST(Mbody, DtViscositySweepConverges) {
-  for (const double dt : {0.01, 0.1, 0.5, 2.0}) {
-    for (const double viscosity : {0.1, 1.0, 10.0}) {
-      SolveInput p = make_chain_problem(/*spring_constant=*/3.0);
-      p.cfg.dt = dt;
-      p.cfg.viscosity = viscosity;
-      const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
-      EXPECT_TRUE(result.converged) << "dt=" << dt << " viscosity=" << viscosity;
+// lambda_max(K B^T M B) over the springs of p: explicit Euler on the linearized spring network is stable only for
+// dt < 2 / lambda_max. Evaluated matrix-free as the symmetric K^1/2 B^T M B K^1/2, which shares its spectrum.
+double spring_network_stiffness(const SolveInput& p) {
+  using backend_t = KokkosBackend<TestExecSpace>;
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+  auto b0_lin = make_constraint_values(constraints_d.linear_springs);
+  auto b0_ang = make_constraint_values(constraints_d.angular_springs);
+  const impl::PairGeometry<TestExecSpace> geo =
+      impl::concat_pair_geometry(impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin),
+                                 impl::compute_angular_spring_geometry(rods_d, constraints_d.angular_springs, b0_ang));
+  const impl::PairForceOp<TestExecSpace> B(geo, p.rods.size());
+  const impl::PairForceOpT<TestExecSpace> BT(geo, p.rods.size());
+  const impl::LocalDragMobilityOp<TestExecSpace> M(p.cfg.viscosity, rods_d);
+
+  // Spring rows are packed linear then angular, matching the concatenated geometry.
+  const size_t num_linear = p.constraints.linear_springs.size();
+  const size_t num_springs = geo.size();
+  Kokkos::View<double*, Kokkos::HostSpace> sqrt_k("sqrt_k", num_springs), q0("q0", num_springs);
+  std::mt19937 rng(20261001);
+  std::uniform_real_distribution<double> dist(-1.0, 1.0);
+  for (size_t row = 0; row < num_springs; ++row) {
+    sqrt_k(row) = std::sqrt(row < num_linear ? p.constraints.linear_springs.spring_constant(row)
+                                             : p.constraints.angular_springs.spring_constant(row - num_linear));
+    q0(row) = dist(rng);
+  }
+  const auto K_half = make_diagonal_op<backend_t>(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, sqrt_k));
+  const auto S = make_quadratic_form<backend_t>(K_half, make_quadratic_form<backend_t>(BT, M, B), K_half);
+
+  auto prob = make_eigen_problem<backend_t>(S);
+  auto state = make_power_state(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, q0),
+                                Kokkos::View<double*, TestMemSpace>("z", num_springs),
+                                Kokkos::View<double*, TestMemSpace>("r", num_springs));
+  const auto strat = make_power_strategy(RelativeL2Residual{}, PowerConfig<double>{.max_iters = 100000, .tol = 1e-10});
+  const auto result = solve_eigen_problem(prob, strat, state);
+  EXPECT_TRUE(result.converged) << result;
+  return result.eigenvalue;
+}
+
+// T6(b): backward Euler is stable at any step size. Forward Euler on the same linearized spring network is stable only
+// for dt < dt_crit = 2 / lambda_max(K B^T M B), so the sweep crosses dt / dt_crit = 1, and on both sides of it every
+// implicit step must lower the elastic energy: the step maps K^1/2 b to (I + dt K^1/2 B^T M B K^1/2)^-1 K^1/2 b.
+TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
+  const double dt_crit = 2.0 / spring_network_stiffness(make_chain_problem(/*spring_constant=*/3.0));
+
+  for (const double cfl : {0.5, 0.9, 1.1, 2.0, 10.0, 100.0}) {
+    SolveInput p = make_chain_problem(/*spring_constant=*/3.0);
+    p.cfg.dt = cfl * dt_crit;
+    p.cfg.cg_tol = 1e-13;
+
+    std::vector<double> energy{elastic_energy(p.rods, p.constraints.linear_springs, p.constraints.angular_springs)};
+    for (int step = 0; step < 40; ++step) {
+      zero_rod_state(p.rods);  // no external load: the springs relax toward rest
+      ASSERT_TRUE(solve_on_device(p.rods, p.constraints, p.cfg).converged) << "cfl=" << cfl << " step " << step;
+      advance_rods(p.rods, p.cfg.dt);
+      energy.push_back(elastic_energy(p.rods, p.constraints.linear_springs, p.constraints.angular_springs));
     }
+
+    // Round-off floor relative to the initial energy, which the largest steps decay toward.
+    const double floor = 1e-10 * energy.front();
+    for (size_t n = 0; n + 1 < energy.size(); ++n) {
+      EXPECT_LE(energy[n + 1], energy[n] + floor) << "cfl=" << cfl << ": energy rose at step " << n + 1;
+    }
+    EXPECT_LT(energy.back(), energy.front()) << "cfl=" << cfl;
   }
 }
 
@@ -1375,7 +1464,7 @@ size_t grid_index(size_t row, size_t col, size_t num_cols) {
 // grid) -- the rest lengths/angles above are still the perfect grid's, so the kick alone is what gets
 // relaxed away.
 SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, double radius, double spring_constant,
-                              double kick_magnitude, unsigned seed) {
+                             double kick_magnitude, unsigned seed) {
   SolveInput p;
   const size_t num_spheres = num_rows * num_cols;
   p.rods = RodViews<HostExecSpace>(num_spheres);
@@ -1483,32 +1572,9 @@ double max_overlap(const RodViews<HostExecSpace>& rods) {
   return -worst_gap;
 }
 
-// Sum of 0.5 * k * (stretch or bend-angle)^2 over every spring -- a scalar proxy for the system's
-// elastic energy, computed directly from rod positions/orientations (not from the solver's Lagrange
-// multipliers), tracked to confirm the kick's energy actually dissipates rather than just persisting.
-double elastic_energy(const RodViews<HostExecSpace>& rods, const LinearSpringViews<HostExecSpace>& lin_springs,
-                      const AngularSpringViews<HostExecSpace>& ang_springs) {
-  double energy = 0.0;
-  for (size_t k = 0; k < lin_springs.size(); ++k) {
-    const int i = lin_springs.rod_i(k);
-    const int j = lin_springs.rod_j(k);
-    const double stretch = norm(rods.center(j) - rods.center(i)) - lin_springs.rest_length(k);
-    energy += 0.5 * lin_springs.spring_constant(k) * stretch * stretch;
-  }
-  for (size_t k = 0; k < ang_springs.size(); ++k) {
-    const int i = ang_springs.rod_i(k);
-    const int j = ang_springs.rod_j(k);
-    const Vector3d tangent_i = rods.orientation(i) * Vector3d{0.0, 0.0, 1.0};
-    const Vector3d tangent_j = rods.orientation(j) * Vector3d{0.0, 0.0, 1.0};
-    const double bend = minor_angle(tangent_i, tangent_j) - ang_springs.rest_angle(k);
-    energy += 0.5 * ang_springs.spring_constant(k) * bend * bend;
-  }
-  return energy;
-}
-
 TEST(Mbody, GridOfSpheresStaysOverlapFreeAndRelaxes) {
   SolveInput p = make_grid_problem(/*num_rows=*/4, /*num_cols=*/4, /*spacing=*/1.0, /*radius=*/0.35,
-                                    /*spring_constant=*/3.0, /*kick_magnitude=*/0.35, /*seed=*/1234);
+                                   /*spring_constant=*/3.0, /*kick_magnitude=*/0.35, /*seed=*/1234);
 
   ASSERT_GT(max_overlap(p.rods), 0.0) << "test setup should start with a real overlap somewhere";
 
