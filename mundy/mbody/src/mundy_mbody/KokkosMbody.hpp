@@ -24,6 +24,7 @@
 // Mundy
 #include <mundy_math/convex_spaces.hpp>
 #include <mundy_math/cqpp.hpp>
+#include <mundy_math/lcp.hpp>
 #include <mundy_math/linear_ops.hpp>
 #include <mundy_math/linear_system.hpp>
 #include <mundy_mbody/impl/KokkosMbodyImpl.hpp>
@@ -130,16 +131,22 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
   M.apply(force_torque, m_force_torque_ext);
   backend_t::axpby(1.0, m_force_torque_ext, 1.0, vel_omega);
 
-  // q := sep0 + dt * D^T vel_omega,  b := b0 + dt * B^T vel_omega.
-  view_t q("q", num_contacts);
-  DT.apply(vel_omega, q);
-  backend_t::axpby(cfg.dt, q, 1.0, sep0);
-  view_t& q_vec = sep0;
+  const bool has_contacts = num_contacts > 0;
+  const bool has_bilateral = index_map.total > 0;
 
-  view_t b_rate("b_rate", index_map.total);
-  BT.apply(vel_omega, b_rate);
-  backend_t::axpby(cfg.dt, b_rate, 1.0, b0);
+  // q := sep0 + dt * D^T vel_omega,  b := b0 + dt * B^T vel_omega.
+  view_t& q_vec = sep0;
+  if (has_contacts) {
+    view_t q("q", num_contacts);
+    DT.apply(vel_omega, q);
+    backend_t::axpby(cfg.dt, q, 1.0, sep0);
+  }
   view_t& b_vec = b0;
+  if (has_bilateral) {
+    view_t b_rate("b_rate", index_map.total);
+    BT.apply(vel_omega, b_rate);
+    backend_t::axpby(cfg.dt, b_rate, 1.0, b0);
+  }
 
   // Schur complement S := (B^T M B + K^{-1})^{-1}, realized via matrix-free CG.
   const auto btmb_plus_kinv =
@@ -147,40 +154,55 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
   const CGConfig<double> cg_cfg{cfg.max_cg_iters, cfg.cg_tol};
   const auto S = make_cg_inv_op<backend_t>(btmb_plus_kinv, cg_cfg);
 
-  // Reduced CQPP + PGD solve for x* (contact force magnitudes).
-  const auto mcqpp =
-      make_mixed_cqpp<backend_t>(DT, M_dt, D, q_vec, B, S, BT, b_vec, LowerBoundSpace<double>{.lower_bound = 0.0});
-
+  // x* (contact force magnitudes): the reduced CQPP, which without bilateral rows is the contact LCP. Without
+  // contacts x* is empty, and its projected residual is zero before any iteration.
   view_t x("x", num_contacts);
-  view_t grad("grad", num_contacts);
-  view_t x_tmp("x_tmp", num_contacts);
-  view_t grad_tmp("grad_tmp", num_contacts);
-  Kokkos::deep_copy(x, 0.0);
+  PGDResult<double> result{.num_iters = 0, .residual = 0.0, .converged = 0.0 <= cfg.outer_tol};
+  if (has_contacts) {
+    view_t grad("grad", num_contacts);
+    view_t x_tmp("x_tmp", num_contacts);
+    view_t grad_tmp("grad_tmp", num_contacts);
+    Kokkos::deep_copy(x, 0.0);
 
-  auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = cfg.max_outer_iters, .tol = cfg.outer_tol});
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
-  const PGDResult<double> result = solve_mixed_cqpp(mcqpp, pgd, pgd_state);
+    auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = cfg.max_outer_iters, .tol = cfg.outer_tol});
+    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+    if (has_bilateral) {
+      const auto mcqpp =
+          make_mixed_cqpp<backend_t>(DT, M_dt, D, q_vec, B, S, BT, b_vec, LowerBoundSpace<double>{.lower_bound = 0.0});
+      result = solve_mixed_cqpp(mcqpp, pgd, pgd_state);
+    } else {
+      result = solve_lcp(make_lcp<backend_t>(DT, M_dt, D, q_vec), pgd, pgd_state);
+    }
+  }
   MUNDY_THROW_REQUIRE(result.converged, std::runtime_error, "mbody::solve: outer PGD solve failed to converge.");
+  if (!has_contacts && !has_bilateral) {
+    return result;
+  }
 
-  // Recover y* = -S (b + B^T M D x*) -- solve_mixed_cqpp only returns the x-block result.
+  // y* = -S (b + B^T M D x*), and the constraint force/torque D x* + B y*.
   view_t Dx("Dx", 6 * num_rods);
-  D.apply(x, Dx);
-  view_t MDx("MDx", 6 * num_rods);
-  M_dt.apply(Dx, MDx);
-  view_t y_rhs("y_rhs", index_map.total);
-  BT.apply(MDx, y_rhs);
-  backend_t::axpby(1.0, b_vec, 1.0, y_rhs);  // y_rhs = b + B^T M D x*
-
+  if (has_contacts) {
+    D.apply(x, Dx);
+  }
   view_t y("y", index_map.total);
-  S.apply(y_rhs, y);
-  backend_t::axpby(-1.0, y, 0.0, y);  // y := -y
-
-  // Apply x*, y* back: force/torque += D x* + B y*; velocity/omega += M (D x* + B y*).
-  view_t By("By", 6 * num_rods);
-  B.apply(y, By);
   view_t total_force_torque("total_force_torque", 6 * num_rods);
-  backend_t::axpby(1.0, Dx, 0.0, total_force_torque);
-  backend_t::axpby(1.0, By, 1.0, total_force_torque);
+  if (has_bilateral) {
+    view_t y_rhs("y_rhs", index_map.total);
+    if (has_contacts) {
+      view_t MDx("MDx", 6 * num_rods);
+      M_dt.apply(Dx, MDx);
+      BT.apply(MDx, y_rhs);
+      backend_t::axpby(1.0, b_vec, 1.0, y_rhs);  // y_rhs = b + B^T M D x*
+    } else {
+      Kokkos::deep_copy(y_rhs, b_vec);
+    }
+    S.apply(y_rhs, y);
+    backend_t::axpby(-1.0, y, 0.0, y);  // y := -y
+    B.apply(y, total_force_torque);
+  }
+  if (has_contacts) {
+    backend_t::axpby(1.0, Dx, 1.0, total_force_torque);
+  }
 
   view_t m_total("m_total", 6 * num_rods);
   M.apply(total_force_torque, m_total);

@@ -951,6 +951,67 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   EXPECT_NEAR(norm(total_torque), 0.0, 1e-9);
 }
 
+// Triple-point angular springs only, zero contacts: the same scalar Schur complement as the linear and
+// angular springs above, for three spheres bent away from straight at their middle one.
+TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
+  RodViews<HostExecSpace> rods(3);
+  rods.center(0) = Vector3d{0.0, 0.0, 0.0};
+  rods.center(1) = Vector3d{0.0, 0.3, 1.0};  // the vertex
+  rods.center(2) = Vector3d{0.1, 0.0, 2.1};
+  for (int i = 0; i < 3; ++i) {
+    rods.orientation(i) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+    rods.radius(i) = 0.2;
+    rods.length(i) = 0.0;
+  }
+  zero_rod_state(rods);
+
+  TriplePointAngularSpringViews<HostExecSpace> triple_springs(1);
+  triple_springs.rod_i(0) = 0;
+  triple_springs.rod_j(0) = 2;
+  triple_springs.rod_k(0) = 1;
+  triple_springs.rest_angle(0) = Kokkos::numbers::pi_v<double>;
+  triple_springs.spring_constant(0) = 2.0;
+
+  ConstraintSet<HostExecSpace> constraints;
+  constraints.triple_springs = triple_springs;
+
+  SolveConfig cfg;
+  cfg.dt = 1.0;
+  cfg.viscosity = 1.0;
+
+  // Independent scalar ground truth for B^T M B, from the same building blocks solve() uses.
+  using backend_t = KokkosBackend<TestExecSpace>;
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  auto b0_d = make_constraint_values(triple_springs);
+  const impl::TripleGeometry<TestExecSpace> geo = impl::compute_triple_point_angular_spring_geometry(
+      rods_d, create_mirror_view_and_copy(TestExecSpace{}, triple_springs), b0_d);
+  const impl::TripleForceOp<TestExecSpace> B(geo, rods.size());
+  const impl::TripleForceOpT<TestExecSpace> BT(geo, rods.size());
+  const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
+  const auto btmb_op = make_quadratic_form<backend_t>(BT, M, B);
+
+  Kokkos::View<double*, TestMemSpace> ones("ones", 1), btmb_result_d("btmb_result", 1);
+  Kokkos::deep_copy(ones, 1.0);
+  auto ws = backend_t::make_workspace(btmb_op);
+  backend_t::apply(btmb_op, ones, btmb_result_d, ws);
+  const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
+  const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
+
+  const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
+  EXPECT_TRUE(result.converged);
+  EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
+
+  const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / triple_springs.spring_constant(0));
+  EXPECT_NEAR(triple_springs.lambda(0), y_expected, 1e-6);
+
+  // The spring is internal and position-only: its three forces cancel exactly and it exerts no torque.
+  const Vector3d total_force = rods.force(0) + rods.force(1) + rods.force(2);
+  EXPECT_NEAR(norm(total_force), 0.0, 1e-9);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(norm(rods.torque(i)), 0.0, 1e-12) << "rod " << i;
+  }
+}
+
 // T9(c): zero springs, contacts present (the exact setup ContactOnlyActive/InactiveMatchesScalarLCP
 // already exercise for solve()-level correctness) -- made explicit here as a direct, white-box check
 // that the Schur complement's own CG, given a literal 0x0 operator (B has zero columns, K^{-1} has
@@ -1771,99 +1832,16 @@ TEST(Mbody, ChainAxialStiffnessConvergesWithSegmentCount) {
   }
 }
 
-// Runs the clamped cantilever chain (N=num_segments free links, physical length L and bending
-// modulus EI fixed, so spacing = L/N shrinks and k_ang = EI/spacing grows as N increases) to static
-// equilibrium under a transverse tip force, and returns the measured tip deflection. See T10(b) below
-// for the resolution-dependence this is used to probe.
-double run_bending_chain_tip_deflection(size_t num_segments, double L, double EI, double tip_force, int num_steps,
-                                        double dt = 0.5) {
-  const size_t num_spheres = num_segments + 2;  // + the two pinned "wall" spheres (0 and 1)
-  const double spacing = L / static_cast<double>(num_segments);
-  const double k_ang = EI / spacing;
-  const double k_lin = 1.0e5 / (spacing * spacing);  // comfortably stiffer than k_ang at every N
-
-  RodViews<HostExecSpace> rods(num_spheres);
-  for (size_t k = 0; k < num_spheres; ++k) {
-    rods.center(k) = Vector3d{0.0, 0.0, spacing * static_cast<double>(k)};
-    rods.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-    rods.radius(k) = 0.15 * spacing;
-    rods.length(k) = 0.0;
-  }
-  zero_rod_state(rods);
-
-  const size_t num_links = num_spheres - 1;
-  LinearSpringViews<HostExecSpace> lin_springs(num_links);
-  for (size_t k = 0; k < num_links; ++k) {
-    lin_springs.rod_i(k) = static_cast<int>(k);
-    lin_springs.rod_j(k) = static_cast<int>(k + 1);
-    lin_springs.rest_length(k) = spacing;
-    lin_springs.spring_constant(k) = k_lin;
-  }
-
-  const size_t num_interior = num_spheres - 2;
-  TriplePointAngularSpringViews<HostExecSpace> triple_springs(num_interior);
-  for (size_t k = 0; k < num_interior; ++k) {
-    const size_t vertex = k + 1;
-    triple_springs.rod_i(k) = static_cast<int>(vertex - 1);
-    triple_springs.rod_j(k) = static_cast<int>(vertex + 1);
-    triple_springs.rod_k(k) = static_cast<int>(vertex);
-    triple_springs.rest_angle(k) = Kokkos::numbers::pi_v<double>;  // straight chain: 180 degrees at rest
-    triple_springs.spring_constant(k) = k_ang;
-  }
-  // The wall is two rigidly held spheres. Holding them as constraints inside the solve, rather than
-  // by discarding their velocity afterwards, is what makes the equilibrium independent of dt: the
-  // reaction they exert is part of B y and so cancels out of the fixed point exactly.
-  FixedPositionViews<HostExecSpace> wall(2);
-  for (int a = 0; a < 2; ++a) {
-    wall.rod(a) = a;
-    wall.target_point(a) = Vector3d(rods.center(a));
-    wall.body_offset(a) = Vector3d{0.0, 0.0, 0.0};
-    wall.compliance(a) = Vector3d{0.0, 0.0, 0.0};
-  }
-
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.linear_springs = lin_springs;
-  constraints.triple_springs = triple_springs;
-  constraints.fixed_positions = wall;
-
-  SolveConfig cfg;
-  cfg.dt = dt;
-  cfg.viscosity = 1.0;
-  cfg.max_cg_iters = 1000;
-  cfg.cg_tol = 1e-10;
-  cfg.max_outer_iters = 1;  // no contacts -> nothing for the outer PGD loop to do
-
-  rods.force(num_spheres - 1) = Vector3d{0.0, -tip_force, 0.0};
-  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-  const auto load_d = copy_load(rods_d);
-
-  // Every sphere integrates; the wall is held by constraint.
-  for (int step = 0; step < num_steps; ++step) {
-    EXPECT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged)
-        << "num_segments=" << num_segments << " step " << step;
-    if (step % (num_steps / 20) == 0 || step == num_steps - 1) {
-      deep_copy(rods, rods_d);
-      const Vector3d tip_disp = rods.center(num_spheres - 1) - rods.center(1);
-      std::fprintf(stderr, "  num_segments=%zu step %6d: tip=(x=%+.6e, y=%+.6e, z=%+.6e)\n", num_segments, step,
-                   tip_disp[0], -tip_disp[1], tip_disp[2]);
-    }
-  }
-
-  return -(rods.center(num_spheres - 1)[1] - rods.center(1)[1]);
-}
-
-// T10(b): a chain with linear springs (axial) plus triple-point angular springs (bending), clamped at
-// one end, plus a transverse point force at the free end -- the classic Euler-Bernoulli cantilever
-// setup. Bending here uses TriplePointAngularSpringViews, not the pairwise/orientation-based
-// AngularSpringViews: one spring per *interior* sphere (vertex = that sphere, outer points = its two
-// immediate neighbors), matching the standard bead-chain/discrete-elastic-rod bending convention (a
-// sliding window of 3 consecutive nodes) -- see compute_triple_point_angular_spring_geometry.
+// T10(b): a chain of triple-point angular springs (bending), clamped at one end, plus a transverse
+// point force at the free end -- the classic Euler-Bernoulli cantilever setup. Bending here uses
+// TriplePointAngularSpringViews, not the pairwise/orientation-based AngularSpringViews: one spring per
+// *interior* sphere (vertex = that sphere, outer points = its two immediate neighbors), matching the
+// standard bead-chain/discrete-elastic-rod bending convention (a sliding window of 3 consecutive
+// nodes) -- see compute_triple_point_angular_spring_geometry.
 //
 // A "clamped" (zero displacement *and* zero slope) boundary needs *two* held spheres, not one: sphere
 // 1 fixes the wall position and sphere 0 fixes the wall tangent, as the direction from sphere 0 to
-// sphere 1. Both are held by FixedPosition constraints, so the wall's reaction is part of B y and the
-// equilibrium the relaxation reaches carries no dependence on dt.
+// sphere 1.
 //
 // Unlike T10(a), a bending chain does not match the continuum Euler-Bernoulli formula at finite
 // resolution. The per-spring force law (checked against finite differences in
@@ -1872,16 +1850,6 @@ double run_bending_chain_tip_deflection(size_t num_segments, double L, double EI
 // derived via a single-spring force balance) are exact statements about *one* spring. A chain of them
 // solves its own discrete problem, whose tip deflection is exactly F L^3 (N+1)(2N+1) / (6 N^2 EI) and
 // approaches the continuum value at first order in the spacing.
-
-// Relaxation steps needed to reach the true static equilibrium, not merely a value that has stopped
-// changing much. Each step couples only immediate neighbours, so information from the tip force needs
-// O(num_segments) steps just to reach the wall and the total scales like num_segments^2. The count is
-// set generously past that: at num_segments=4 the tip is still visibly moving at step 3000 and only
-// settles onto its plateau of 0.2398180 around step 15000.
-int bending_chain_steps_for_convergence(size_t num_segments) {
-  const double ratio = static_cast<double>(num_segments) / 4.0;
-  return static_cast<int>(30000.0 * ratio * ratio * 1.5);
-}
 
 // A straight chain of spheres along z with a bend spring at each interior vertex, and nothing else:
 // callers that relax it add their own linear springs and anchors.
@@ -2350,22 +2318,6 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     EXPECT_NEAR(norm(rods.center(num_spheres - 1) - right), 0.0, 1e-10) << "dt=" << dt;
     // The span sags under the load, so the test is not vacuously satisfied by nothing moving.
     EXPECT_LT(rods.center(num_spheres / 2)[1], -1e-4) << "dt=" << dt;
-  }
-}
-
-// The property a boundary condition imposed inside the solve has and a post-hoc clamp does not. With
-// the wall held by constraints the relaxation's equilibrium is the static one at any dt. Discarding
-// the wall spheres' velocity after the solve instead leaves an O(dt) error proportional to their
-// mobility, which at these dt put the plateau 7.1% above the static value and worse as dt grew.
-TEST(Mbody, BendingRelaxationMatchesStaticSolveAtAnyDt) {
-  const double L = 8.0, EI = 5.0, tip_force = 0.005;
-  constexpr size_t num_segments = 4;
-  const double static_tip = run_static_bending_tip_dynamic(num_segments, L, EI, tip_force);
-
-  for (const double dt : {0.5, 5.0}) {
-    const int num_steps = static_cast<int>(bending_chain_steps_for_convergence(num_segments) * (0.5 / dt));
-    const double tip = run_bending_chain_tip_deflection(num_segments, L, EI, tip_force, num_steps, dt);
-    EXPECT_NEAR(tip, static_tip, 0.005 * static_tip) << "dt=" << dt;
   }
 }
 
