@@ -28,7 +28,7 @@
 /// that fill them.
 
 // C++ core
-#include <concepts>      // for std::same_as
+#include <concepts>     // for std::same_as
 #include <type_traits>  // for std::false_type, std::true_type
 
 // Kokkos
@@ -39,10 +39,10 @@
 #include <mundy_geom/primitives.hpp>
 #include <mundy_math/Quaternion.hpp>  // for mundy::{quaternion_to_rotation_vector, rotation_vector_jacobian}
 #include <mundy_math/Scalar.hpp>
-#include <mundy_math/Vector3.hpp>  // for mundy::{cross, perp}
+#include <mundy_math/Vector3.hpp>          // for mundy::{cross, perp}
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
-#include <mundy_utils/throw_assert.hpp>
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -153,6 +153,9 @@ class SingleForceOp {
     MUNDY_THROW_ASSERT(out.extent(0) == range_size(), std::invalid_argument, "SingleForceOp: out size mismatch.");
 
     Kokkos::deep_copy(out, 0.0);
+    if (singles_.size() == 0) {
+      return;
+    }
     auto singles = singles_;
     Kokkos::parallel_for(
         "SingleForceOp::apply", Kokkos::RangePolicy<ExecSpace>(0, singles.size()), KOKKOS_LAMBDA(const int p) {
@@ -204,6 +207,9 @@ class SingleForceOpT {
     MUNDY_THROW_ASSERT(vel_omega.extent(0) == domain_size(), std::invalid_argument,
                        "SingleForceOpT: vel_omega size mismatch.");
     MUNDY_THROW_ASSERT(rate.extent(0) == range_size(), std::invalid_argument, "SingleForceOpT: rate size mismatch.");
+    if (singles_.size() == 0) {
+      return;
+    }
 
     auto singles = singles_;
     Kokkos::parallel_for(
@@ -359,6 +365,9 @@ class PairForceOp {
     MUNDY_THROW_ASSERT(out.extent(0) == range_size(), std::invalid_argument, "PairForceOp: out size mismatch.");
 
     Kokkos::deep_copy(out, 0.0);
+    if (pairs_.size() == 0) {
+      return;
+    }
     auto pairs = pairs_;
     Kokkos::parallel_for(
         "PairForceOp::apply", Kokkos::RangePolicy<ExecSpace>(0, pairs.size()), KOKKOS_LAMBDA(const int p) {
@@ -413,6 +422,9 @@ class PairForceOpT {
     MUNDY_THROW_ASSERT(vel_omega.extent(0) == domain_size(), std::invalid_argument,
                        "PairForceOpT: vel_omega size mismatch.");
     MUNDY_THROW_ASSERT(rate.extent(0) == range_size(), std::invalid_argument, "PairForceOpT: rate size mismatch.");
+    if (pairs_.size() == 0) {
+      return;
+    }
 
     auto pairs = pairs_;
     Kokkos::parallel_for(
@@ -532,6 +544,9 @@ class TripleForceOp {
     MUNDY_THROW_ASSERT(out.extent(0) == range_size(), std::invalid_argument, "TripleForceOp: out size mismatch.");
 
     Kokkos::deep_copy(out, 0.0);
+    if (triples_.size() == 0) {
+      return;
+    }
     auto triples = triples_;
     Kokkos::parallel_for(
         "TripleForceOp::apply", Kokkos::RangePolicy<ExecSpace>(0, triples.size()), KOKKOS_LAMBDA(const int p) {
@@ -586,6 +601,9 @@ class TripleForceOpT {
     MUNDY_THROW_ASSERT(vel_omega.extent(0) == domain_size(), std::invalid_argument,
                        "TripleForceOpT: vel_omega size mismatch.");
     MUNDY_THROW_ASSERT(rate.extent(0) == range_size(), std::invalid_argument, "TripleForceOpT: rate size mismatch.");
+    if (triples_.size() == 0) {
+      return;
+    }
 
     auto triples = triples_;
     Kokkos::parallel_for(
@@ -747,6 +765,9 @@ PairGeometry<ExecSpace> compute_contact_geometry(const RodViews<ExecSpace>& rods
   MUNDY_THROW_ASSERT(sep0.extent(0) == n, std::invalid_argument,
                      "compute_contact_geometry: sep0 must have one entry per contact.");
   PairGeometry<ExecSpace> geo(contacts.rod_i_view(), contacts.rod_j_view());
+  if (n == 0) {
+    return geo;
+  }
 
   auto rods_l = rods;
   auto geo_l = geo;
@@ -791,12 +812,15 @@ PairGeometry<ExecSpace> compute_contact_geometry(const RodViews<ExecSpace>& rods
 /// \brief Linear spring direction Jacobian and initial stretch, via rod centers.
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-PairGeometry<ExecSpace> compute_linear_spring_geometry(const RodViews<ExecSpace>& rods, const LinearSpringViews<ExecSpace>& springs,
-                                                       const B0View& b0) {
+PairGeometry<ExecSpace> compute_linear_spring_geometry(const RodViews<ExecSpace>& rods,
+                                                       const LinearSpringViews<ExecSpace>& springs, const B0View& b0) {
   const size_t n = springs.size();
   MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
                      "compute_linear_spring_geometry: b0 must have one entry per spring.");
   PairGeometry<ExecSpace> geo(springs.rod_i_view(), springs.rod_j_view());
+  if (n == 0) {
+    return geo;
+  }
 
   auto rods_l = rods;
   auto geo_l = geo;
@@ -824,12 +848,16 @@ PairGeometry<ExecSpace> compute_linear_spring_geometry(const RodViews<ExecSpace>
 /// \brief Angular spring axis Jacobian and initial bend angle, via rod tangents (orientation * e_z).
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-PairGeometry<ExecSpace> compute_angular_spring_geometry(const RodViews<ExecSpace>& rods, const AngularSpringViews<ExecSpace>& springs,
-                                                       const B0View& b0) {
+PairGeometry<ExecSpace> compute_angular_spring_geometry(const RodViews<ExecSpace>& rods,
+                                                        const AngularSpringViews<ExecSpace>& springs,
+                                                        const B0View& b0) {
   const size_t n = springs.size();
   MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
                      "compute_angular_spring_geometry: b0 must have one entry per spring.");
   PairGeometry<ExecSpace> geo(springs.rod_i_view(), springs.rod_j_view());
+  if (n == 0) {
+    return geo;
+  }
 
   auto rods_l = rods;
   auto geo_l = geo;
@@ -881,6 +909,9 @@ TripleGeometry<ExecSpace> compute_triple_point_angular_spring_geometry(
   MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
                      "compute_triple_point_angular_spring_geometry: b0 must have one entry per spring.");
   TripleGeometry<ExecSpace> geo(springs.rod_i_view(), springs.rod_j_view(), springs.rod_k_view());
+  if (n == 0) {
+    return geo;
+  }
 
   auto rods_l = rods;
   auto geo_l = geo;
@@ -905,8 +936,7 @@ TripleGeometry<ExecSpace> compute_triple_point_angular_spring_geometry(
         // is sin(angle) directly. An absolute cutoff would miss near-degenerate cross products at large
         // length scales and reject valid ones at small scales.
         const double d1_d2 = Kokkos::sqrt(d1_sq * d2_sq);
-        const Vector3d n_hat =
-            (cross_norm > 1e-9 * d1_d2) ? cross_v1v2 / cross_norm : perp(v1);
+        const Vector3d n_hat = (cross_norm > 1e-9 * d1_d2) ? cross_v1v2 / cross_norm : perp(v1);
         const double angle = minor_angle(v1, v2);
 
         const Vector3d force_1 = cross(v1, n_hat) / d1_sq;
@@ -941,6 +971,9 @@ SingleGeometry<ExecSpace> compute_fixed_position_geometry(const RodViews<ExecSpa
 
   Kokkos::View<int*, memory_space> owner("fixed_position_owner", anchors.num_constraints());
   SingleGeometry<ExecSpace> geo(owner);
+  if (num_anchors == 0) {
+    return geo;
+  }
 
   auto rods_l = rods;
   auto geo_l = geo;
@@ -1030,6 +1063,9 @@ SingleGeometry<ExecSpace> compute_fixed_pose_geometry(const RodViews<ExecSpace>&
 
   Kokkos::View<int*, memory_space> owner("fixed_pose_owner", anchors.num_constraints());
   SingleGeometry<ExecSpace> geo(owner);
+  if (num_anchors == 0) {
+    return geo;
+  }
 
   auto rods_l = rods;
   auto geo_l = geo;
@@ -1078,24 +1114,29 @@ SingleGeometry<ExecSpace> compute_fixed_pose_geometry(const RodViews<ExecSpace>&
 /// set would otherwise surface only as a failure to converge, a long way from its cause.
 template <typename ExecSpace>
 size_t count_doubly_anchored_rods(const ConstraintSet<ExecSpace>& constraints, size_t num_rods) {
-  Kokkos::View<int*, typename ExecSpace::memory_space> anchor_count("anchor_count", num_rods);
-
-  auto count = anchor_count;
   auto fixed_positions = constraints.fixed_positions;
-  Kokkos::parallel_for(
-      "count_fixed_position_anchors", Kokkos::RangePolicy<ExecSpace>(0, fixed_positions.size()),
-      KOKKOS_LAMBDA(const int a) {
-        const int rod = fixed_positions.rod(a);
-        Kokkos::atomic_add(&count(rod), 1);
-      });
-
   auto fixed_poses = constraints.fixed_poses;
-  Kokkos::parallel_for(
-      "count_fixed_pose_anchors", Kokkos::RangePolicy<ExecSpace>(0, fixed_poses.size()),
-      KOKKOS_LAMBDA(const int a) {
-        const int rod = fixed_poses.rod(a);
-        Kokkos::atomic_add(&count(rod), 1);
-      });
+  if (fixed_positions.size() + fixed_poses.size() < 2) {
+    return 0;
+  }
+
+  Kokkos::View<int*, typename ExecSpace::memory_space> anchor_count("anchor_count", num_rods);
+  auto count = anchor_count;
+  if (fixed_positions.size() > 0) {
+    Kokkos::parallel_for(
+        "count_fixed_position_anchors", Kokkos::RangePolicy<ExecSpace>(0, fixed_positions.size()),
+        KOKKOS_LAMBDA(const int a) {
+          const int rod = fixed_positions.rod(a);
+          Kokkos::atomic_add(&count(rod), 1);
+        });
+  }
+  if (fixed_poses.size() > 0) {
+    Kokkos::parallel_for(
+        "count_fixed_pose_anchors", Kokkos::RangePolicy<ExecSpace>(0, fixed_poses.size()), KOKKOS_LAMBDA(const int a) {
+          const int rod = fixed_poses.rod(a);
+          Kokkos::atomic_add(&count(rod), 1);
+        });
+  }
 
   size_t doubly_anchored = 0;
   Kokkos::parallel_reduce(
@@ -1135,6 +1176,9 @@ FirstView concat_vectors(const FirstView& first, const OtherViews&... others) {
 
   size_t offset = 0;
   auto append = [&out, &offset](const FirstView& v) {
+    if (v.extent(0) == 0) {
+      return;
+    }
     Kokkos::deep_copy(Kokkos::subview(out, Kokkos::pair<size_t, size_t>(offset, offset + v.extent(0))), v);
     offset += v.extent(0);
   };
@@ -1179,6 +1223,9 @@ Kokkos::View<double*, typename ExecSpace::memory_space> reciprocal(
     const Kokkos::View<double*, typename ExecSpace::memory_space>& v) {
   using memory_space = typename ExecSpace::memory_space;
   Kokkos::View<double*, memory_space> out("reciprocal", v.extent(0));
+  if (v.extent(0) == 0) {
+    return out;
+  }
   Kokkos::parallel_for(
       "reciprocal", Kokkos::RangePolicy<ExecSpace>(0, v.extent(0)),
       KOKKOS_LAMBDA(const int i) { out(i) = 1.0 / v(i); });
