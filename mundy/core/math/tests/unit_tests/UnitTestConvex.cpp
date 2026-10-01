@@ -1465,6 +1465,15 @@ TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+// Every residual is a norm, so that of a zero-length iterate is exactly zero.
+TEST(Convex, EmptyResidualsAreZero) {
+  using backend_t = KokkosBackend<Kokkos::DefaultExecutionSpace>;
+  const Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space> x("x", 0), grad("grad", 0);
+  const LowerBoundSpace<double> space{.lower_bound = 0.0};
+  EXPECT_EQ(LinfNormProjectedGradientResidual{}(backend_t{}, x, grad, space), 0.0);
+  EXPECT_EQ(LinfNormProjectedDiffResidual{}(backend_t{}, x, grad, space), 0.0);
+}
+
 TEST(Convex, KokkosAnalyticalSolutions) {
 #if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
     !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
