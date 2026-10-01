@@ -271,6 +271,14 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
   EXPECT_NEAR(x_host(1), 0.0, 1e-8);
   EXPECT_NEAR(x_host(2), 1.0, 1e-8);
 }
+
+// Every residual is a norm, so that of a zero-length vector is exactly zero.
+TEST(LinearSystem, EmptyResidualsAreZero) {
+  const view_t r("r", 0), b("b", 0);
+  EXPECT_EQ(L2Residual{}(kokkos_backend_t{}, r, b), 0.0);
+  EXPECT_EQ(RelativeL2Residual{}(kokkos_backend_t{}, r, b), 0.0);
+  EXPECT_EQ(LinfResidual{}(kokkos_backend_t{}, r, b), 0.0);
+}
 //@}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 

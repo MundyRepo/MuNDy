@@ -75,9 +75,13 @@ struct RelativeL2Residual {
 struct LinfResidual {
   template <class Backend, class RVector, class BVector, class ReductionScalar = impl::vector_value_type<RVector>>
   KOKKOS_FUNCTION ReductionScalar operator()(const Backend& backend, const RVector& r, const BVector&) const {
+    const size_t n = Backend::size(r);
+    if (n == 0) {
+      return ReductionScalar(0);
+    }
     ReductionScalar max_val;
     Backend::template reduce_max<ReductionScalar>(
-        r, Backend::size(r),
+        r, n,
         KOKKOS_LAMBDA(const int i, ReductionScalar& m) {
           const ReductionScalar v = abs(Backend::vector_data(r, i));
           if (v > m) m = v;
@@ -112,7 +116,10 @@ struct LinfNormProjectedGradientResidual {
 
     using value_type = ReductionScalar;
 
-    size_t n = Backend::size(x);
+    const size_t n = Backend::size(x);
+    if (n == 0) {
+      return value_type(0);
+    }
     value_type largest_abs_gradient;
     Backend::template reduce_max<value_type>(
         x, n,
@@ -148,7 +155,10 @@ struct LinfNormProjectedDiffResidual {
                                              const ConvexSpace& convex_space) const {
     using value_type = ReductionScalar;
 
-    size_t num_unknowns = Backend::size(x);
+    const size_t num_unknowns = Backend::size(x);
+    if (num_unknowns == 0) {
+      return value_type(0);
+    }
     constexpr value_type small_step_size = static_cast<value_type>(1e-6);
     value_type largest_abs_diff;
     Backend::template reduce_max<value_type>(
