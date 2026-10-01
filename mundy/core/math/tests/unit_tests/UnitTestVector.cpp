@@ -1477,6 +1477,30 @@ TYPED_TEST(VectorSingleTypeTest, Views) {
   }
 }
 
+TYPED_TEST(VectorSingleTypeTest, ViewSubset) {
+  using T = TypeParam;
+  Vector<T, 5> v{1, 2, 3, 4, 5};
+
+  auto head = v.template view_subset<0, 2>();
+  auto middle = v.template view_subset<1, 3>();
+  auto tail = v.template view_subset<3, 2>();
+  static_assert(decltype(head)::size == 2 && decltype(middle)::size == 3 && decltype(tail)::size == 2);
+  is_close_debug(head[0], 1, "view_subset<0, 2> read failed.");
+  is_close_debug(head[1], 2, "view_subset<0, 2> read failed.");
+  is_close_debug(middle[0], 2, "view_subset<1, 3> read failed.");
+  is_close_debug(middle[2], 4, "view_subset<1, 3> read failed.");
+  is_close_debug(tail[0], 4, "view_subset<3, 2> read failed.");
+  is_close_debug(tail[1], 5, "view_subset<3, 2> read failed.");
+
+  // Writes through a subset reach the parent.
+  middle[1] = static_cast<T>(30);
+  is_close_debug(v[2], 30, "view_subset is not a view.");
+
+  const Vector<T, 5>& const_v = v;
+  const auto const_middle = const_v.template view_subset<1, 3>();
+  is_close_debug(const_middle[1], 30, "const view_subset read failed.");
+}
+
 template <typename T>
 struct CallableOnlyAccessor {
   T* data_;

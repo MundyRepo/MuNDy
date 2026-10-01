@@ -120,6 +120,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     INSTALLABLE
   )
 
+  tribits_add_executable_and_test(
+    UnitTestEigenvalues
+    SOURCES UnitTestEigenvalues.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
   # Belos-backed solve tests are active only when the Belos + Tpetra TPLs are enabled; the source guards itself on
   # HAVE_MUNDYMATH_{BELOS,TPETRA} and is an empty (trivially passing) translation unit otherwise.
   tribits_add_executable_and_test(

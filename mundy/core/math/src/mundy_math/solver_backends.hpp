@@ -99,17 +99,22 @@ struct KokkosBackend {
  public:
   using exec_space = ExecSpace;
 
- public:
-  template <class Vector>
-  static auto make_vector_like(const Vector& q) {
-    return Vector("make_vector_like",
-                  q.extent(0));  // Kokkos::View has no label-less allocating ctor; a size alone resolves to
-                                 // the (incompatible) pointer-wrapping overload instead.
-  }
+  // Vector and operator sizes are runtime values.
+  static constexpr bool has_static_sizes = false;
 
-  // make_domain/range_vector is host only, but may be called from KOKKOS_FUNCTION code being called on the host
+ public:
+  // The vector factories are host only, but may be called from KOKKOS_FUNCTION code being called on the host
   // This will cause warnings, but is otherwise perfectly valid, so we suppress the warnings for these functions
   MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
+
+  template <class Vector>
+  KOKKOS_INLINE_FUNCTION static auto make_vector_like(const Vector& q) {
+    // Kokkos::View has no label-less allocating ctor; a size alone resolves to the pointer-wrapping overload.
+    KOKKOS_IF_ON_HOST((return Vector("make_vector_like", q.extent(0));));
+    KOKKOS_IF_ON_DEVICE((MUNDY_THROW_REQUIRE(false, std::logic_error,
+                                             "KokkosBackend::make_vector_like: cannot be called from device code.");
+                         return Vector("make_vector_like", q.extent(0));));
+  }
 
   template <class LinearOp>
   KOKKOS_INLINE_FUNCTION static auto make_domain_vector(const LinearOp& op) {
@@ -151,6 +156,15 @@ struct KokkosBackend {
       static_assert(dependent_false_v<LinearOp>,
                     "KokkosBackend::make_range_vector requires DenseMatView or op.make_range_vector().");
     }
+  }
+
+  /// \brief An uninitialized Vector of the given size.
+  template <class Vector>
+  KOKKOS_INLINE_FUNCTION static Vector make_vector(size_t size) {
+    KOKKOS_IF_ON_HOST((return Vector(Kokkos::view_alloc(Kokkos::WithoutInitializing, "make_vector"), size);));
+    KOKKOS_IF_ON_DEVICE(
+        (MUNDY_THROW_REQUIRE(false, std::logic_error, "KokkosBackend::make_vector: cannot be called from device code.");
+         return Vector("make_vector", size);));
   }
 
   MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
@@ -209,6 +223,12 @@ struct KokkosBackend {
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static decltype(auto) vector_data(Vector& x, size_t i) {
     return x(i);
+  }
+
+  /// \brief The entries [begin, end) of x, aliasing its storage.
+  template <class Vector>
+  KOKKOS_INLINE_FUNCTION static auto subvector(const Vector& x, size_t begin, size_t end) {
+    return Kokkos::subview(x, Kokkos::pair<size_t, size_t>(begin, end));
   }
 
   template <class DestVector, class SrcVector>
@@ -364,6 +384,16 @@ struct KokkosBackend {
     }
   }
 
+  /// \brief z := x .* y, elementwise.
+  template <class XVector, class YVector, class ZVector>
+  static void elementwise_mul(const XVector& x, const YVector& y, ZVector& z) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && y.extent(0) == z.extent(0), std::invalid_argument,
+                       "x, y, and z must have the same size.");
+    Kokkos::parallel_for(
+        "elementwise_mul", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i) { z(i) = x(i) * y(i); });
+  }
+
   template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>
   static void wrapped_axpbyz(const Scalar alpha, const XVector& x, const Scalar beta, const YVector& y, ZVector& z,
                              const Wrapper& wrapper) {
@@ -448,8 +478,25 @@ struct KokkosBackend {
 
 /// \brief Backend for Mundy math within a kernel
 struct MundyMathBackend {
+  // Vector and operator sizes are compile-time constants.
+  static constexpr bool has_static_sizes = true;
+
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static auto make_vector_like(const Vector& /*x*/) {
+    return Vector();
+  }
+
+  /// \brief A Vector of Size Scalars.
+  template <class Scalar, size_t Size>
+  KOKKOS_INLINE_FUNCTION static auto make_vector() {
+    return ::mundy::Vector<Scalar, Size>();
+  }
+
+  /// \brief A Vector of the given size, which must equal Vector's compile-time size.
+  template <class Vector>
+  KOKKOS_INLINE_FUNCTION static Vector make_vector(size_t size) {
+    MUNDY_THROW_ASSERT(size == Vector::size, std::invalid_argument,
+                       "MundyMathBackend::make_vector: size must equal the vector's compile-time size.");
     return Vector();
   }
 
@@ -535,6 +582,41 @@ struct MundyMathBackend {
     return 0;
   }
 
+  /// \brief The compile-time size of a Vector.
+  template <class Vector>
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_size() {
+    return std::remove_cvref_t<Vector>::size;
+  }
+
+  /// \brief The compile-time domain size of a mundy::Matrix or of an op providing static_domain_size().
+  template <class LinearOp>
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() {
+    using op_t = std::remove_cvref_t<LinearOp>;
+    if constexpr (is_matrix_v<op_t>) {
+      return op_t::num_cols;
+    } else if constexpr (requires { op_t::static_domain_size(); }) {
+      return op_t::static_domain_size();
+    } else {
+      static_assert(dependent_false_v<op_t>,
+                    "MundyMathBackend::static_domain_size: op must be a mundy::Matrix or "
+                    "provide static_domain_size().");
+    }
+  }
+
+  /// \brief The compile-time range size of a mundy::Matrix or of an op providing static_range_size().
+  template <class LinearOp>
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() {
+    using op_t = std::remove_cvref_t<LinearOp>;
+    if constexpr (is_matrix_v<op_t>) {
+      return op_t::num_rows;
+    } else if constexpr (requires { op_t::static_range_size(); }) {
+      return op_t::static_range_size();
+    } else {
+      static_assert(dependent_false_v<op_t>,
+                    "MundyMathBackend::static_range_size: op must be a mundy::Matrix or provide static_range_size().");
+    }
+  }
+
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static decltype(auto) vector_data(const Vector& x, size_t i) {
     return x[i];
@@ -543,6 +625,12 @@ struct MundyMathBackend {
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static decltype(auto) vector_data(Vector& x, size_t i) {
     return x[i];
+  }
+
+  /// \brief The Size entries of x starting at Offset, aliasing its storage.
+  template <size_t Offset, size_t Size, class Vector>
+  KOKKOS_INLINE_FUNCTION static auto subvector(Vector& x) {
+    return x.template view_subset<Offset, Size>();
   }
 
   template <class DestVector, class SrcVector>
@@ -622,6 +710,12 @@ struct MundyMathBackend {
   template <class Scalar, class XVector, class YVector>
   KOKKOS_INLINE_FUNCTION static void axpby(const Scalar alpha, const XVector& x, const Scalar beta, YVector& y) {
     y = alpha * x + beta * y;
+  }
+
+  /// \brief z := x .* y, elementwise.
+  template <class XVector, class YVector, class ZVector>
+  KOKKOS_INLINE_FUNCTION static void elementwise_mul(const XVector& x, const YVector& y, ZVector& z) {
+    z = ::mundy::elementwise_mul(x, y);
   }
 
   template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>

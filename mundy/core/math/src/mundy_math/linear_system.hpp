@@ -86,12 +86,14 @@ class LinearSystem {
   using workspace_t = Workspace;
   using value_type = impl::vector_value_type<rhs_vector_t>;
 
+  KOKKOS_INLINE_FUNCTION
   LinearSystem(Backend, LinearOp&& A, RhsVector&& b)
       : A_(std::forward<LinearOp>(A)), b_(std::forward<RhsVector>(b)), workspace_(impl::make_workspace(A_.get())) {
     MUNDY_THROW_ASSERT(Backend::domain_size(A_.get()) == Backend::range_size(A_.get()), std::invalid_argument,
                        "LinearSystem: operator must be square.");
   }
 
+  KOKKOS_INLINE_FUNCTION
   LinearSystem(Backend, LinearOp&& A, RhsVector&& b, workspace_t workspace)
       : A_(std::forward<LinearOp>(A)), b_(std::forward<RhsVector>(b)), workspace_(std::move(workspace)) {
     MUNDY_THROW_ASSERT(Backend::domain_size(A_.get()) == Backend::range_size(A_.get()), std::invalid_argument,
@@ -168,7 +170,7 @@ class CGState {
 /// \brief The CG strategy: initialize/iterate/done/result over (Problem, State).
 ///
 /// alpha/beta are fixed by the conjugate-direction recurrence, so there is no step policy -- only how the
-/// residual is measured (ResidualPolicy) is pluggable.
+/// residual is measured (ResidualPolicy, a VectorResidualPolicy) is pluggable.
 template <class ResidualPolicy, class Config>
 class CGStrategy {
  public:
@@ -196,7 +198,7 @@ class CGStrategy {
     backend_t::deep_copy(state.p(), state.r());
 
     state.r_dot_r() = backend_t::template dot<value_type>(state.r(), state.r());
-    state.residual() = resid_(backend, state.r(), prob.b());
+    state.residual() = measure(backend, state.r(), prob.b());
     state.iter() = 0;
     state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
     if (state.converged()) {
@@ -224,7 +226,7 @@ class CGStrategy {
     backend_t::axpby(-alpha, state.Ap(), one, state.r());
 
     state.r_dot_r() = backend_t::template dot<value_type>(state.r(), state.r());
-    state.residual() = resid_(backend, state.r(), prob.b());
+    state.residual() = measure(backend, state.r(), prob.b());
     ++state.iter();
 
     if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
@@ -248,6 +250,13 @@ class CGStrategy {
   }
 
  private:
+  template <class Backend, class RVector, class BVector>
+  KOKKOS_FUNCTION value_type measure(const Backend& backend, const RVector& r, const BVector& b) const {
+    static_assert(VectorResidualPolicy<residual_policy_t, Backend, RVector, BVector>,
+                  "CGStrategy: ResidualPolicy must be a VectorResidualPolicy.");
+    return resid_(backend, r, b);
+  }
+
   residual_policy_t resid_;
   config_t cfg_;
 };
@@ -357,6 +366,12 @@ class CGInvOp {
   KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
   size_t domain_size() const { return Backend::domain_size(op_storage_.get()); }
   size_t range_size() const { return Backend::range_size(op_storage_.get()); }
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op>();
+  }
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op>();
+  }
   auto make_domain_vector() const { return Backend::make_domain_vector(op_storage_.get()); }
   auto make_range_vector() const { return Backend::make_range_vector(op_storage_.get()); }
   // clang-format on

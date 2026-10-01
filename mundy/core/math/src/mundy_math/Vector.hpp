@@ -37,6 +37,7 @@
 #include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
 #include <mundy_math/Scalar.hpp>                // for mundy::AScalar (interaction operators)
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/ShiftedAccessor.hpp>       // for mundy::get_shifted_accessor
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
 #include <mundy_math/cmath.hpp>
 #include <mundy_math/impl/VectorImpl.hpp>
@@ -353,6 +354,22 @@ class AVector {
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
     return impl::cast_impl<U>(std::make_index_sequence<N>{}, *this);
+  }
+
+  /// \brief Get a view into the Size entries starting at Offset
+  template <size_t Offset, size_t Size>
+  KOKKOS_INLINE_FUNCTION constexpr auto view_subset() {
+    static_assert(Offset + Size <= N, "AVector::view_subset: the subset must lie within the vector.");
+    auto shifted_data_accessor = get_shifted_accessor<T, Offset>(accessor_);
+    return AVector<T, Size, decltype(shifted_data_accessor)>(std::move(shifted_data_accessor));
+  }
+
+  /// \brief Get a view into the Size entries starting at Offset
+  template <size_t Offset, size_t Size>
+  KOKKOS_INLINE_FUNCTION constexpr auto view_subset() const {
+    static_assert(Offset + Size <= N, "AVector::view_subset: the subset must lie within the vector.");
+    auto shifted_data_accessor = get_shifted_accessor<T, Offset>(accessor_);
+    return AVector<T, Size, decltype(shifted_data_accessor)>(std::move(shifted_data_accessor));
   }
   //@}
 

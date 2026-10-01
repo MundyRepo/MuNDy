@@ -47,6 +47,12 @@ namespace mundy {
 
 namespace {
 
+static_assert(ProjectedResidualPolicy<LinfNormProjectedGradientResidual, MundyMathBackend, Vector3d, Vector3d,
+                                      LowerBoundSpace<double>>);
+static_assert(ProjectedResidualPolicy<LinfNormProjectedDiffResidual, MundyMathBackend, Vector3d, Vector3d,
+                                      LowerBoundSpace<double>>);
+static_assert(!ProjectedResidualPolicy<L2Residual, MundyMathBackend, Vector3d, Vector3d, LowerBoundSpace<double>>);
+
 //! \name MundyMath backend test problems
 //@{
 
@@ -1242,6 +1248,40 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   }
 }
 
+// The full mixed-CQPP chain (make_mixed_cqpp through solve_mixed_cqpp) constructed and solved inside a kernel.
+template <class Test>
+void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test) {
+  constexpr double tol = 1e-6;
+  Kokkos::View<double, Kokkos::DefaultExecutionSpace::memory_space> max_error("max_error");
+  Kokkos::View<bool, Kokkos::DefaultExecutionSpace::memory_space> converged("converged");
+  Kokkos::parallel_for(
+      "mixed_cqpp_in_kernel", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1), KOKKOS_LAMBDA(const int) {
+        const auto mixed_cqpp =
+            make_mixed_cqpp<MundyMathBackend>(test.get_DT(), test.get_M(), test.get_D(), test.get_q(), test.get_B(),
+                                              test.get_S(), test.get_BT(), test.get_b(), test.get_space_x());
+        const auto x_exact = test.get_exact_x();
+        auto x = x_exact;
+        auto grad = x_exact;
+        auto x_tmp = x_exact;
+        auto grad_tmp = x_exact;
+        for (size_t i = 0; i < x.size; ++i) {
+          x[i] = 99.99;
+        }
+        auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = tol});
+        auto state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+        const auto result = solve_mixed_cqpp(mixed_cqpp, pgd, state);
+
+        double error = 0.0;
+        for (size_t i = 0; i < x.size; ++i) {
+          error = max(error, abs(x[i] - x_exact[i]));
+        }
+        max_error() = error;
+        converged() = result.converged;
+      });
+  EXPECT_TRUE(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, converged)()) << test.name();
+  EXPECT_LE(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, max_error)(), 10 * tol) << test.name();
+}
+
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 void run_kokkos_test(const auto& test) {
   std::cout << "Running test: " << test.name() << std::endl;
@@ -1421,6 +1461,7 @@ TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
   auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
+  std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test_in_kernel(test_case), ...); }, test_cases);
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS

@@ -25,6 +25,7 @@
 #include <Kokkos_Core.hpp>
 
 // C++ core:
+#include <concepts>
 #include <stdexcept>
 
 // Mundy
@@ -38,12 +39,21 @@ namespace mundy {
 
 //! \name Residual policies
 //@{
-// A residual policy maps a solver's current state to a scalar convergence measure computed through a Backend. The
-// convergence check (residual <= tol) is fixed; which residual is measured is the swappable choice. Two families
-// live here: plain-vector residuals over a residual vector r (for linear-system solves) and projected-gradient
-// residuals over (x, grad, space) (for constrained convex solves).
+// A residual policy maps a solver's state to a scalar convergence measure. The convergence check (residual <= tol) is
+// fixed; which residual is measured is the swappable choice. Policies are grouped by the contract they satisfy, each
+// named by a concept; a solver states which contracts it accepts.
+//@}
 
-/// \brief res = ||r||_2 (absolute). The classic linear-solve convergence measure.
+//! \name Vector residuals: policy(backend, r, b), a residual vector r measured against a reference vector b
+//@{
+
+template <class Policy, class Backend, class RVector, class BVector>
+concept VectorResidualPolicy =
+    requires(const Policy& policy, const Backend& backend, const RVector& r, const BVector& b) {
+      { policy(backend, r, b) } -> std::convertible_to<impl::vector_value_type<RVector>>;
+    };
+
+/// \brief res = ||r||_2 (absolute).
 struct L2Residual {
   template <class Backend, class RVector, class BVector, class ReductionScalar = impl::vector_value_type<RVector>>
   KOKKOS_FUNCTION ReductionScalar operator()(const Backend&, const RVector& r, const BVector&) const {
@@ -51,7 +61,7 @@ struct L2Residual {
   }
 };
 
-/// \brief res = ||r||_2 / ||b||_2 (relative to the right-hand side). Scale-independent, unlike L2Residual.
+/// \brief res = ||r||_2 / ||b||_2 (relative). Scale-independent, unlike L2Residual.
 struct RelativeL2Residual {
   template <class Backend, class RVector, class BVector, class ReductionScalar = impl::vector_value_type<RVector>>
   KOKKOS_FUNCTION ReductionScalar operator()(const Backend&, const RVector& r, const BVector& b) const {
@@ -75,6 +85,17 @@ struct LinfResidual {
         max_val);
     return max_val;
   }
+};
+
+//@}
+
+//! \name Projected residuals: policy(backend, x, grad, space), an iterate and its gradient against a convex space
+//@{
+
+template <class Policy, class Backend, class XVector, class GradVector, class ConvexSpace>
+concept ProjectedResidualPolicy = requires(const Policy& policy, const Backend& backend, const XVector& x,
+                                           const GradVector& grad, const ConvexSpace& space) {
+  { policy(backend, x, grad, space) } -> std::convertible_to<impl::vector_value_type<GradVector>>;
 };
 
 /// \brief res = ||proj_grad(x)||_inf, the max absolute projected gradient entry (Eq 2.2 of Dai & Fletcher 2005).
@@ -144,6 +165,24 @@ struct LinfNormProjectedDiffResidual {
         largest_abs_diff);
 
     return largest_abs_diff / small_step_size;
+  }
+};
+
+//@}
+
+//! \name Change residuals: policy(current, previous), the change of a scalar estimate between iterates
+//@{
+
+template <class Policy, class Scalar>
+concept ChangeResidualPolicy = requires(const Policy& policy, Scalar current, Scalar previous) {
+  { policy(current, previous) } -> std::convertible_to<Scalar>;
+};
+
+/// \brief res = |current - previous| (absolute).
+struct ChangeResidual {
+  template <class Scalar>
+  KOKKOS_FUNCTION Scalar operator()(Scalar current, Scalar previous) const {
+    return abs(current - previous);
   }
 };
 //@}

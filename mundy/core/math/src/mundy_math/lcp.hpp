@@ -59,10 +59,12 @@ class LCP {
   using workspace_t = Workspace;
   using value_type = impl::vector_value_type<q_vector_t>;
 
+  KOKKOS_INLINE_FUNCTION
   LCP(Backend, LinearOp&& A, QVector&& q)
       : A_(std::forward<LinearOp>(A)), q_(std::forward<QVector>(q)), workspace_(impl::make_workspace(A_.get())) {
   }
 
+  KOKKOS_INLINE_FUNCTION
   LCP(Backend, LinearOp&& A, QVector&& q, workspace_t workspace)
       : A_(std::forward<LinearOp>(A)), q_(std::forward<QVector>(q)), workspace_(std::move(workspace)) {
   }
