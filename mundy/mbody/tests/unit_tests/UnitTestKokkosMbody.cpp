@@ -129,6 +129,45 @@ void zero_rod_state(const RodViews<HostExecSpace>& rods) {
   }
 }
 
+// Time loops stage their rods and constraints once, step them in place on TestExecSpace, and copy back only what they
+// assert on.
+
+// rods' current force/torque, in storage of its own: solve() accumulates the constraint forces into rods'.
+template <typename Space>
+Kokkos::View<double*, typename Space::memory_space> copy_load(const RodViews<Space>& rods) {
+  Kokkos::View<double*, typename Space::memory_space> load("load", rods.force_torque_view().extent(0));
+  Kokkos::deep_copy(load, rods.force_torque_view());
+  return load;
+}
+
+// force/torque := load and velocity/omega := 0, the state solve() expects on entry to a step.
+template <typename Space>
+void reset_rod_state(const RodViews<Space>& rods, const Kokkos::View<double*, typename Space::memory_space>& load) {
+  Kokkos::deep_copy(rods.force_torque_view(), load);
+  Kokkos::deep_copy(rods.velocity_omega_view(), 0.0);
+}
+
+// Advance every rod over dt: center += dt * velocity, orientation rotated by omega * dt.
+template <typename Space>
+void advance_rods(const RodViews<Space>& rods, double dt) {
+  Kokkos::parallel_for(
+      "advance_rods", Kokkos::RangePolicy<Space>(0, rods.size()), KOKKOS_LAMBDA(const int i) {
+        rods.center(i) = rods.center(i) + dt * rods.velocity(i);
+        auto orientation = rods.orientation(i);
+        rotate_quaternion(orientation, Vector3d(rods.omega(i)), dt);
+      });
+}
+
+// One backward-Euler step under a constant external load.
+template <typename Space>
+PGDResult<double> step_rods(const RodViews<Space>& rods, const ConstraintSet<Space>& constraints,
+                            const SolveConfig& cfg, const Kokkos::View<double*, typename Space::memory_space>& load) {
+  reset_rod_state(rods, load);
+  const PGDResult<double> result = solve(rods, constraints, cfg);
+  advance_rods(rods, cfg.dt);
+  return result;
+}
+
 // Central finite difference of `value_of(rods)` with respect to (vel,omega)*eps, compared against
 // PairForceOpT's analytical rate at vel_omega.
 void expect_rate_matches_finite_difference(std::function<double(const RodViews<HostExecSpace>&)> value_of,
@@ -429,13 +468,18 @@ TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
 
     zero_rod_state(rods);
     rods.force(0) = load;
-    ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt;
-    rods.center(0) = rods.center(0) + cfg.dt * rods.velocity(0);
+    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+    const auto load_d = copy_load(rods_d);
+
+    ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt;
+    deep_copy(rods, rods_d);
     EXPECT_NEAR(norm(rods.center(0) - target), 0.0, 1e-10) << "dt=" << dt;
 
-    zero_rod_state(rods);
-    rods.force(0) = load;
-    ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt;
+    reset_rod_state(rods_d, load_d);
+    ASSERT_TRUE(solve(rods_d, constraints_d, cfg).converged) << "dt=" << dt;
+    deep_copy(rods, rods_d);
+    deep_copy(constraints, constraints_d);
     EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-10) << "dt=" << dt;
     EXPECT_NEAR(norm(constraints.fixed_positions.lambda(0) + load), 0.0, 1e-10) << "dt=" << dt;
   }
@@ -546,15 +590,16 @@ TEST(Mbody, FixedPoseHoldsItsTarget) {
     cfg.cg_tol = 1e-14;
     cfg.max_outer_iters = 1;
 
+    zero_rod_state(rods);
+    rods.force(0) = load;
+    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+    const auto load_d = copy_load(rods_d);
     for (int step = 0; step < 60; ++step) {
-      zero_rod_state(rods);
-      rods.force(0) = load;
-      ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt << " step " << step;
-
-      rods.center(0) = rods.center(0) + cfg.dt * rods.velocity(0);
-      auto orientation = rods.orientation(0);
-      rotate_quaternion(orientation, Vector3d(rods.omega(0)), cfg.dt);
+      ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt << " step " << step;
     }
+    deep_copy(rods, rods_d);
+    deep_copy(constraints, constraints_d);
 
     const Vector3d r_world = rods.orientation(0) * body_offset;
     EXPECT_NEAR(norm(rods.center(0) + r_world - target_point), 0.0, 1e-9) << "dt=" << dt;
@@ -1008,36 +1053,32 @@ SolveInput make_chain_problem(double spring_constant) {
 
 // Sum of 0.5 * k * (stretch or bend-angle)^2 over every spring, computed from rod poses rather than from the solver's
 // multipliers.
-double elastic_energy(const RodViews<HostExecSpace>& rods, const LinearSpringViews<HostExecSpace>& lin_springs,
-                      const AngularSpringViews<HostExecSpace>& ang_springs) {
-  double energy = 0.0;
-  for (size_t k = 0; k < lin_springs.size(); ++k) {
-    const int i = lin_springs.rod_i(k);
-    const int j = lin_springs.rod_j(k);
-    const double stretch = norm(rods.center(j) - rods.center(i)) - lin_springs.rest_length(k);
-    energy += 0.5 * lin_springs.spring_constant(k) * stretch * stretch;
-  }
-  for (size_t k = 0; k < ang_springs.size(); ++k) {
-    const int i = ang_springs.rod_i(k);
-    const int j = ang_springs.rod_j(k);
-    const Vector3d tangent_i = rods.orientation(i) * Vector3d{0.0, 0.0, 1.0};
-    const Vector3d tangent_j = rods.orientation(j) * Vector3d{0.0, 0.0, 1.0};
-    const double bend = minor_angle(tangent_i, tangent_j) - ang_springs.rest_angle(k);
-    energy += 0.5 * ang_springs.spring_constant(k) * bend * bend;
-  }
-  return energy;
-}
-
-// Advance every rod over dt: center += dt * velocity, orientation rotated by omega * dt.
-void advance_rods(const RodViews<HostExecSpace>& rods, double dt) {
-  for (size_t i = 0; i < rods.size(); ++i) {
-    rods.center(i) = rods.center(i) + dt * rods.velocity(i);
-    const Vector3d omega = rods.omega(i);
-    const double omega_norm = norm(omega);
-    if (omega_norm > 1e-14) {
-      rods.orientation(i) = axis_angle_to_quaternion(omega / omega_norm, omega_norm * dt) * rods.orientation(i);
-    }
-  }
+template <typename Space>
+double elastic_energy(const RodViews<Space>& rods, const LinearSpringViews<Space>& lin_springs,
+                      const AngularSpringViews<Space>& ang_springs) {
+  double linear_energy = 0.0;
+  Kokkos::parallel_reduce(
+      "linear_spring_energy", Kokkos::RangePolicy<Space>(0, lin_springs.size()),
+      KOKKOS_LAMBDA(const int k, double& sum) {
+        const int i = lin_springs.rod_i(k);
+        const int j = lin_springs.rod_j(k);
+        const double stretch = norm(rods.center(j) - rods.center(i)) - lin_springs.rest_length(k);
+        sum += 0.5 * lin_springs.spring_constant(k) * stretch * stretch;
+      },
+      linear_energy);
+  double angular_energy = 0.0;
+  Kokkos::parallel_reduce(
+      "angular_spring_energy", Kokkos::RangePolicy<Space>(0, ang_springs.size()),
+      KOKKOS_LAMBDA(const int k, double& sum) {
+        const int i = ang_springs.rod_i(k);
+        const int j = ang_springs.rod_j(k);
+        const Vector3d tangent_i = rods.orientation(i) * Vector3d{0.0, 0.0, 1.0};
+        const Vector3d tangent_j = rods.orientation(j) * Vector3d{0.0, 0.0, 1.0};
+        const double bend = minor_angle(tangent_i, tangent_j) - ang_springs.rest_angle(k);
+        sum += 0.5 * ang_springs.spring_constant(k) * bend * bend;
+      },
+      angular_energy);
+  return linear_energy + angular_energy;
 }
 
 // Materialize any operator's action as a dense (row-major) matrix via repeated unit-vector applies.
@@ -1256,12 +1297,15 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
     p.cfg.dt = cfl * dt_crit;
     p.cfg.cg_tol = 1e-13;
 
-    std::vector<double> energy{elastic_energy(p.rods, p.constraints.linear_springs, p.constraints.angular_springs)};
+    zero_rod_state(p.rods);  // no external load: the springs relax toward rest
+    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+    const auto load_d = copy_load(rods_d);
+
+    std::vector<double> energy{elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs)};
     for (int step = 0; step < 40; ++step) {
-      zero_rod_state(p.rods);  // no external load: the springs relax toward rest
-      ASSERT_TRUE(solve_on_device(p.rods, p.constraints, p.cfg).converged) << "cfl=" << cfl << " step " << step;
-      advance_rods(p.rods, p.cfg.dt);
-      energy.push_back(elastic_energy(p.rods, p.constraints.linear_springs, p.constraints.angular_springs));
+      ASSERT_TRUE(step_rods(rods_d, constraints_d, p.cfg, load_d).converged) << "cfl=" << cfl << " step " << step;
+      energy.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
     }
 
     // Round-off floor relative to the initial energy, which the largest steps decay toward.
@@ -1346,10 +1390,22 @@ double expected_inv_drag_para(double radius, double length, double viscosity) {
   return (log_p - 0.207 + 0.98 * inv_p - 0.133 * inv_p2) / lprime / (2.0 * pi * viscosity);
 }
 
-// Two rods along z (T3's setup), one linear spring, no contacts/angular springs/external load. Steps
-// solve() + explicit position update (center += dt * velocity) `num_steps` times, zeroing force/torque/
-// velocity/omega before each step per solve()'s accumulate-in-place convention. Returns the stretch
-// after each step, with index 0 the initial (pre-stepping) stretch.
+// Sum over the linear springs of (center distance - rest length).
+template <typename Space>
+double summed_stretch(const RodViews<Space>& rods, const LinearSpringViews<Space>& lin_springs) {
+  double stretch = 0.0;
+  Kokkos::parallel_reduce(
+      "summed_stretch", Kokkos::RangePolicy<Space>(0, lin_springs.size()),
+      KOKKOS_LAMBDA(const int k, double& sum) {
+        sum += norm(rods.center(lin_springs.rod_j(k)) - rods.center(lin_springs.rod_i(k))) - lin_springs.rest_length(k);
+      },
+      stretch);
+  return stretch;
+}
+
+// Two rods along z (T3's setup), one linear spring, no contacts/angular springs/external load. Takes
+// `num_steps` backward-Euler steps and returns the stretch after each, with index 0 the initial
+// (pre-stepping) stretch.
 std::vector<double> run_relaxation(double spring_constant, double dt, int num_steps, double radius = 0.2,
                                    double length = 1.0, double viscosity = 1.0) {
   RodViews<HostExecSpace> rods =
@@ -1372,17 +1428,15 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
   cfg.cg_tol = 1e-12;
   cfg.max_outer_iters = 1;  // no contacts -> nothing for the outer PGD loop to do
 
-  std::vector<double> stretch;
-  stretch.push_back(norm(rods.center(1) - rods.center(0)) - lin_springs.rest_length(0));
+  zero_rod_state(rods);
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  const auto load_d = copy_load(rods_d);
 
+  std::vector<double> stretch{summed_stretch(rods_d, constraints_d.linear_springs)};
   for (int step = 0; step < num_steps; ++step) {
-    zero_rod_state(rods);
-    const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
-    EXPECT_TRUE(result.converged) << "step " << step;
-    for (size_t i = 0; i < rods.size(); ++i) {
-      rods.center(i) = rods.center(i) + cfg.dt * rods.velocity(i);
-    }
-    stretch.push_back(norm(rods.center(1) - rods.center(0)) - lin_springs.rest_length(0));
+    EXPECT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "step " << step;
+    stretch.push_back(summed_stretch(rods_d, constraints_d.linear_springs));
   }
   return stretch;
 }
@@ -1561,14 +1615,21 @@ SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, d
 
 // Brute-force over every pair, independent of whatever contact list the solver was given: positive
 // if any two spheres overlap (by that much), non-positive if none do.
-double max_overlap(const RodViews<HostExecSpace>& rods) {
-  double worst_gap = std::numeric_limits<double>::max();
-  for (size_t i = 0; i < rods.size(); ++i) {
-    for (size_t j = i + 1; j < rods.size(); ++j) {
-      const double gap = norm(rods.center(j) - rods.center(i)) - rods.radius(i) - rods.radius(j);
-      worst_gap = std::min(worst_gap, gap);
-    }
-  }
+template <typename Space>
+double max_overlap(const RodViews<Space>& rods) {
+  const int num_rods = static_cast<int>(rods.size());
+  double worst_gap = 0.0;
+  Kokkos::parallel_reduce(
+      "max_overlap", Kokkos::RangePolicy<Space>(0, num_rods * num_rods),
+      KOKKOS_LAMBDA(const int pair, double& min_gap) {
+        const int i = pair / num_rods;
+        const int j = pair % num_rods;
+        if (i < j) {
+          const double gap = norm(rods.center(j) - rods.center(i)) - rods.radius(i) - rods.radius(j);
+          min_gap = Kokkos::min(min_gap, gap);
+        }
+      },
+      Kokkos::Min<double>(worst_gap));
   return -worst_gap;
 }
 
@@ -1576,30 +1637,19 @@ TEST(Mbody, GridOfSpheresStaysOverlapFreeAndRelaxes) {
   SolveInput p = make_grid_problem(/*num_rows=*/4, /*num_cols=*/4, /*spacing=*/1.0, /*radius=*/0.35,
                                    /*spring_constant=*/3.0, /*kick_magnitude=*/0.35, /*seed=*/1234);
 
-  ASSERT_GT(max_overlap(p.rods), 0.0) << "test setup should start with a real overlap somewhere";
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+  const auto load_d = copy_load(rods_d);
+  ASSERT_GT(max_overlap(rods_d), 0.0) << "test setup should start with a real overlap somewhere";
 
   const int num_steps = 80;
   std::vector<double> energy_trace;
-  energy_trace.push_back(elastic_energy(p.rods, p.constraints.linear_springs, p.constraints.angular_springs));
+  energy_trace.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
 
   for (int step = 0; step < num_steps; ++step) {
-    zero_rod_state(p.rods);
-    const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
-    ASSERT_TRUE(result.converged) << "step " << step;
-
-    for (size_t i = 0; i < p.rods.size(); ++i) {
-      p.rods.center(i) = p.rods.center(i) + p.cfg.dt * p.rods.velocity(i);
-
-      const Vector3d omega = p.rods.omega(i);
-      const double omega_norm = norm(omega);
-      if (omega_norm > 1e-14) {
-        const Quaterniond dq = axis_angle_to_quaternion(omega / omega_norm, omega_norm * p.cfg.dt);
-        p.rods.orientation(i) = dq * p.rods.orientation(i);
-      }
-    }
-
-    ASSERT_LE(max_overlap(p.rods), 1e-4) << "overlap at step " << step;
-    energy_trace.push_back(elastic_energy(p.rods, p.constraints.linear_springs, p.constraints.angular_springs));
+    ASSERT_TRUE(step_rods(rods_d, constraints_d, p.cfg, load_d).converged) << "step " << step;
+    ASSERT_LE(max_overlap(rods_d), 1e-4) << "overlap at step " << step;
+    energy_trace.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
   }
 
   // Eventually relaxes: elastic energy shortly after the kick vs. at the end should have dropped
@@ -1687,17 +1737,18 @@ double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double ti
   cfg.cg_tol = 1e-12;
   cfg.max_outer_iters = 1;  // no contacts -> nothing for the outer PGD loop to do
 
+  rods.force(0) = Vector3d{0.0, 0.0, -tip_force};
+  rods.force(num_spheres - 1) = Vector3d{0.0, 0.0, tip_force};
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  const auto load_d = copy_load(rods_d);
+
   const int num_steps = 150;
   for (int step = 0; step < num_steps; ++step) {
-    zero_rod_state(rods);
-    rods.force(0) = Vector3d{0.0, 0.0, -tip_force};
-    rods.force(num_spheres - 1) = Vector3d{0.0, 0.0, tip_force};
-    const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
-    EXPECT_TRUE(result.converged) << "num_segments=" << num_segments << " step " << step;
-    for (size_t i = 0; i < num_spheres; ++i) {
-      rods.center(i) = rods.center(i) + cfg.dt * rods.velocity(i);
-    }
+    EXPECT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged)
+        << "num_segments=" << num_segments << " step " << step;
   }
+  deep_copy(rods, rods_d);
 
   const double L_final = norm(rods.center(num_spheres - 1) - rods.center(0));
   return tip_force * L / (L_final - L);
@@ -1782,15 +1833,17 @@ double run_bending_chain_tip_deflection(size_t num_segments, double L, double EI
   cfg.cg_tol = 1e-10;
   cfg.max_outer_iters = 1;  // no contacts -> nothing for the outer PGD loop to do
 
+  rods.force(num_spheres - 1) = Vector3d{0.0, -tip_force, 0.0};
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  const auto load_d = copy_load(rods_d);
+
+  // Every sphere integrates; the wall is held by constraint.
   for (int step = 0; step < num_steps; ++step) {
-    zero_rod_state(rods);
-    rods.force(num_spheres - 1) = Vector3d{0.0, -tip_force, 0.0};
-    const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
-    EXPECT_TRUE(result.converged) << "num_segments=" << num_segments << " step " << step;
-    for (size_t i = 0; i < num_spheres; ++i) {  // every sphere integrates; the wall is held by constraint
-      rods.center(i) = rods.center(i) + cfg.dt * rods.velocity(i);
-    }
+    EXPECT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged)
+        << "num_segments=" << num_segments << " step " << step;
     if (step % (num_steps / 20) == 0 || step == num_steps - 1) {
+      deep_copy(rods, rods_d);
       const Vector3d tip_disp = rods.center(num_spheres - 1) - rods.center(1);
       std::fprintf(stderr, "  num_segments=%zu step %6d: tip=(x=%+.6e, y=%+.6e, z=%+.6e)\n", num_segments, step,
                    tip_disp[0], -tip_disp[1], tip_disp[2]);
@@ -2046,19 +2099,16 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
       cfg.cg_tol = 1e-14;
       cfg.max_outer_iters = 1;
 
+      rods.force(0) = position_load;
+      rods.force(1) = pose_load;
+      rods.torque(1) = applied_torque;
+      const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+      const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+      const auto load_d = copy_load(rods_d);
       for (int step = 0; step < 200; ++step) {
-        zero_rod_state(rods);
-        rods.force(0) = position_load;
-        rods.force(1) = pose_load;
-        rods.torque(1) = applied_torque;
-        solve_on_device(rods, constraints, cfg);
-
-        for (int i = 0; i < 2; ++i) {
-          rods.center(i) = rods.center(i) + cfg.dt * rods.velocity(i);
-          auto orientation = rods.orientation(i);
-          rotate_quaternion(orientation, Vector3d(rods.omega(i)), cfg.dt);
-        }
+        step_rods(rods_d, constraints_d, cfg, load_d);
       }
+      deep_copy(rods, rods_d);
 
       const Vector3d position_offset = rods.center(0) - position_target;
       const Vector3d pose_offset = rods.center(1) - pose_target;
@@ -2114,14 +2164,15 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   cfg.cg_tol = 1e-12;
   cfg.outer_tol = 1e-12;
 
+  rods.force(1) = Vector3d{0.0, 0.0, -push};
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  const auto load_d = copy_load(rods_d);
   for (int step = 0; step < 100; ++step) {
-    zero_rod_state(rods);
-    rods.force(1) = Vector3d{0.0, 0.0, -push};
-    solve_on_device(rods, constraints, cfg);
-    for (int i = 0; i < 2; ++i) {
-      rods.center(i) = rods.center(i) + cfg.dt * rods.velocity(i);
-    }
+    step_rods(rods_d, constraints_d, cfg, load_d);
   }
+  deep_copy(rods, rods_d);
+  deep_copy(constraints, constraints_d);
 
   EXPECT_NEAR(norm(rods.center(0) - anchor_target), 0.0, 1e-10);
   EXPECT_NEAR(norm(rods.center(1) - rods.center(0)), 2.0 * radius, 1e-9);
@@ -2286,14 +2337,14 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     cfg.cg_tol = 1e-12;
     cfg.max_outer_iters = 1;
 
+    rods.force(num_spheres / 2) = Vector3d{0.0, -load, 0.0};
+    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+    const auto load_d = copy_load(rods_d);
     for (int step = 0; step < 200; ++step) {
-      zero_rod_state(rods);
-      rods.force(num_spheres / 2) = Vector3d{0.0, -load, 0.0};
-      ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt << " step " << step;
-      for (size_t i = 0; i < num_spheres; ++i) {
-        rods.center(i) = rods.center(i) + cfg.dt * rods.velocity(i);
-      }
+      ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt << " step " << step;
     }
+    deep_copy(rods, rods_d);
 
     EXPECT_NEAR(norm(rods.center(0) - left), 0.0, 1e-10) << "dt=" << dt;
     EXPECT_NEAR(norm(rods.center(num_spheres - 1) - right), 0.0, 1e-10) << "dt=" << dt;
