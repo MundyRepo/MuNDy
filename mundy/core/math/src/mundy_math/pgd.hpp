@@ -176,6 +176,8 @@ class PGDState {
   value_type step_size_{1};
 };
 
+/// \brief The PGD strategy: initialize/iterate/done/result over (Problem, State). ResidualPolicy is a
+/// ProjectedResidualPolicy.
 template <class StepPolicy, class ResidualPolicy, class Config>
 class PGDStrategy {
  public:
@@ -207,7 +209,7 @@ class PGDStrategy {
     backend_t::axpby(one, prob.q(), one, state.grad_tmp());
 
     // Dai-Fletcher Sec. 5 initial step
-    state.residual() = resid_(backend, state.x_tmp(), state.grad_tmp(), prob.space());
+    state.residual() = measure(backend, state.x_tmp(), state.grad_tmp(), prob.space());
 
     // Initialize iteration state (allow for early exit)
     state.iter() = 0;
@@ -243,7 +245,7 @@ class PGDStrategy {
     backend_t::axpby(one, prob.q(), one, state.grad());
 
     // residual & test
-    state.residual() = resid_(backend, state.x(), state.grad(), prob.space());
+    state.residual() = measure(backend, state.x(), state.grad(), prob.space());
     if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
       state.converged() = true;
       impl::workspace_commit(workspace);
@@ -269,6 +271,14 @@ class PGDStrategy {
   }
 
  private:
+  template <class Backend, class XVector, class GradVector, class ConvexSpace>
+  KOKKOS_FUNCTION value_type measure(const Backend& backend, const XVector& x, const GradVector& grad,
+                                     const ConvexSpace& space) const {
+    static_assert(ProjectedResidualPolicy<residual_policy_t, Backend, XVector, GradVector, ConvexSpace>,
+                  "PGDStrategy: ResidualPolicy must be a ProjectedResidualPolicy.");
+    return resid_(backend, x, grad, space);
+  }
+
   step_policy_t step_;
   residual_policy_t resid_;
   config_t cfg_;

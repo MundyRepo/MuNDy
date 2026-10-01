@@ -47,6 +47,28 @@ Vector3d spd_rhs() {
 
 using mm_backend_t = MundyMathBackend;
 
+static_assert(VectorResidualPolicy<L2Residual, mm_backend_t, Vector3d, Vector3d>);
+static_assert(VectorResidualPolicy<RelativeL2Residual, mm_backend_t, Vector3d, Vector3d>);
+static_assert(VectorResidualPolicy<LinfResidual, mm_backend_t, Vector3d, Vector3d>);
+
+// Solves spd_matrix() x = spd_rhs() inside a kernel, constructing the LinearSystem there.
+void solve_spd_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>& x,
+                         const Kokkos::View<bool, Kokkos::DefaultExecutionSpace::memory_space>& converged) {
+  Kokkos::parallel_for(
+      "solve_spd_in_kernel", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1), KOKKOS_LAMBDA(const int) {
+        const Matrix3d A{2.0,  -1.0, 0.0,   //
+                         -1.0, 2.0,  -1.0,  //
+                         0.0,  -1.0, 2.0};
+        auto prob = make_linear_system<mm_backend_t>(Matrix3d(A), Vector3d(A * Vector3d{1.0, 0.0, 1.0}));
+        auto state = make_cg_state(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
+        const auto result = solve_linear_system(prob, make_cg_solution_strategy(CGConfig<double>{}), state);
+        for (size_t i = 0; i < 3; ++i) {
+          x(i) = state.x()[i];
+        }
+        converged() = result.converged;
+      });
+}
+
 TEST(LinearSystem, MundyMathBackendConvergesToKnownSolution) {
   const Matrix3d A = spd_matrix();
   const Vector3d b = spd_rhs();
@@ -173,6 +195,19 @@ TEST(LinearSystem, CGInvOpReusedAcrossMultipleRhsAlwaysColdStarts) {
   for (int i = 0; i < 3; ++i) {
     EXPECT_NEAR(out2[i], expected2[i], 1e-6);
   }
+}
+
+// A LinearSystem constructed and solved inside a kernel.
+TEST(LinearSystem, MundyMathBackendInKernel) {
+  Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space> x("x", 3);
+  Kokkos::View<bool, Kokkos::DefaultExecutionSpace::memory_space> converged("converged");
+  solve_spd_in_kernel(x, converged);
+
+  const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+  EXPECT_TRUE(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, converged)());
+  EXPECT_NEAR(x_host(0), 1.0, 1e-8);
+  EXPECT_NEAR(x_host(1), 0.0, 1e-8);
+  EXPECT_NEAR(x_host(2), 1.0, 1e-8);
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS

@@ -21,6 +21,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/belos_solver.hpp
   src/mundy_math/convex_spaces.hpp
   src/mundy_math/cqpp.hpp
+  src/mundy_math/eigenvalues.hpp
   src/mundy_math/Hilbert.hpp
   src/mundy_math/impl/AccessorImpl.hpp
   src/mundy_math/impl/ArrayImpl.hpp

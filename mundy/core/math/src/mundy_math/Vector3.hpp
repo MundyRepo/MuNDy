@@ -28,8 +28,8 @@
 #include <cmath>
 #include <concepts>
 #include <initializer_list>
-#include <stdexcept>  // for std::invalid_argument
 #include <iostream>
+#include <stdexcept>    // for std::invalid_argument
 #include <type_traits>  // for std::decay_t
 #include <utility>
 

@@ -24,6 +24,10 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_math/Matrix.hpp>
+#include <mundy_math/Matrix3.hpp>
+#include <mundy_math/Vector.hpp>
+#include <mundy_math/Vector3.hpp>
 #include <mundy_math/linear_ops.hpp>
 #include <mundy_math/solver_backends.hpp>
 
@@ -244,6 +248,106 @@ struct SliceScaleOp {
         KOKKOS_LAMBDA(const int i) { y(off + i) = s * x(i); });
   }
 };
+
+TEST(LinearOperators, ShiftedOpWorksWithAWorkspaceOnlyChild) {
+  auto shifted = ShiftedOp(backend_t{}, /*sigma=*/0.5, WorkspaceOnlyScaleOp(2.0, 3));
+
+  const view_t x = make_view({1.0, 2.0, 3.0});
+  view_t y = shifted.make_range_vector();
+  shifted.apply(x, y);
+
+  const std::vector<double> result = to_host(y);
+  EXPECT_DOUBLE_EQ(result[0], (2.0 - 0.5) * 1.0);
+  EXPECT_DOUBLE_EQ(result[1], (2.0 - 0.5) * 2.0);
+  EXPECT_DOUBLE_EQ(result[2], (2.0 - 0.5) * 3.0);
+}
+
+TEST(LinearOperators, ShiftedOpMatchesAMinusSigmaIdentityOnMundyMathBackend) {
+  const Matrix3d A{2.0, -1.0, 0.5,   //
+                   -1.0, 3.0, 0.25,  //
+                   0.5, 0.25, -4.0};
+  constexpr double sigma = 1.75;
+  const auto shifted = make_shifted_op<MundyMathBackend>(sigma, A);
+
+  // Column j of the shifted operator is its action on the j-th basis vector.
+  for (size_t j = 0; j < 3; ++j) {
+    Vector3d e{0.0, 0.0, 0.0};
+    e[j] = 1.0;
+    Vector3d column{0.0, 0.0, 0.0};
+    MundyMathBackend::apply(shifted, e, column);
+    for (size_t i = 0; i < 3; ++i) {
+      EXPECT_DOUBLE_EQ(column[i], A(i, j) - (i == j ? sigma : 0.0)) << "entry (" << i << ", " << j << ")";
+    }
+  }
+}
+
+// MundyMathBackend Concat cases, each applied to x = (1, -2, 3) with integer entries so every sum is exact. A1 is 3x2
+// and A2 is 3x1; their transposes are 2x3 and 1x3.
+struct ConcatDomainCase {
+  // [A1 | A2] = [[1, 2, 7], [3, 4, 8], [5, 6, 9]]
+  KOKKOS_INLINE_FUNCTION Vector3d operator()() const {
+    const Matrix<double, 3, 2> A1{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
+    const Matrix<double, 3, 1> A2{7.0, 8.0, 9.0};
+    const auto op = make_concat_domain_op<MundyMathBackend>(A1, A2);
+    static_assert(std::remove_cvref_t<decltype(op)>::static_domain_size() == 3);
+    static_assert(std::remove_cvref_t<decltype(op)>::static_range_size() == 3);
+    Vector3d y;
+    MundyMathBackend::apply(op, Vector3d{1.0, -2.0, 3.0}, y);
+    return y;
+  }
+};
+
+struct ConcatRangeCase {
+  // [A1T; A2T] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+  KOKKOS_INLINE_FUNCTION Vector3d operator()() const {
+    const Matrix<double, 2, 3> A1T{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
+    const Matrix<double, 1, 3> A2T{7.0, 8.0, 9.0};
+    const auto op = make_concat_range_op<MundyMathBackend>(A1T, A2T);
+    static_assert(std::remove_cvref_t<decltype(op)>::static_domain_size() == 3);
+    static_assert(std::remove_cvref_t<decltype(op)>::static_range_size() == 3);
+    Vector3d y;
+    MundyMathBackend::apply(op, Vector3d{1.0, -2.0, 3.0}, y);
+    return y;
+  }
+};
+
+struct NestedConcatDomainCase {
+  // [A1 + A1 | A2] = [[2, 4, 7], [6, 8, 8], [10, 12, 9]]; the first child's sizes come from a SumOp.
+  KOKKOS_INLINE_FUNCTION Vector3d operator()() const {
+    const Matrix<double, 3, 2> A1{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
+    const Matrix<double, 3, 1> A2{7.0, 8.0, 9.0};
+    const auto op = make_concat_domain_op<MundyMathBackend>(make_sum_op<MundyMathBackend>(A1, A1), A2);
+    static_assert(std::remove_cvref_t<decltype(op)>::static_domain_size() == 3);
+    Vector3d y;
+    MundyMathBackend::apply(op, Vector3d{1.0, -2.0, 3.0}, y);
+    return y;
+  }
+};
+
+// Evaluates the case on the host and inside a kernel; both must equal the dense block product exactly.
+template <class Case>
+void expect_case_on_host_and_device(const Case& concat_case, const Vector3d& expected) {
+  const Vector3d host = concat_case();
+  Kokkos::View<double[3], Kokkos::DefaultExecutionSpace::memory_space> device("device");
+  Kokkos::parallel_for(
+      "concat_case", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1), KOKKOS_LAMBDA(const int) {
+        const Vector3d y = concat_case();
+        for (size_t i = 0; i < 3; ++i) {
+          device(i) = y[i];
+        }
+      });
+  const auto device_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, device);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_DOUBLE_EQ(host[i], expected[i]) << "host entry " << i;
+    EXPECT_DOUBLE_EQ(device_host(i), expected[i]) << "device entry " << i;
+  }
+}
+
+TEST(LinearOperators, ConcatOpsOnMundyMathBackend) {
+  expect_case_on_host_and_device(ConcatDomainCase{}, Vector3d{18.0, 19.0, 20.0});
+  expect_case_on_host_and_device(ConcatRangeCase{}, Vector3d{6.0, 12.0, 18.0});
+  expect_case_on_host_and_device(NestedConcatDomainCase{}, Vector3d{15.0, 14.0, 13.0});
+}
 
 TEST(LinearOperators, ConcatDomainOpSplitsInputAndSumsContributions) {
   // [op1 | op2]: op1 has domain 2 -> writes rows {0,1}; op2 has domain 1 -> writes row {2}; shared range 3.

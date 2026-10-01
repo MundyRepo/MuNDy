@@ -131,7 +131,7 @@ concept HasMakeWorkspaceNoArgMember = requires(const Op& op) {
 
 /// \brief The workspace for op: op.make_workspace() if op provides one, else NoWorkspace.
 template <class LinearOp>
-auto make_workspace(LinearOp&& op) {
+KOKKOS_INLINE_FUNCTION auto make_workspace(LinearOp&& op) {
   if constexpr (HasMakeWorkspaceNoArgMember<LinearOp>) {
     return std::forward<LinearOp>(op).make_workspace();
   } else {

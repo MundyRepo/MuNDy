@@ -73,6 +73,7 @@ class CQPP {
   using workspace_t = Workspace;
   using value_type = impl::vector_value_type<vector_t>;
 
+  KOKKOS_INLINE_FUNCTION
   CQPP(Backend, LinearOp&& A, QVector&& q, const space_t& space)
       : A_(std::forward<LinearOp>(A)),
         q_(std::forward<QVector>(q)),
@@ -80,6 +81,7 @@ class CQPP {
         workspace_(impl::make_workspace(A_.get())) {
   }
 
+  KOKKOS_INLINE_FUNCTION
   CQPP(Backend, LinearOp&& A, QVector&& q, const space_t& space, workspace_t workspace)
       : A_(std::forward<LinearOp>(A)), q_(std::forward<QVector>(q)), space_(space), workspace_(std::move(workspace)) {
   }
@@ -154,6 +156,7 @@ class MCQPP {
   using l_workspace_t = WorkspaceL;
   using value_type = impl::vector_value_type<q_vector_t>;
 
+  KOKKOS_INLINE_FUNCTION
   MCQPP(Backend, LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b, const space_t& space)
       : A_(std::forward<LinearOpA>(A)),
         q_(std::forward<QVector>(q)),
@@ -164,6 +167,7 @@ class MCQPP {
         l_workspace_(impl::make_workspace(L_.get())) {
   }
 
+  KOKKOS_INLINE_FUNCTION
   MCQPP(Backend, LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b, const space_t& space,
         a_workspace_t a_workspace, l_workspace_t l_workspace)
       : A_(std::forward<LinearOpA>(A)),
@@ -222,6 +226,7 @@ class CongruentMCQPP {
   using l_workspace_t = WorkspaceL;
   using value_type = impl::vector_value_type<q_vector_t>;
 
+  KOKKOS_INLINE_FUNCTION
   CongruentMCQPP(Backend, LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpL&& L, FVector&& f_b,
                  const space_t& space)
       : DT_(std::forward<LinearOpDT>(DT)),
@@ -237,6 +242,7 @@ class CongruentMCQPP {
         l_workspace_(impl::make_workspace(L_.get())) {
   }
 
+  KOKKOS_INLINE_FUNCTION
   CongruentMCQPP(Backend, LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpL&& L, FVector&& f_b,
                  const space_t& space, dt_workspace_t dt_workspace, m_workspace_t m_workspace,
                  d_workspace_t d_workspace, l_workspace_t l_workspace)
