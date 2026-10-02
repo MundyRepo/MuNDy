@@ -220,6 +220,10 @@ class CGStrategy {
     backend_t::apply(prob.A(), state.p(), state.Ap(), workspace);
     const value_type r_dot_r_old = state.r_dot_r();
     const value_type p_Ap = backend_t::template dot<value_type>(state.p(), state.Ap());
+    // p^T A p not positive: A is not positive definite on the Krylov space, so CG stops unconverged.
+    if (!(p_Ap > static_cast<value_type>(0))) {
+      return true;
+    }
 
     const value_type alpha = r_dot_r_old / p_Ap;
     backend_t::axpby(alpha, state.p(), one, state.x());
@@ -391,6 +395,8 @@ class CGInvOp {
     last_result_ = solve_linear_system(prob, strat, state);
 
     // A non-converged CG would silently return a wrong answer with no way for us to inform the caller, so we throw.
+    MUNDY_THROW_REQUIRE(last_result_.converged || last_result_.num_iters == cfg_.max_iters, std::runtime_error,
+                        "CGInvOp: CG stopped early: p^T A p <= 0, so the operator is not positive definite.");
     MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error, "CGInvOp: inner CG solve failed to converge.");
     Backend::deep_copy(out, x_);
   }
