@@ -65,6 +65,8 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
 
   const auto& lin_springs = constraints.linear_springs;
   const auto& ang_springs = constraints.angular_springs;
+  const auto& pins = constraints.pins;
+  const auto& fixed_lengths = constraints.fixed_lengths;
   const auto& triple_springs = constraints.triple_springs;
   const auto& fixed_positions = constraints.fixed_positions;
   const auto& fixed_poses = constraints.fixed_poses;
@@ -78,8 +80,7 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
                      "mbody::solve: a rod carries more than one fixed-position or fixed-pose anchor, leaving the "
                      "bilateral block rank deficient.");
 
-  // Contact (x-block) and spring (y-block, linear + axis-angular + triple-point-angular
-  // concatenated) geometry.
+  // Contact (x-block) and bilateral (y-block, concatenated in index-map order) geometry.
   view_t sep0("sep0", num_contacts);
   const impl::PairGeometry<ExecSpace> contact_geo = impl::compute_contact_geometry(rods, contacts, sep0);
 
@@ -89,7 +90,11 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
       impl::compute_linear_spring_geometry(rods, lin_springs, impl::subrange(b0, index_map.linear_springs));
   const impl::PairGeometry<ExecSpace> ang_geo =
       impl::compute_angular_spring_geometry(rods, ang_springs, impl::subrange(b0, index_map.angular_springs));
-  const impl::PairGeometry<ExecSpace> pair_spring_geo = impl::concat_pair_geometry(lin_geo, ang_geo);
+  const impl::PairGeometry<ExecSpace> pin_geo =
+      impl::compute_pin_geometry(rods, pins, impl::subrange(b0, index_map.pins));
+  const impl::PairGeometry<ExecSpace> length_geo =
+      impl::compute_fixed_length_geometry(rods, fixed_lengths, impl::subrange(b0, index_map.fixed_lengths));
+  const impl::PairGeometry<ExecSpace> pair_geo = impl::concat_pair_geometry(lin_geo, ang_geo, pin_geo, length_geo);
   const impl::TripleGeometry<ExecSpace> triple_geo = impl::compute_triple_point_angular_spring_geometry(
       rods, triple_springs, impl::subrange(b0, index_map.triple_springs));
   const impl::SingleGeometry<ExecSpace> fixed_position_geo = impl::compute_fixed_position_geometry(
@@ -100,22 +105,24 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
       impl::concat_single_geometry(fixed_position_geo, fixed_pose_geo);
   const view_t kinv_diag = impl::concat_vectors(impl::reciprocal<ExecSpace>(lin_springs.spring_constant_view()),
                                                 impl::reciprocal<ExecSpace>(ang_springs.spring_constant_view()),
+                                                view_t("pin_kinv", pins.num_constraints()),
+                                                view_t("fixed_length_kinv", fixed_lengths.num_constraints()),
                                                 impl::reciprocal<ExecSpace>(triple_springs.spring_constant_view()),
                                                 fixed_positions.compliance_view(), fixed_poses.compliance_view());
 
   // Operators.
   const impl::PairForceOp<ExecSpace> D(contact_geo, num_rods);
   const impl::PairForceOpT<ExecSpace> DT(contact_geo, num_rods);
-  const impl::PairForceOp<ExecSpace> B_pairs(pair_spring_geo, num_rods);
-  const impl::PairForceOpT<ExecSpace> BT_pairs(pair_spring_geo, num_rods);
+  const impl::PairForceOp<ExecSpace> B_pairs(pair_geo, num_rods);
+  const impl::PairForceOpT<ExecSpace> BT_pairs(pair_geo, num_rods);
   const impl::TripleForceOp<ExecSpace> B_triple(triple_geo, num_rods);
   const impl::TripleForceOpT<ExecSpace> BT_triple(triple_geo, num_rods);
   const impl::SingleForceOp<ExecSpace> B_single(single_geo, num_rods);
   const impl::SingleForceOpT<ExecSpace> BT_single(single_geo, num_rods);
-  const auto B_springs = make_concat_domain_op<backend_t>(B_pairs, B_triple);
-  const auto BT_springs = make_concat_range_op<backend_t>(BT_pairs, BT_triple);
-  const auto B = make_concat_domain_op<backend_t>(B_springs, B_single);
-  const auto BT = make_concat_range_op<backend_t>(BT_springs, BT_single);
+  const auto B_multibody = make_concat_domain_op<backend_t>(B_pairs, B_triple);
+  const auto BT_multibody = make_concat_range_op<backend_t>(BT_pairs, BT_triple);
+  const auto B = make_concat_domain_op<backend_t>(B_multibody, B_single);
+  const auto BT = make_concat_range_op<backend_t>(BT_multibody, BT_single);
   const impl::LocalDragMobilityOp<ExecSpace> M(cfg.viscosity, rods);
   // The mixed CQPP's "M" is dt * mobility: it maps a constraint force to the displacement it causes
   // over the step, not to a velocity. The other uses of M below (free-velocity prediction, final
@@ -215,6 +222,8 @@ PGDResult<double> solve(const RodViews<ExecSpace>& rods, const ConstraintSet<Exe
   Kokkos::deep_copy(contacts.lambda_view(), x);
   Kokkos::deep_copy(lin_springs.lambda_view(), impl::subrange(y, index_map.linear_springs));
   Kokkos::deep_copy(ang_springs.lambda_view(), impl::subrange(y, index_map.angular_springs));
+  Kokkos::deep_copy(pins.lambda_view(), impl::subrange(y, index_map.pins));
+  Kokkos::deep_copy(fixed_lengths.lambda_view(), impl::subrange(y, index_map.fixed_lengths));
   Kokkos::deep_copy(triple_springs.lambda_view(), impl::subrange(y, index_map.triple_springs));
   Kokkos::deep_copy(fixed_positions.lambda_view(), impl::subrange(y, index_map.fixed_positions));
   Kokkos::deep_copy(fixed_poses.lambda_view(), impl::subrange(y, index_map.fixed_poses));

@@ -73,6 +73,16 @@ Kokkos::View<double*, TestMemSpace> make_constraint_values(const FamilyViews& fa
 
 //@}
 
+//! \name Compile-time contracts
+//@{
+
+static_assert(is_views_container_v<PinViews<HostExecSpace>> && is_views_container_v<FixedLengthViews<HostExecSpace>>,
+              "Pin and fixed-length families must be views containers");
+static_assert(MirrorableType<PinViews<HostExecSpace>> && MirrorableType<FixedLengthViews<HostExecSpace>>,
+              "Pin and fixed-length families must be mirrorable");
+
+//@}
+
 //! \name Rod setup
 //@{
 
@@ -329,6 +339,17 @@ DenseMat dense_hcat(const DenseMat& A, const DenseMat& B) {
   return C;
 }
 
+/// \brief sqrt(sum_ij A_ij^2).
+double dense_frobenius_norm(const DenseMat& A) {
+  double sum = 0.0;
+  for (const auto& row : A) {
+    for (const double entry : row) {
+      sum += entry * entry;
+    }
+  }
+  return std::sqrt(sum);
+}
+
 /// \brief The x solving A x = b, by Gaussian elimination with partial pivoting.
 std::vector<double> dense_solve(DenseMat A, std::vector<double> b) {
   const size_t n = A.size();
@@ -358,6 +379,21 @@ std::vector<double> dense_solve(DenseMat A, std::vector<double> b) {
     x[i] = b[i] / A[i][i];
   }
   return x;
+}
+
+/// \brief ||A^-1||_F, an upper bound on ||A^-1||_2, from one solve per column.
+double dense_inverse_frobenius_norm(const DenseMat& A) {
+  const size_t n = A.size();
+  DenseMat inverse(n, std::vector<double>(n, 0.0));
+  for (size_t col = 0; col < n; ++col) {
+    std::vector<double> unit(n, 0.0);
+    unit[col] = 1.0;
+    const std::vector<double> x = dense_solve(A, unit);
+    for (size_t row = 0; row < n; ++row) {
+      inverse[row][col] = x[row];
+    }
+  }
+  return dense_frobenius_norm(inverse);
 }
 
 //@}
@@ -665,6 +701,66 @@ TEST(Mbody, SingleForceOpIsExactAdjoint) {
   EXPECT_NEAR(lhs, rhs, 1e-12 * std::max(1.0, std::abs(lhs)));
 }
 
+// The pair peer of the identity above. Rows share owner pairs, as a pin's three rows do.
+TEST(Mbody, PairAdjoint) {
+  constexpr size_t kNumRods = 4;
+  constexpr size_t kNumRows = 8;
+  constexpr size_t kGenDim = 6 * kNumRods;
+  const int owners_i[kNumRows] = {0, 0, 0, 2, 2, 2, 1, 3};
+  const int owners_j[kNumRows] = {1, 1, 1, 3, 3, 3, 3, 0};
+
+  Kokkos::View<int*, Kokkos::HostSpace> owner_i("owner_i", kNumRows), owner_j("owner_j", kNumRows);
+  for (size_t p = 0; p < kNumRows; ++p) {
+    owner_i(p) = owners_i[p];
+    owner_j(p) = owners_j[p];
+  }
+
+  std::mt19937 rng(20261002);
+  std::uniform_real_distribution<double> dist(-1.0, 1.0);
+  const impl::PairGeometry<HostExecSpace> geo_h(owner_i, owner_j);
+  for (size_t p = 0; p < kNumRows; ++p) {
+    const int row = static_cast<int>(p);
+    geo_h.force_i(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
+    geo_h.torque_i(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
+    geo_h.force_j(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
+    geo_h.torque_j(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
+  }
+  const impl::PairGeometry<TestExecSpace> geo(
+      Kokkos::create_mirror_view_and_copy(TestMemSpace{}, geo_h.owner_i_view()),
+      Kokkos::create_mirror_view_and_copy(TestMemSpace{}, geo_h.owner_j_view()),
+      Kokkos::create_mirror_view_and_copy(TestMemSpace{}, geo_h.jacobian_i_view()),
+      Kokkos::create_mirror_view_and_copy(TestMemSpace{}, geo_h.jacobian_j_view()));
+
+  const impl::PairForceOp<TestExecSpace> B(geo, kNumRods);
+  const impl::PairForceOpT<TestExecSpace> BT(geo, kNumRods);
+
+  Kokkos::View<double*, Kokkos::HostSpace> x("x", kNumRows), y("y", kGenDim);
+  for (size_t p = 0; p < kNumRows; ++p) {
+    x(p) = dist(rng);
+  }
+  for (size_t i = 0; i < kGenDim; ++i) {
+    y(i) = dist(rng);
+  }
+
+  Kokkos::View<double*, TestMemSpace> bx_d("bx", kGenDim), bty_d("bty", kNumRows);
+  B.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, x), bx_d);
+  BT.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, y), bty_d);
+  const auto bx = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bx_d);
+  const auto bty = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bty_d);
+
+  double lhs = 0.0;
+  double rhs = 0.0;
+  for (size_t i = 0; i < kGenDim; ++i) {
+    lhs += bx(i) * y(i);
+  }
+  for (size_t p = 0; p < kNumRows; ++p) {
+    rhs += x(p) * bty(p);
+  }
+
+  // Summation order is the only difference between the two sides.
+  EXPECT_NEAR(lhs, rhs, 1e-12 * std::max(1.0, std::abs(lhs)));
+}
+
 // The anchor is off the rod centre and the rod is turned, so the torque rows r_world x e_c are nonzero.
 TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   const Quaterniond tilt = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.7);
@@ -754,17 +850,77 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
   }
 }
 
+// Both rods turned, offset and spinning, so every lever-arm term is live. A central difference at eps = 1e-6 of
+// O(1) values errs by eps^2 |f'''| / 6 + eps_mach |f| / eps, about 2e-10.
+TEST(Mbody, HolonomicJacobians) {
+  RodViews<HostExecSpace> rods =
+      make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, axis_angle_to_quaternion(Vector3d{0.6, 0.0, 0.8}, 0.6),
+                          Vector3d{0.9, -0.4, 1.3}, axis_angle_to_quaternion(Vector3d{0.0, 0.8, -0.6}, 1.1));
+  zero_rod_state(rods);
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
+      Vector3d{0.3, -0.2, 0.1}, Vector3d{-0.4, 0.2, 0.5}, Vector3d{-0.1, 0.4, -0.3}, Vector3d{0.2, -0.3, 0.4});
+  const Vector3d offset_i{0.1, -0.2, 0.45};
+  const Vector3d offset_j{-0.15, 0.05, -0.4};
+
+  // Pin
+  PinViews<HostExecSpace> pins(1);
+  pins.rod_i(0) = 0;
+  pins.rod_j(0) = 1;
+  pins.body_offset_i(0) = offset_i;
+  pins.body_offset_j(0) = offset_j;
+  const auto pins_d = create_mirror_view_and_copy(TestExecSpace{}, pins);
+  auto pin_b0 = make_constraint_values(pins);
+  const impl::PairGeometry<TestExecSpace> pin_geo = impl::compute_pin_geometry(rods_d, pins_d, pin_b0);
+
+  auto pin_value_of = [&](const RodViews<HostExecSpace>& r) {
+    auto b = make_constraint_values(pins);
+    impl::compute_pin_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), pins_d, b);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
+  };
+  {
+    SCOPED_TRACE("pin");
+    const impl::PairForceOpT<TestExecSpace> rate_op(pin_geo, rods.size());
+    expect_rate_matches_finite_difference(pin_value_of, rods, rate_op, vel_omega, 1e-8);
+  }
+
+  // Fixed length
+  FixedLengthViews<HostExecSpace> lengths(1);
+  lengths.rod_i(0) = 0;
+  lengths.rod_j(0) = 1;
+  lengths.body_offset_i(0) = offset_i;
+  lengths.body_offset_j(0) = offset_j;
+  lengths.rest_length(0) = 1.2;
+  const auto lengths_d = create_mirror_view_and_copy(TestExecSpace{}, lengths);
+  auto length_b0 = make_constraint_values(lengths);
+  const impl::PairGeometry<TestExecSpace> length_geo =
+      impl::compute_fixed_length_geometry(rods_d, lengths_d, length_b0);
+
+  auto length_value_of = [&](const RodViews<HostExecSpace>& r) {
+    auto b = make_constraint_values(lengths);
+    impl::compute_fixed_length_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), lengths_d, b);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
+  };
+  {
+    SCOPED_TRACE("fixed length");
+    const impl::PairForceOpT<TestExecSpace> rate_op(length_geo, rods.size());
+    expect_rate_matches_finite_difference(length_value_of, rods, rate_op, vel_omega, 1e-8);
+  }
+}
+
 //@}
 
 //! \name Constraint packing
 //@{
 
-// Every family non-empty, each at a distinct prime size, so swapping any two moves an offset. Also pins the rows per
-// anchor: three per fixed position, six per fixed pose.
+// Every family non-empty, each at a distinct prime size, so swapping any two moves an offset. Also fixes the rows per
+// entry: three per pin and fixed position, six per fixed pose.
 TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
   ConstraintSet<HostExecSpace> constraints;
   constraints.linear_springs = LinearSpringViews<HostExecSpace>(2);
   constraints.angular_springs = AngularSpringViews<HostExecSpace>(3);
+  constraints.pins = PinViews<HostExecSpace>(13);
+  constraints.fixed_lengths = FixedLengthViews<HostExecSpace>(17);
   constraints.triple_springs = TriplePointAngularSpringViews<HostExecSpace>(5);
   constraints.fixed_positions = FixedPositionViews<HostExecSpace>(7);
   constraints.fixed_poses = FixedPoseViews<HostExecSpace>(11);
@@ -775,13 +931,17 @@ TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
   EXPECT_EQ(index_map.linear_springs.size(), 2u);
   EXPECT_EQ(index_map.angular_springs.begin, 2u);
   EXPECT_EQ(index_map.angular_springs.size(), 3u);
-  EXPECT_EQ(index_map.triple_springs.begin, 5u);
+  EXPECT_EQ(index_map.pins.begin, 5u);
+  EXPECT_EQ(index_map.pins.size(), 39u);
+  EXPECT_EQ(index_map.fixed_lengths.begin, 44u);
+  EXPECT_EQ(index_map.fixed_lengths.size(), 17u);
+  EXPECT_EQ(index_map.triple_springs.begin, 61u);
   EXPECT_EQ(index_map.triple_springs.size(), 5u);
-  EXPECT_EQ(index_map.fixed_positions.begin, 10u);
+  EXPECT_EQ(index_map.fixed_positions.begin, 66u);
   EXPECT_EQ(index_map.fixed_positions.size(), 21u);
-  EXPECT_EQ(index_map.fixed_poses.begin, 31u);
+  EXPECT_EQ(index_map.fixed_poses.begin, 87u);
   EXPECT_EQ(index_map.fixed_poses.size(), 66u);
-  EXPECT_EQ(index_map.total, 97u);
+  EXPECT_EQ(index_map.total, 153u);
 }
 
 //@}
@@ -1103,28 +1263,31 @@ struct DenseStep {
   std::vector<double> vel_omega;
 };
 
-/// \brief One step solved densely: b = b0 + dt B^T M F_ext, (dt B^T M B + K^-1) y = -b, and v = M (F_ext + B y).
+/// \brief The inverse Schur complement dt B^T M B + K^-1.
 ///
-/// The Schur complement's mobility is dt M, the displacement per unit force over one step.
-DenseStep dense_schur_step(const DenseMat& B, const DenseMat& M, const std::vector<double>& b0,
-                           const std::vector<double>& kinv, const std::vector<double>& force_torque_ext, double dt) {
-  const DenseMat BT = dense_transpose(B);
-  const std::vector<double> b_rate = dense_matvec(BT, dense_matvec(M, force_torque_ext));
-  std::vector<double> neg_b(b0.size());
-  for (size_t r = 0; r < b0.size(); ++r) {
-    neg_b[r] = -(b0[r] + dt * b_rate[r]);
-  }
-
-  DenseMat schur = dense_matmul(BT, dense_matmul(M, B));
+/// Its mobility is dt M, the displacement per unit force over one step.
+DenseMat dense_schur_matrix(const DenseMat& B, const DenseMat& M, const std::vector<double>& kinv, double dt) {
+  DenseMat schur = dense_matmul(dense_transpose(B), dense_matmul(M, B));
   for (size_t r = 0; r < schur.size(); ++r) {
     for (size_t c = 0; c < schur.size(); ++c) {
       schur[r][c] *= dt;
     }
     schur[r][r] += kinv[r];
   }
+  return schur;
+}
+
+/// \brief One step solved densely: b = b0 + dt B^T M F_ext, (dt B^T M B + K^-1) y = -b, and v = M (F_ext + B y).
+DenseStep dense_schur_step(const DenseMat& B, const DenseMat& M, const std::vector<double>& b0,
+                           const std::vector<double>& kinv, const std::vector<double>& force_torque_ext, double dt) {
+  const std::vector<double> b_rate = dense_matvec(dense_transpose(B), dense_matvec(M, force_torque_ext));
+  std::vector<double> neg_b(b0.size());
+  for (size_t r = 0; r < b0.size(); ++r) {
+    neg_b[r] = -(b0[r] + dt * b_rate[r]);
+  }
 
   DenseStep step;
-  step.y = dense_solve(schur, neg_b);
+  step.y = dense_solve(dense_schur_matrix(B, M, kinv, dt), neg_b);
   std::vector<double> total_force_torque = dense_matvec(B, step.y);
   for (size_t i = 0; i < total_force_torque.size(); ++i) {
     total_force_torque[i] += force_torque_ext[i];
@@ -1288,6 +1451,115 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     }
     EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-12) << "dt=" << dt;
     EXPECT_NEAR(norm(rods.velocity(num_spheres - 1)), 0.0, 1e-12) << "dt=" << dt;
+  }
+}
+
+// Pins and a fixed length are rigid rows (K^-1 = 0) beside a spring and an anchor. Rod 0 is held, a spring joins it to
+// rod 1, rod 1's end is pinned to rod 2's, and a fixed length joins rods 2 and 3, so the rigid columns stay
+// independent. CG stops at ||r||_2 <= cg_tol, so ||y - y*||_2 <= cg_tol ||A^-1||_2 with A = dt B^T M B + K^-1, and
+// v = M (F_ext + B y) adds a factor ||M B||_2. Frobenius norms bound both.
+TEST(Mbody, HolonomicDenseStep) {
+  constexpr size_t kNumRods = 4;
+  const Vector3d tilt_axis{0.6, 0.8, 0.0};
+  const double tilts[kNumRods] = {0.0, 0.3, -0.5, 0.8};
+  RodViews<HostExecSpace> rods(kNumRods);
+  for (size_t k = 0; k < kNumRods; ++k) {
+    const double s = static_cast<double>(k);
+    rods.center(k) = Vector3d{0.1 * s, -0.05 * s, 1.1 * s};
+    rods.orientation(k) = axis_angle_to_quaternion(tilt_axis, tilts[k]);
+    rods.radius(k) = 0.2;
+    rods.length(k) = 1.0;
+  }
+  zero_rod_state(rods);
+  rods.force(2) = Vector3d{0.3, -0.2, 0.1};
+  rods.force(3) = Vector3d{-0.1, 0.25, 0.2};
+  rods.torque(3) = Vector3d{0.05, -0.1, 0.08};
+
+  ConstraintSet<HostExecSpace> constraints;
+  constraints.linear_springs = LinearSpringViews<HostExecSpace>(1);
+  constraints.linear_springs.rod_i(0) = 0;
+  constraints.linear_springs.rod_j(0) = 1;
+  constraints.linear_springs.rest_length(0) = 1.0;
+  constraints.linear_springs.spring_constant(0) = 3.0;
+  constraints.pins = PinViews<HostExecSpace>(1);
+  constraints.pins.rod_i(0) = 1;
+  constraints.pins.rod_j(0) = 2;
+  constraints.pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.5};
+  constraints.pins.body_offset_j(0) = Vector3d{0.0, 0.0, -0.5};
+  constraints.fixed_lengths = FixedLengthViews<HostExecSpace>(1);
+  constraints.fixed_lengths.rod_i(0) = 2;
+  constraints.fixed_lengths.rod_j(0) = 3;
+  constraints.fixed_lengths.body_offset_i(0) = Vector3d{0.1, 0.0, 0.4};
+  constraints.fixed_lengths.body_offset_j(0) = Vector3d{0.0, -0.1, -0.4};
+  constraints.fixed_lengths.rest_length(0) = 0.35;
+  constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
+  set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, Vector3d(rods.center(0)));
+
+  SolveConfig cfg;
+  cfg.dt = 0.3;
+  cfg.viscosity = 1.0;
+  cfg.max_cg_iters = 1000;
+  cfg.cg_tol = 1e-10;
+  cfg.max_outer_iters = 1;
+
+  // Dense reference, built before solve() updates the inputs; B's columns follow the y-block order
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
+  auto b0_pin_d = make_constraint_values(constraints_d.pins);
+  auto b0_length_d = make_constraint_values(constraints_d.fixed_lengths);
+  auto b0_fixed_d = make_constraint_values(constraints_d.fixed_positions);
+  const impl::PairForceOp<TestExecSpace> B_lin(
+      impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin_d), kNumRods);
+  const impl::PairForceOp<TestExecSpace> B_pin(impl::compute_pin_geometry(rods_d, constraints_d.pins, b0_pin_d),
+                                               kNumRods);
+  const impl::PairForceOp<TestExecSpace> B_length(
+      impl::compute_fixed_length_geometry(rods_d, constraints_d.fixed_lengths, b0_length_d), kNumRods);
+  const impl::SingleForceOp<TestExecSpace> B_fixed(
+      impl::compute_fixed_position_geometry(rods_d, constraints_d.fixed_positions, b0_fixed_d), kNumRods);
+  const impl::LocalDragMobilityOp<TestExecSpace> M_op(cfg.viscosity, rods_d);
+
+  std::vector<double> b0, kinv;
+  const auto append_rows = [&b0, &kinv](const Kokkos::View<double*, TestMemSpace>& rows, double compliance) {
+    const auto rows_h = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rows);
+    for (size_t r = 0; r < rows_h.extent(0); ++r) {
+      b0.push_back(rows_h(r));
+      kinv.push_back(compliance);
+    }
+  };
+  append_rows(b0_lin_d, 1.0 / constraints.linear_springs.spring_constant(0));
+  append_rows(b0_pin_d, 0.0);
+  append_rows(b0_length_d, 0.0);
+  append_rows(b0_fixed_d, 0.0);
+
+  const DenseMat B = dense_hcat(
+      dense_hcat(dense_hcat(materialize_dense(B_lin), materialize_dense(B_pin)), materialize_dense(B_length)),
+      materialize_dense(B_fixed));
+  const DenseMat M = materialize_dense(M_op);
+  const auto force_torque_ext = rods.force_torque_view();
+  const DenseStep expected = dense_schur_step(
+      B, M, b0, kinv, std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()),
+      cfg.dt);
+  const double y_bound = cfg.cg_tol * dense_inverse_frobenius_norm(dense_schur_matrix(B, M, kinv, cfg.dt));
+  const double v_bound = dense_frobenius_norm(dense_matmul(M, B)) * y_bound;
+
+  // Solve
+  ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged);
+
+  std::vector<double> y{constraints.linear_springs.lambda(0)};
+  for (int c = 0; c < 3; ++c) {
+    y.push_back(constraints.pins.lambda(0)[c]);
+  }
+  y.push_back(constraints.fixed_lengths.lambda(0));
+  for (int c = 0; c < 3; ++c) {
+    y.push_back(constraints.fixed_positions.lambda(0)[c]);
+  }
+  ASSERT_EQ(y.size(), expected.y.size());
+  for (size_t r = 0; r < y.size(); ++r) {
+    EXPECT_NEAR(y[r], expected.y[r], y_bound) << "multiplier " << r;
+  }
+  for (size_t i = 0; i < 6 * kNumRods; ++i) {
+    EXPECT_NEAR(rods.velocity_omega_view()(i), expected.vel_omega[i], v_bound) << "entry " << i;
   }
 }
 
