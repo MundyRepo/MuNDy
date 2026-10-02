@@ -19,12 +19,7 @@
 // @HEADER
 
 /// \file
-/// \brief Correctness tests (T1-T10) for the rod/spring/contact MCQPP solver in KokkosMbody.hpp.
-///
-/// See that file for the underlying math and KokkosMbodyImpl.hpp for the operator/geometry machinery
-/// several of these tests exercise directly (white-box, via mundy::mbody::impl::...). T1-T6 and T9
-/// are all single-step (call solve() once, or exercise impl:: pieces directly); T7, T8, and T10 are
-/// multi-step time integration -- see their own section comments.
+/// \brief Unit tests for mundy::mbody::solve and the operators and geometry kernels behind it.
 
 // External
 #include <gtest/gtest.h>      // for TEST, EXPECT_NEAR, etc
@@ -53,14 +48,12 @@ namespace {
 //! \name Device staging
 //@{
 
-// Every library call runs on TestExecSpace. Inputs are built and results inspected on the host, in containers typed on
-// HostExecSpace, and staged across with create_mirror_view_and_copy / deep_copy.
+// Library calls run on TestExecSpace; inputs are built and results checked on the host in HostExecSpace containers.
 using TestExecSpace = Kokkos::DefaultExecutionSpace;
 using TestMemSpace = TestExecSpace::memory_space;
 using HostExecSpace = Kokkos::DefaultHostExecutionSpace;
 
-// solve() on TestExecSpace against device copies of host-staged inputs; the rods' and every family's state
-// (forces, velocities, multipliers) is copied back.
+/// \brief solve() on TestExecSpace for host inputs, which are updated in place.
 PGDResult<double> solve_on_device(const RodViews<HostExecSpace>& rods, const ConstraintSet<HostExecSpace>& constraints,
                                   const SolveConfig& cfg) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -71,8 +64,7 @@ PGDResult<double> solve_on_device(const RodViews<HostExecSpace>& rods, const Con
   return result;
 }
 
-// A constraint-value vector sized for one family. The geometry kernels fill a caller-owned view, so
-// the white-box tests that drive a kernel directly (rather than through solve()) size one here.
+/// \brief A device vector with one entry per constraint row of family, for a geometry kernel to fill.
 template <typename FamilyViews>
 Kokkos::View<double*, TestMemSpace> make_constraint_values(const FamilyViews& family) {
   return Kokkos::View<double*, TestMemSpace>("constraint_values", family.num_constraints());
@@ -83,6 +75,7 @@ Kokkos::View<double*, TestMemSpace> make_constraint_values(const FamilyViews& fa
 //! \name Rod setup
 //@{
 
+/// \brief Two rods with the given poses and a shared radius and length.
 RodViews<HostExecSpace> make_two_rod_system(const Vector3d& center_i, const Quaterniond& orientation_i,
                                             const Vector3d& center_j, const Quaterniond& orientation_j,
                                             double radius = 0.2, double length = 1.0) {
@@ -97,7 +90,7 @@ RodViews<HostExecSpace> make_two_rod_system(const Vector3d& center_i, const Quat
   return rods;
 }
 
-// Perturb every rod's pose by (vel, omega) * eps (host-only helper for finite-difference checks).
+/// \brief A copy of a two-rod system moved by (velocity, omega) * eps.
 RodViews<HostExecSpace> perturb_rods(const RodViews<HostExecSpace>& rods,
                                      const Kokkos::View<double*, Kokkos::HostSpace>& vel_omega, double eps) {
   RodViews<HostExecSpace> out = make_two_rod_system(rods.center(0), rods.orientation(0), rods.center(1),
@@ -118,6 +111,7 @@ RodViews<HostExecSpace> perturb_rods(const RodViews<HostExecSpace>& rods,
   return out;
 }
 
+/// \brief Zero every rod's force, torque, velocity and omega.
 void zero_rod_state(const RodViews<HostExecSpace>& rods) {
   for (size_t i = 0; i < rods.size(); ++i) {
     rods.force(i) = Vector3d{0.0, 0.0, 0.0};
@@ -127,6 +121,7 @@ void zero_rod_state(const RodViews<HostExecSpace>& rods) {
   }
 }
 
+/// \brief A two-rod velocity/omega vector.
 Kokkos::View<double*, Kokkos::HostSpace> make_vel_omega(const Vector3d& vel_i, const Vector3d& omega_i,
                                                         const Vector3d& vel_j, const Vector3d& omega_j) {
   Kokkos::View<double*, Kokkos::HostSpace> v("vel_omega", 12);
@@ -142,10 +137,9 @@ Kokkos::View<double*, Kokkos::HostSpace> make_vel_omega(const Vector3d& vel_i, c
 //! \name Time stepping
 //@{
 
-// Time loops stage their rods and constraints once, step them in place on TestExecSpace, and copy back only what they
-// assert on.
+// Time loops stage once, step on TestExecSpace, and copy back only what they check.
 
-// rods' current force/torque, in storage of its own: solve() accumulates the constraint forces into rods'.
+/// \brief A copy of rods' force/torque, kept apart because solve() adds the constraint forces into rods'.
 template <typename Space>
 Kokkos::View<double*, typename Space::memory_space> copy_load(const RodViews<Space>& rods) {
   Kokkos::View<double*, typename Space::memory_space> load("load", rods.force_torque_view().extent(0));
@@ -153,14 +147,14 @@ Kokkos::View<double*, typename Space::memory_space> copy_load(const RodViews<Spa
   return load;
 }
 
-// force/torque := load and velocity/omega := 0, the state solve() expects on entry to a step.
+/// \brief force/torque := load and velocity/omega := 0, the state solve() expects at the start of a step.
 template <typename Space>
 void reset_rod_state(const RodViews<Space>& rods, const Kokkos::View<double*, typename Space::memory_space>& load) {
   Kokkos::deep_copy(rods.force_torque_view(), load);
   Kokkos::deep_copy(rods.velocity_omega_view(), 0.0);
 }
 
-// Advance every rod over dt: center += dt * velocity, orientation rotated by omega * dt.
+/// \brief Advance every rod by dt: center += dt v, orientation rotated by omega dt.
 template <typename Space>
 void advance_rods(const RodViews<Space>& rods, double dt) {
   Kokkos::parallel_for(
@@ -171,7 +165,7 @@ void advance_rods(const RodViews<Space>& rods, double dt) {
       });
 }
 
-// One backward-Euler step under a constant external load.
+/// \brief One backward-Euler step under a constant external load.
 template <typename Space>
 PGDResult<double> step_rods(const RodViews<Space>& rods, const ConstraintSet<Space>& constraints,
                             const SolveConfig& cfg, const Kokkos::View<double*, typename Space::memory_space>& load) {
@@ -181,7 +175,7 @@ PGDResult<double> step_rods(const RodViews<Space>& rods, const ConstraintSet<Spa
   return result;
 }
 
-// The largest distance or angle any rod moved over its last step: dt * max(|velocity|, |omega|).
+/// \brief The largest distance or angle any rod moved over its last step, dt max(|v|, |omega|).
 template <typename Space>
 double max_step_displacement(const RodViews<Space>& rods, double dt) {
   double max_speed = 0.0;
@@ -199,8 +193,7 @@ double max_step_displacement(const RodViews<Space>& rods, double dt) {
 //! \name Finite differences
 //@{
 
-// Central finite difference of `value_of(rods)` with respect to (vel,omega)*eps, compared against
-// PairForceOpT's analytical rate at vel_omega.
+/// \brief Expect a pair constraint's rate under vel_omega to match a central difference of value_of.
 void expect_rate_matches_finite_difference(std::function<double(const RodViews<HostExecSpace>&)> value_of,
                                            const RodViews<HostExecSpace>& rods,
                                            const impl::PairGeometry<TestExecSpace>& geo,
@@ -222,7 +215,7 @@ void expect_rate_matches_finite_difference(std::function<double(const RodViews<H
 //! \name Dense linear algebra
 //@{
 
-// Materialize any operator's action as a dense (row-major) matrix via repeated unit-vector applies.
+/// \brief An operator as a dense row-major matrix, one unit-vector apply per column.
 template <typename Op>
 std::vector<std::vector<double>> materialize_dense(const Op& op) {
   const size_t rows = op.range_size();
@@ -241,8 +234,7 @@ std::vector<std::vector<double>> materialize_dense(const Op& op) {
   return dense;
 }
 
-// Minimal dense linear algebra over row-major std::vector matrices, for the cross-checks whose system
-// size is a runtime value rather than a template parameter.
+// Row-major dense matrices for reference solves whose size is known only at run time.
 using DenseMat = std::vector<std::vector<double>>;
 
 DenseMat dense_matmul(const DenseMat& A, const DenseMat& B) {
@@ -271,14 +263,14 @@ std::vector<double> dense_matvec(const DenseMat& A, const std::vector<double>& x
   return y;
 }
 
-// [A B]: B's columns appended to A's. Both have the same number of rows.
+/// \brief [A B], for A and B with the same number of rows.
 DenseMat dense_hcat(const DenseMat& A, const DenseMat& B) {
   DenseMat C = A;
   for (size_t i = 0; i < C.size(); ++i) C[i].insert(C[i].end(), B[i].begin(), B[i].end());
   return C;
 }
 
-// Solve A x = b by Gaussian elimination with partial pivoting (A is square, copied and destroyed).
+/// \brief The x solving A x = b, by Gaussian elimination with partial pivoting.
 std::vector<double> dense_solve(DenseMat A, std::vector<double> b) {
   const size_t n = A.size();
   for (size_t col = 0; col < n; ++col) {
@@ -309,16 +301,17 @@ constexpr size_t kChainNumRods = 6;
 constexpr size_t kChainNumSprings = 2 * (kChainNumRods - 1);  // linear + angular, one pair each link
 constexpr size_t kChainRodSpaceDim = 6 * kChainNumRods;
 
-// Everything one solve() call consumes. Shared by the chain and grid fixtures below.
+/// \brief The inputs to one solve().
 struct SolveInput {
   RodViews<HostExecSpace> rods;
   ConstraintSet<HostExecSpace> constraints;
   SolveConfig cfg;
 };
 
-// A chain rod0-spring-rod1-spring-...-rod(N-1): each rod is twisted a bit relative to its neighbor
-// (so adjacent tangents are never parallel, keeping the angular-spring axis well-defined), with a
-// small initial stretch/bend offset and nonzero external load on the end rods.
+/// \brief A chain of rods joined by linear and angular springs, slightly stretched and bent, loaded at both ends.
+///
+/// Each rod is turned a little from its neighbour so adjacent tangents are never parallel and every bend axis is
+/// defined.
 SolveInput make_chain_problem(double spring_constant) {
   SolveInput p;
   p.rods = RodViews<HostExecSpace>(kChainNumRods);
@@ -357,13 +350,12 @@ SolveInput make_chain_problem(double spring_constant) {
   p.cfg.viscosity = 1.0;
   p.cfg.max_cg_iters = 500;
   p.cfg.cg_tol = 1e-10;
-  p.cfg.max_outer_iters = 1;  // x has zero contacts -> the outer PGD loop has nothing to iterate on
+  p.cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
   p.cfg.outer_tol = 1e-10;
   return p;
 }
 
-// Sum of 0.5 * k * (stretch or bend-angle)^2 over every spring, computed from rod poses rather than from the solver's
-// multipliers.
+/// \brief Sum over every spring of 0.5 k (stretch or bend)^2, from rod poses.
 template <typename Space>
 double elastic_energy(const RodViews<Space>& rods, const LinearSpringViews<Space>& lin_springs,
                       const AngularSpringViews<Space>& ang_springs) {
@@ -392,8 +384,9 @@ double elastic_energy(const RodViews<Space>& rods, const LinearSpringViews<Space
   return linear_energy + angular_energy;
 }
 
-// A straight chain of spheres along z with a bend spring at each interior vertex, and nothing else:
-// callers that relax it add their own linear springs and anchors.
+/// \brief A straight chain of spheres along z with a bend spring at each interior vertex.
+///
+/// Callers add their own linear springs and anchors.
 struct BendChain {
   RodViews<HostExecSpace> rods;
   TriplePointAngularSpringViews<HostExecSpace> springs;
@@ -427,12 +420,7 @@ BendChain make_bend_chain(size_t num_spheres, double spacing, double k_ang) {
 //! \name Constraint Jacobians
 //@{
 
-// Stage 1 tests: T1 -- Jacobian consistency via finite differences.
-//
-// For each constraint type, perturb every rod's pose by (velocity, omega) * eps, recompute the
-// geometry kernel's constraint value (separation / stretch / angle), and compare the finite
-// difference against PairForceOpT's analytical rate. This is the acceptance test for
-// impl::PairForceOp/PairForceOpT before anything is built on top of them.
+// Each constraint's rate operator against a central difference of the constraint value its geometry kernel computes.
 
 TEST(Mbody, ContactJacobianMatchesFiniteDifference) {
   RodViews<HostExecSpace> rods =
@@ -516,17 +504,14 @@ TEST(Mbody, AngularSpringJacobianMatchesFiniteDifference) {
   expect_rate_matches_finite_difference(value_of, rods, geo, vel_omega, 1e-6);
 }
 
-// Three-body, position-only bend spring (TriplePointAngularSpringViews): the angle is measured at
-// rod_k (the vertex) between the position vectors to rod_i and rod_j, so unlike the two above this
-// needs a genuine 3-rod system and doesn't fit expect_rate_matches_finite_difference's 2-rod-specific
-// helpers -- written out directly instead of forcing that abstraction to fit.
+// Three rods, so the two-rod finite-difference helper does not apply.
 TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
   RodViews<HostExecSpace> rods(3);
   rods.center(0) = Vector3d{0.3, -0.2, 0.1};
   rods.center(1) = Vector3d{1.1, 0.4, -0.3};
   rods.center(2) = Vector3d{-0.2, 0.9, 0.5};  // the vertex
   for (size_t i = 0; i < 3; ++i) {
-    rods.orientation(i) = Quaterniond{1.0, 0.0, 0.0, 0.0};  // irrelevant: this constraint has no torque
+    rods.orientation(i) = Quaterniond{1.0, 0.0, 0.0, 0.0};  // unused: the constraint depends on positions only
     rods.radius(i) = 0.2;
     rods.length(i) = 0.0;
   }
@@ -547,8 +532,8 @@ TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
   rod_velocity(vel_omega, 0) = Vector3d{0.3, -0.1, 0.2};
   rod_velocity(vel_omega, 1) = Vector3d{-0.2, 0.4, 0.1};
   rod_velocity(vel_omega, 2) = Vector3d{0.1, 0.2, -0.3};
-  // omega left zero: unused by this constraint (no dependence on any rod's orientation).
 
+  // Central difference
   constexpr double eps = 1e-6;
   auto perturbed_b0 = [&](double sign) {
     RodViews<HostExecSpace> r(3);
@@ -564,6 +549,7 @@ TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
   };
   const double finite_diff_rate = (perturbed_b0(1.0) - perturbed_b0(-1.0)) / (2.0 * eps);
 
+  // Analytical rate
   const impl::TripleForceOpT<TestExecSpace> op_t(geo, rods.size());
   Kokkos::View<double*, TestMemSpace> rate("rate", 1);
   op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate);
@@ -571,13 +557,8 @@ TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
   EXPECT_NEAR(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate)(0), finite_diff_rate, 1e-6);
 }
 
-// The unary operator pair has no constraint family behind it yet, but its defining property is
-// already checkable and is exact: B and B^T are adjoint, so <B x, y> == <x, B^T y> for every x, y.
-// Rows deliberately share owners here -- one row per constrained degree of freedom of the same rod
-// is the normal shape of a single-body constraint, and sharing is what separates accumulating into a
-// rod's generalized block from overwriting it (the reason SingleForceOp's add is atomic). A forward
-// operator that overwrote, or indexed the wrong block, breaks the identity; one that is merely
-// mis-scaled does not, which is what the finite-difference tests above are for.
+// <B x, y> == <x, B^T y> for random x and y. Rows share owners, as one constraint's rows on one rod do, so a
+// forward operator that overwrites a rod's block instead of accumulating into it breaks the identity.
 TEST(Mbody, SingleForceOpIsExactAdjoint) {
   constexpr size_t kNumRods = 4;
   constexpr size_t kNumRows = 9;
@@ -626,14 +607,11 @@ TEST(Mbody, SingleForceOpIsExactAdjoint) {
     rhs += x(p) * bty(p);
   }
 
-  // Exact algebra: only summation order separates the two sides, so the floor is round-off.
+  // Summation order is the only difference between the two sides.
   EXPECT_NEAR(lhs, rhs, 1e-12 * std::max(1.0, std::abs(lhs)));
 }
 
-// The anchor sits on a material point well off the rod centre, and the rod is turned away from the
-// identity, so the torque rows r_world x e_c are genuinely exercised. A centred anchor leaves them
-// zero and would check nothing past the identity block -- exactly the degenerate case that makes an
-// axis-aligned shortcut look sufficient.
+// The anchor is off the rod centre and the rod is turned, so the torque rows r_world x e_c are nonzero.
 TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   const Quaterniond tilt = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.7);
   RodViews<HostExecSpace> rods =
@@ -654,10 +632,12 @@ TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
       Vector3d{0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 0.0}, Vector3d{0.4, -0.3, 0.2}, Vector3d{-0.2, 0.5, 0.3});
 
+  // Analytical rate
   const impl::SingleForceOpT<TestExecSpace> op_t(geo, rods.size());
   Kokkos::View<double*, TestMemSpace> rate_d("rate", anchors.num_constraints());
   op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate_d);
 
+  // Central difference
   constexpr double eps = 1e-6;
   auto b0_plus_d = make_constraint_values(anchors);
   auto b0_minus_d = make_constraint_values(anchors);
@@ -674,10 +654,8 @@ TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   }
 }
 
-// The matrix the pose kernel's orientation rows are built from, checked on its own against a central
-// difference of the rotation vector it differentiates. The pose test below covers only errors above
-// the series cutoff, so the angles here straddle it: the coefficient on [theta]_x^2 switches from its
-// closed form to its series there, and the two must agree across the seam.
+// The inverse left Jacobian against a central difference of the rotation vector. The angles straddle the switch
+// between its closed form and its series.
 TEST(Mbody, RotationVectorJacobianMatchesFiniteDifference) {
   const Quaterniond target = axis_angle_to_quaternion(Vector3d{0.3, -0.5, 0.8}, 0.9);
   const Vector3d omega{0.4, -0.3, 0.25};
@@ -699,10 +677,8 @@ TEST(Mbody, RotationVectorJacobianMatchesFiniteDifference) {
   }
 }
 
-// Both halves of a fixed pose are exact. The position rows' Jacobian is exact by construction; the
-// orientation rows use SO(3)'s inverse left Jacobian rather than the identity usually substituted for
-// it, so they match a finite difference to round-off at any pose error rather than only near zero.
-// The sweep runs out to 1.5 rad, where the identity is tens of percent wrong.
+// Both halves of a fixed pose match a central difference at any pose error. The sweep reaches 1.5 rad, where the
+// identity in place of the inverse left Jacobian would be tens of percent off.
 TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
   const Quaterniond rod_orientation = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.7);
   const Vector3d error_axis{0.0, 0.0, 1.0};
@@ -728,10 +704,13 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
 
     const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
         Vector3d{0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 0.0}, Vector3d{0.4, -0.3, 0.2}, Vector3d{-0.2, 0.5, 0.3});
+
+    // Analytical rate
     const impl::SingleForceOpT<TestExecSpace> op_t(geo, rods.size());
     Kokkos::View<double*, TestMemSpace> rate_d("rate", anchors.num_constraints());
     op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate_d);
 
+    // Central difference
     constexpr double eps = 1e-6;
     auto b0_plus_d = make_constraint_values(anchors);
     auto b0_minus_d = make_constraint_values(anchors);
@@ -755,9 +734,8 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
 //! \name Constraint packing
 //@{
 
-// The only exercise of the full five-family packing order, with every family non-empty at a distinct
-// prime size so any transposition moves an offset. Pins the row multipliers num_constraints() applies
-// as well: three rows per fixed position, six per fixed pose.
+// Every family non-empty, each at a distinct prime size, so swapping any two moves an offset. Also pins the rows per
+// anchor: three per fixed position, six per fixed pose.
 TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
   ConstraintSet<HostExecSpace> constraints;
   constraints.linear_springs = LinearSpringViews<HostExecSpace>(2);
@@ -786,14 +764,11 @@ TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
 //! \name Single-family solves
 //@{
 
-// Stage 3 tests: T3/T4 -- the full mundy::mbody::solve() pipeline against exactly-solvable analytical cases.
+// One constraint through the full solve(). A single spring reduces the Schur complement to the scalar equation
+// (B^T M B + 1/k) y = -b0, and a single contact to the scalar LCP lambda = max(0, -sep0 / A). The scalars come
+// from the same operators solve() uses, so these check solve()'s assembly of the operators, not the operators.
 
-// T3: two rods, one linear spring, zero contacts, zero external load. With x empty, the mixed
-// problem is a single scalar equation (B^T M B + 1/k) y = -b0. The scalar B^T M B is evaluated
-// here using the same operator building blocks solve() uses internally (make_quadratic_form over
-// B/M/B^T built from the same geometry kernel), so this checks that solve()'s own composition of
-// those blocks (CG for a 1-dof system, PGD over an empty x-block, the y* recovery formula, and the
-// output write-back) is self-consistent.
+// Two rods joined by one linear spring.
 TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   RodViews<HostExecSpace> rods = make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0},
                                                      Vector3d{0.0, 0.0, 1.6}, Quaterniond{1.0, 0.0, 0.0, 0.0});
@@ -812,7 +787,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
 
-  // Independent scalar ground truth for B^T M B, from the same building blocks solve() uses.
+  // Scalar B^T M B
   using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(lin_springs);
@@ -830,6 +805,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
   const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
 
+  // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
@@ -837,18 +813,14 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / lin_springs.spring_constant(0));
   EXPECT_NEAR(lin_springs.lambda(0), y_expected, 1e-6);
 
-  // Momentum conservation: the two rods' forces (and torques) must be equal and opposite.
+  // Internal force: equal and opposite on the two rods.
   const Vector3d total_force = rods.force(0) + rods.force(1);
   const Vector3d total_torque = rods.torque(0) + rods.torque(1);
   EXPECT_NEAR(norm(total_force), 0.0, 1e-9);
   EXPECT_NEAR(norm(total_torque), 0.0, 1e-9);
 }
 
-// T9(b): angular springs only, zero contacts -- the exact analogue of
-// LinearSpringOnlyMatchesScalarSchurComplement above, but for the *other* spring type, verifying that
-// path through the same reduced-Schur-complement machinery (this is otherwise only exercised
-// structurally, by T1's Jacobian-only AngularSpringJacobianMatchesFiniteDifference, never through a
-// full solve()).
+// Two rods joined by one angular spring.
 TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   RodViews<HostExecSpace> rods =
       make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 1.6},
@@ -868,7 +840,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
 
-  // Independent scalar ground truth for B^T M B, from the same building blocks solve() uses.
+  // Scalar B^T M B
   using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(ang_springs);
@@ -886,6 +858,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
   const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
 
+  // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
@@ -893,16 +866,14 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / ang_springs.spring_constant(0));
   EXPECT_NEAR(ang_springs.lambda(0), y_expected, 1e-6);
 
-  // Angular springs contribute equal-and-opposite torques and exactly zero force -- both should
-  // cancel exactly between the two rods.
+  // Internal torque and no force: both cancel between the two rods.
   const Vector3d total_force = rods.force(0) + rods.force(1);
   const Vector3d total_torque = rods.torque(0) + rods.torque(1);
   EXPECT_NEAR(norm(total_force), 0.0, 1e-9);
   EXPECT_NEAR(norm(total_torque), 0.0, 1e-9);
 }
 
-// Triple-point angular springs only, zero contacts: the same scalar Schur complement as the linear and
-// angular springs above, for three spheres bent away from straight at their middle one.
+// Three spheres bent away from straight at the middle one, joined by one triple-point angular spring.
 TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   RodViews<HostExecSpace> rods(3);
   rods.center(0) = Vector3d{0.0, 0.0, 0.0};
@@ -929,7 +900,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
 
-  // Independent scalar ground truth for B^T M B, from the same building blocks solve() uses.
+  // Scalar B^T M B
   using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(triple_springs);
@@ -947,6 +918,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
   const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
 
+  // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
@@ -954,7 +926,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / triple_springs.spring_constant(0));
   EXPECT_NEAR(triple_springs.lambda(0), y_expected, 1e-6);
 
-  // The spring is internal and position-only: its three forces cancel exactly and it exerts no torque.
+  // Internal and position-only: the three forces cancel and there is no torque.
   const Vector3d total_force = rods.force(0) + rods.force(1) + rods.force(2);
   EXPECT_NEAR(norm(total_force), 0.0, 1e-9);
   for (int i = 0; i < 3; ++i) {
@@ -969,8 +941,7 @@ struct ContactOnlyCaseResult {
   bool converged;
 };
 
-// Shared setup for T4: two parallel rods (offset laterally by gap_x, so the spherocylinder-vs-
-// spherocylinder distance/normal is unambiguous), zero springs, zero external load.
+/// \brief One contact between two parallel rods gap_x apart: the solved multiplier and its closed form's scalars.
 ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   RodViews<HostExecSpace> rods =
       make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0}, Vector3d{gap_x, 0.0, 0.0},
@@ -988,7 +959,7 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
 
-  // Independent scalar ground truth for A := D^T M D, from the same building blocks solve() uses.
+  // Scalar A := D^T M D
   using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto sep0 = make_constraint_values(contacts);
@@ -1011,7 +982,7 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   return ContactOnlyCaseResult{contacts.lambda(0), sep0_value, A_value, result.converged};
 }
 
-// T4 (active branch): overlapping rods -- closed-form 1-DOF LCP solution lambda = -sep0/A > 0.
+// Overlapping rods: lambda = -sep0 / A > 0.
 TEST(Mbody, ContactOnlyActiveMatchesScalarLCP) {
   const ContactOnlyCaseResult r = run_contact_only_case(/*gap_x=*/0.3, /*radius=*/0.2);
   EXPECT_TRUE(r.converged);
@@ -1022,8 +993,7 @@ TEST(Mbody, ContactOnlyActiveMatchesScalarLCP) {
   EXPECT_NEAR(r.lambda, lambda_expected, 1e-4);
 }
 
-// T4 (inactive branch): separated rods -- closed-form 1-DOF LCP solution lambda = 0, and
-// complementarity slackness lambda * sep0 = 0 holds trivially.
+// Separated rods: lambda = 0.
 TEST(Mbody, ContactOnlyInactiveMatchesScalarLCP) {
   const ContactOnlyCaseResult r = run_contact_only_case(/*gap_x=*/1.0, /*radius=*/0.2);
   EXPECT_TRUE(r.converged);
@@ -1032,19 +1002,9 @@ TEST(Mbody, ContactOnlyInactiveMatchesScalarLCP) {
   EXPECT_NEAR(r.lambda * r.sep0, 0.0, 1e-6);
 }
 
-// T9: sizing -- every constraint block (contacts, linear springs, angular springs) is independently
-// optional, so B (springs) and/or D (contacts) can each be a genuine zero-column operator, and the
-// Schur complement S := (B^T M B + K^{-1})^{-1} can be a genuine 0x0 SPD system. Neither
-// mundy::CGInvOp nor the outer PGD solve special-cases this: both must fall out of the general
-// zero-extent-view code paths (Kokkos parallel_for/parallel_reduce over an empty range, matrix-free
-// operators with domain/range size 0) automatically, converging trivially -- zero iterations, exactly
-// zero residual -- rather than iterating needlessly, misreporting non-convergence, or (worse)
-// touching out-of-bounds memory.
+// Empty families are zero-column operators, and a solve over them converges at once.
 
-// T9(a): zero springs *and* zero contacts -- the most degenerate case, where the outer PGD's x-block
-// is empty (0 contacts) *and* the inner Schur complement's y-block is empty (0 springs)
-// simultaneously. With nothing to solve for, vel_omega must come out exactly equal to the
-// unconstrained free-motion prediction V_ext + M * F_ext -- no constraint correction whatsoever.
+// No constraints at all: the velocities are exactly the free motion M F_ext.
 TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   RodViews<HostExecSpace> rods = make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0},
                                                      Vector3d{0.0, 0.0, 1.6}, Quaterniond{1.0, 0.0, 0.0, 0.0});
@@ -1078,10 +1038,7 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   }
 }
 
-// T9(c): zero springs, contacts present (the exact setup ContactOnlyActive/InactiveMatchesScalarLCP
-// already exercise for solve()-level correctness) -- made explicit here as a direct, white-box check
-// that the Schur complement's own CG, given a literal 0x0 operator (B has zero columns, K^{-1} has
-// zero entries), converges immediately rather than iterating, timing out, or misreporting failure.
+// The Schur complement's CG on a 0x0 system: zero iterations and zero residual.
 TEST(Mbody, EmptySpringBlockSchurComplementConvergesInZeroIterations) {
   RodViews<HostExecSpace> rods = make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0},
                                                      Vector3d{0.0, 0.0, 1.6}, Quaterniond{1.0, 0.0, 0.0, 0.0});
@@ -1121,22 +1078,13 @@ TEST(Mbody, EmptySpringBlockSchurComplementConvergesInZeroIterations) {
 //! \name Multi-family solves
 //@{
 
-// Stage 4 tests: T5 (chain of rods vs. an independent dense linear solve) and T6 (stability /
-// consistency sweep).
+// Several families in one solve, against a dense solve of the same Schur complement.
 
-// T5: cross-check mundy::mbody::solve() on a multi-spring chain against an independent dense
-// linear solve. B and M are materialized (via materialize_dense, above) from the same
-// impl::PairForceOp / impl::LocalDragMobilityOp building blocks solve() itself uses -- this is the
-// same "reuse the already finite-difference-validated (T1) operators, but solve the resulting
-// linear system by a completely different, non-iterative algorithm" strategy as T3/T4, just at
-// multi-spring scale. What's newly exercised here, beyond T3/T4, is (a) concatenating linear+
-// angular springs into one consistent y-block index space at N>1, and (b) mundy::CGInvOp/
-// conjugate_gradient's iterative accuracy on a genuinely multi-dimensional (kChainNumSprings-dof),
-// coupled SPD system.
+// A chain of linear and angular springs packed into one y-block.
 TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   SolveInput p = make_chain_problem(/*spring_constant=*/3.0);
 
-  // Independent dense reference, built from the rods/springs BEFORE solve() mutates them.
+  // Dense reference, built before solve() updates the inputs
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
   auto b0_lin = make_constraint_values(constraints_d.linear_springs);
@@ -1155,7 +1103,7 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   const std::vector<std::vector<double>> B_dense = materialize_dense(B);  // kChainRodSpaceDim x kChainNumSprings
   const std::vector<std::vector<double>> M_dense = materialize_dense(M);  // kChainRodSpaceDim x kChainRodSpaceDim
 
-  // b = b0 + dt * B^T (V_ext + M F_ext); V_ext = 0 here, F_ext read from p.rods.
+  // b = b0 + dt B^T M F_ext
   Kokkos::View<double*, Kokkos::HostSpace> force_torque_ext("force_torque_ext", kChainRodSpaceDim);
   for (size_t i = 0; i < kChainNumRods; ++i) {
     rod_force(force_torque_ext, static_cast<int>(i)) = p.rods.force(i);
@@ -1172,10 +1120,7 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
     b_vec[i] = b0(i) + p.cfg.dt * b_rate(i);
   }
 
-  // (dt * B^T M B + Kinv), assembled by plain triple loops -- no KokkosBlas, no mundy::CGInvOp. The
-  // Schur complement's "M" is dt * mobility (it maps a constraint force to the displacement it causes
-  // over the step, not to a velocity -- see solve()'s M_dt), so M_dense (the raw, instantaneous
-  // force->velocity mobility) needs that same dt scaling applied here to match.
+  // dt B^T M B + K^-1: the Schur complement's mobility is dt M, the displacement per unit force over one step.
   Matrix<double, kChainNumSprings, kChainNumSprings> btmb_plus_kinv =
       Matrix<double, kChainNumSprings, kChainNumSprings>::zeros();
   for (size_t i = 0; i < kChainNumSprings; ++i) {
@@ -1200,6 +1145,7 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
 
   const Vector<double, kChainNumSprings> y_expected = -1.0 * (inverse(btmb_plus_kinv) * b_vec);
 
+  // Solve
   const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
   EXPECT_TRUE(result.converged);
 
@@ -1212,8 +1158,7 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   }
 }
 
-// T6(a): a much stiffer chain (approaching a rigid bilateral limit) still converges, with the
-// inner CG's iteration count staying well within budget.
+// The same chain with k = 1e6, near the rigid limit, still converges.
 TEST(Mbody, StiffChainStaysStable) {
   SolveInput p = make_chain_problem(/*spring_constant=*/1.0e6);
   const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
@@ -1226,14 +1171,12 @@ TEST(Mbody, StiffChainStaysStable) {
   }
 }
 
-// Two anchors on two *different* rods coupled through the springs between them, which is the ordinary
-// multi-anchor case and the one a simply supported beam needs. B's columns act on two distinct bodies'
-// translational blocks, so it keeps full column rank, unlike two anchors placed on one rod.
+// A simply supported beam: two anchors on different rods, coupled through the springs between them. B's columns act
+// on two distinct bodies, so it keeps full column rank.
 //
-// One solve against a dense solve of the same Schur complement: every multiplier and velocity matches,
-// and both anchored spheres are held at zero velocity. The reference transposes B densely, so it also
-// checks each family's rate operator against its force operator. The chain starts on a shallow arc so
-// every bend angle has a gradient (see solve_static_bend) and the bend rows resist the load.
+// The reference transposes B densely, so it also checks each family's rate operator against its force operator. The
+// chain starts on a shallow arc so every bend angle has a gradient (see solve_static_bend) and the bend rows resist
+// the load.
 TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
   constexpr size_t num_segments = 8;
   constexpr size_t num_spheres = num_segments + 1;
@@ -1280,8 +1223,7 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
 
     rods.force(num_spheres / 2) = Vector3d{0.0, -load, 0.0};
 
-    // Dense reference, built from the rods and constraints before solve() mutates them. Columns of B follow
-    // the y-block packing order: linear springs, triple springs, fixed positions.
+    // Dense reference, built before solve() updates the inputs; B's columns follow the y-block order
     const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
     const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
     auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
@@ -1342,6 +1284,7 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     }
     const std::vector<double> vel_omega_expected = dense_matvec(M_dense, total_force_torque);
 
+    // Solve
     ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt;
 
     std::vector<double> y;
@@ -1367,18 +1310,16 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
 //! \name Anchors
 //@{
 
-// Both identities a boundary condition imposed *inside* the implicit solve satisfies and one imposed
-// by discarding the anchored body's velocity *after* it does not: the anchored point reaches its
-// target exactly in a single step, and the multiplier is the support reaction balancing the applied
-// load. Neither depends on dt, so the sweep spans four decades; the post-hoc clamp's error is O(dt)
-// and would fail both at the wide end while passing at the narrow one.
+// Constraints holding a point or pose of a rod at a target.
+
+// A rigid anchor reaches its target in one step, and its multiplier is the reaction to the load, at every dt.
 TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
   const Vector3d target{0.4, -0.3, 1.1};
   const Vector3d load{0.7, 0.25, -0.5};
 
   for (const double dt : {0.005, 0.5, 2.0, 20.0}) {
     RodViews<HostExecSpace> rods(1);
-    rods.center(0) = target + Vector3d{-0.35, 0.2, 0.15};  // starts displaced from where it must end up
+    rods.center(0) = target + Vector3d{-0.35, 0.2, 0.15};  // starts off target
     rods.orientation(0) = Quaterniond{1.0, 0.0, 0.0, 0.0};
     rods.radius(0) = 0.2;
     rods.length(0) = 1.0;
@@ -1416,6 +1357,7 @@ TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
   }
 }
 
+// A rigid pose anchor holds its point and orientation, with multipliers equal to the reaction to the load.
 TEST(Mbody, FixedPoseHoldsItsTarget) {
   const Vector3d target_point{0.4, -0.3, 1.1};
   const Quaterniond target_orientation = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.6);
@@ -1465,17 +1407,12 @@ TEST(Mbody, FixedPoseHoldsItsTarget) {
   }
 }
 
-// Soft anchors. At a fixed point every body has v = 0, so F_ext + B y = 0 and K^-1 y = -b0, and a centre
-// anchor's B is the identity on its force rows. Started at its target, each anchored rod therefore settles
-// at an offset of exactly compliance * load, componentwise, with no dependence on dt.
+// Soft anchors settle at an offset of exactly compliance * load, componentwise, at any dt. At the fixed point v = 0,
+// so F_ext + B y = 0 and K^-1 y = -b0, and a centre anchor's B is the identity on its force rows.
 //
-// The orientation rows are exact only for a torque about a single axis: the rod then turns about that
-// axis, so the rotation vector is parallel to the torque and the inverse left Jacobian acts as the
-// identity on it. Hence the loop over axes rather than one general torque.
-//
-// Both single-arity families are non-empty in one solve, so their adjacent y-block ranges are both live.
-// Every compliance here differs from every other, which makes a swap between the two families -- or
-// between rows inside one -- show up as a wrong offset.
+// The orientation rows are exact only for a torque about one axis, where the rotation vector is parallel to the
+// torque and the inverse left Jacobian acts as the identity on it. Every compliance differs from every other, so a
+// swap between the two families or between rows shows up as a wrong offset.
 TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
   const Vector3d position_compliance{0.01, 0.02, 0.04};
   const Vector3d position_load{0.7, -0.4, 0.25};
@@ -1559,14 +1496,9 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
   }
 }
 
-// Contacts alongside an anchor, which nothing else does: the x-block appears only in the contact-only
-// and grid tests, so the reduced problem H = D^T M D - D^T M B S B^T M D has never been formed with
-// rigid anchor rows (K^-1 = 0) inside S. Unlike the other anchor tests this needs the outer PGD to
-// iterate, so max_outer_iters stays at its default rather than being pinned to 1.
-//
-// One sphere is held; the other is driven onto it along the line of centres. At the fixed point the
-// driven sphere's balance fixes the contact multiplier, and the held sphere's balance makes the anchor
-// reaction exactly minus the contact force it absorbs -- an identity spanning the two blocks.
+// One sphere held, the other driven onto it along the line of centres. At the fixed point the contact multiplier
+// balances the push and the anchor reaction is exactly minus the contact force. The contact needs PGD iterations,
+// so max_outer_iters keeps its default.
 TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   constexpr double radius = 0.2;
   const double push = 0.5;
@@ -1615,9 +1547,8 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   EXPECT_NEAR(norm(Vector3d(constraints.fixed_positions.lambda(0)) - Vector3d{0.0, 0.0, push}), 0.0, 1e-9);
 }
 
-// Anchors on distinct rods are the ordinary case; two on one rod duplicate that rod's constraint
-// columns and leave the bilateral block rank deficient. solve() rejects the latter, but only in debug
-// builds, so the detection itself is exercised here where it runs in any build.
+// Two anchors on one rod duplicate its constraint columns and leave the bilateral block rank deficient. solve() rejects
+// that only in debug builds, so the count itself is checked here.
 TEST(Mbody, DoublyAnchoredRodsAreDetected) {
   constexpr size_t kNumRods = 3;
   const auto anchor_on = [](int rod) {
@@ -1662,8 +1593,7 @@ TEST(Mbody, DoublyAnchoredRodsAreDetected) {
   EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, mixed), kNumRods), 1u);
 
 #ifndef NDEBUG
-  // solve() enforces this with a debug-only assert, so the throw is reachable only where that assert
-  // is compiled in. The counting above is what runs everywhere.
+  // solve() checks this with a debug-only assert.
   RodViews<HostExecSpace> rods(kNumRods);
   for (size_t i = 0; i < kNumRods; ++i) {
     rods.center(i) = Vector3d{0.0, 0.0, static_cast<double>(i)};
@@ -1682,19 +1612,11 @@ TEST(Mbody, DoublyAnchoredRodsAreDetected) {
 //! \name Time integration
 //@{
 
-// Stage 5 tests: T7 -- multi-step time integration. T1-T6 all call solve() exactly once, so none of
-// them exercise repeated time-stepping. These step the scalar spring system and check the trajectory
-// against the exact backward-Euler discretization -- the dt-consistency (the Schur-complement "M" is
-// dt * mobility) that a single-step test cannot see.
-//
-// Both tests reduce to the same scalar system as T3 (two rods along z, one linear spring, zero
-// contacts/angular springs/external load), so the analytical reference is exact, not approximate: with
-// A := B^T M B (M the raw, instantaneous mobility) and tau := 1/(A*k), backward Euler on the resulting
-// scalar ODE ds/dt = -A*k*s gives the closed form s_n = s0 / (1 + dt/tau)^n. A is computed here directly
-// from the slender-body drag formula LocalDragMobilityOp::apply implements, reproduced independently
-// rather than by constructing/calling the operator, so this is a check against known mechanics, not a
-// tautology.
+// Repeated steps. One linear spring between two rods relaxes as ds/dt = -A k s with A = B^T M B, and backward Euler
+// steps it exactly as s_n = s0 / (1 + dt/tau)^n with tau = 1/(A k). A comes from the drag formula, not from the
+// mobility operator.
 
+/// \brief The parallel inverse drag coefficient of a rod.
 double expected_inv_drag_para(double radius, double length, double viscosity) {
   const double lprime = length + 2.0 * radius;
   const double p = lprime / (2.0 * radius);
@@ -1705,7 +1627,7 @@ double expected_inv_drag_para(double radius, double length, double viscosity) {
   return (log_p - 0.207 + 0.98 * inv_p - 0.133 * inv_p2) / lprime / (2.0 * pi * viscosity);
 }
 
-// Sum over the linear springs of (center distance - rest length).
+/// \brief Sum over the linear springs of center distance minus rest length.
 template <typename Space>
 double summed_stretch(const RodViews<Space>& rods, const LinearSpringViews<Space>& lin_springs) {
   double stretch = 0.0;
@@ -1718,9 +1640,7 @@ double summed_stretch(const RodViews<Space>& rods, const LinearSpringViews<Space
   return stretch;
 }
 
-// Two rods along z (T3's setup), one linear spring, no contacts/angular springs/external load. Takes
-// `num_steps` backward-Euler steps and returns the stretch after each, with index 0 the initial
-// (pre-stepping) stretch.
+/// \brief Two rods joined by one linear spring, stepped num_steps times; the stretch before and after each step.
 std::vector<double> run_relaxation(double spring_constant, double dt, int num_steps, double radius = 0.2,
                                    double length = 1.0, double viscosity = 1.0) {
   RodViews<HostExecSpace> rods =
@@ -1741,7 +1661,7 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
   cfg.viscosity = viscosity;
   cfg.max_cg_iters = 500;
   cfg.cg_tol = 1e-12;
-  cfg.max_outer_iters = 1;  // no contacts -> nothing for the outer PGD loop to do
+  cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
 
   zero_rod_state(rods);
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -1756,13 +1676,11 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
   return stretch;
 }
 
-// T7(a): stepping the scalar spring system reproduces the exact backward-Euler discretization of
-// ds/dt = -A*k*s, s_n = s0/(1+dt/tau)^n -- the precise closed form solve() is supposed to implement,
-// not just "decays a plausible amount" -- and, since dt/tau is modest here, is also close to the
-// continuous solution s0*exp(-t/tau), the physical relaxation this discretization approximates.
+// The stretch follows the backward-Euler closed form exactly, and the continuous decay s0 exp(-t/tau) closely at this
+// modest dt/tau.
 TEST(Mbody, SpringRelaxationMatchesBackwardEulerAndExponentialDecay) {
   const double radius = 0.2, length = 1.0, viscosity = 1.0, spring_constant = 2.0;
-  const double A = 2.0 * expected_inv_drag_para(radius, length, viscosity);  // both rods move; T3's setup
+  const double A = 2.0 * expected_inv_drag_para(radius, length, viscosity);  // both rods move
   const double tau = 1.0 / (A * spring_constant);
 
   const double dt = 0.2 * tau;
@@ -1779,10 +1697,7 @@ TEST(Mbody, SpringRelaxationMatchesBackwardEulerAndExponentialDecay) {
   }
 }
 
-// T7(b): backward Euler is unconditionally A-stable -- bounded and monotonically decaying for *any*
-// dt > 0, however large relative to the system's own relaxation time tau. Sweeps dt from a small
-// fraction of tau up to 50 tau and checks both that the exact backward-Euler formula holds at every
-// step and that the trajectory never oscillates or grows.
+// From dt = 0.1 tau to 50 tau the stretch follows the closed form and decays monotonically, never overshooting zero.
 TEST(Mbody, SpringRelaxationStableAcrossWideDtSweep) {
   const double radius = 0.2, length = 1.0, viscosity = 1.0, spring_constant = 2.0;
   const double A = 2.0 * expected_inv_drag_para(radius, length, viscosity);
@@ -1808,8 +1723,7 @@ TEST(Mbody, SpringRelaxationStableAcrossWideDtSweep) {
   }
 }
 
-// lambda_max(K B^T M B) over the springs of p: explicit Euler on the linearized spring network is stable only for
-// dt < 2 / lambda_max. Evaluated matrix-free as the symmetric K^1/2 B^T M B K^1/2, which shares its spectrum.
+/// \brief lambda_max(K B^T M B) for the springs of p, from K^1/2 B^T M B K^1/2, which shares its spectrum.
 double spring_network_stiffness(const SolveInput& p) {
   using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
@@ -1847,9 +1761,9 @@ double spring_network_stiffness(const SolveInput& p) {
   return result.eigenvalue;
 }
 
-// T6(b): backward Euler is stable at any step size. Forward Euler on the same linearized spring network is stable only
-// for dt < dt_crit = 2 / lambda_max(K B^T M B), so the sweep crosses dt / dt_crit = 1, and on both sides of it every
-// implicit step must lower the elastic energy: the step maps K^1/2 b to (I + dt K^1/2 B^T M B K^1/2)^-1 K^1/2 b.
+// Explicit Euler on the linearized springs is stable only for dt < dt_crit = 2 / lambda_max(K B^T M B). On both sides
+// of dt_crit every backward-Euler step lowers the elastic energy, since it maps K^1/2 b to
+// (I + dt K^1/2 B^T M B K^1/2)^-1 K^1/2 b.
 TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
   const double dt_crit = 2.0 / spring_network_stiffness(make_chain_problem(/*spring_constant=*/3.0));
 
@@ -1878,28 +1792,16 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
   }
 }
 
-// Stage 6 test: T8 -- full-stack integration test. A 2D grid of spheres (zero-length rods), linear
-// springs on every row/column/diagonal edge (full triangulation, so the lattice can't shear/rack
-// without stretching a spring), angular (bending) springs along rows only. Angular springs constrain a
-// single per-rod tangent axis (orientation * e_z), so a genuine 2D grid can't give both row- and
-// column-neighbors an independent bending constraint without a second constrained axis that doesn't
-// exist yet -- rows get real bending, columns are stretch-only. A random kick pushes many pairs into
-// overlap; contacts (every pair within a generous cutoff of the post-kick configuration) have to
-// resolve every one of them, every step, while the spring network relaxes -- the only test here that
-// runs contacts and springs together at more than a handful of rods.
+// A grid of spheres kicked into overlap: contacts clear every overlap every step while the springs relax. Only rows
+// carry bend springs, since an angular spring constrains a single axis of each rod.
 
 size_t grid_index(size_t row, size_t col, size_t num_cols) {
   return row * num_cols + col;
 }
 
-// Builds a num_rows x num_cols grid of spheres (zero-length rods) at the given spacing, fully
-// triangulated with linear springs (row/column/both diagonals), angular (bending) springs along rows
-// only, and a contact for every pair within contact_cutoff of each other. Every rod starts with the
-// same orientation (tangent along the row/+x axis), so row-neighbor rest angles are all zero. A
-// uniform random kick in [-kick_magnitude, kick_magnitude]^3 is applied to every center *before* the
-// contact list is built (so contacts reflect the actual post-kick configuration, not the pristine
-// grid) -- the rest lengths/angles above are still the perfect grid's, so the kick alone is what gets
-// relaxed away.
+/// \brief A fully triangulated grid of spheres with bend springs along rows, kicked randomly off its rest shape.
+///
+/// Contacts cover every pair within a cutoff of the kicked positions.
 SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, double radius, double spring_constant,
                              double kick_magnitude, unsigned seed) {
   SolveInput p;
@@ -1955,7 +1857,7 @@ SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, d
     p.constraints.linear_springs.spring_constant(k) = spring_constant;
   }
 
-  // Angular (bending) springs: row edges only -- see the section comment for why.
+  // Bend springs: row edges only.
   std::vector<std::pair<size_t, size_t>> ang_pairs;
   for (size_t row = 0; row < num_rows; ++row) {
     for (size_t col = 0; col + 1 < num_cols; ++col) {
@@ -1970,9 +1872,7 @@ SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, d
     p.constraints.angular_springs.spring_constant(k) = spring_constant;
   }
 
-  // Contacts: every pair within a generous cutoff of the post-kick configuration. The test's own
-  // overlap check (max_overlap, below) verifies *every* pair regardless of this list, so an
-  // insufficient cutoff here would show up as a loud failure, not a silent miss.
+  // Contacts: every pair within the cutoff. max_overlap checks every pair, so too small a cutoff fails the test.
   const double contact_cutoff = 1.8 * spacing;
   std::vector<std::pair<size_t, size_t>> contact_pairs;
   for (size_t i = 0; i < num_spheres; ++i) {
@@ -1996,8 +1896,7 @@ SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, d
   return p;
 }
 
-// Brute-force over every pair, independent of whatever contact list the solver was given: positive
-// if any two spheres overlap (by that much), non-positive if none do.
+/// \brief The deepest overlap over every pair of spheres; non-positive if none overlap.
 template <typename Space>
 double max_overlap(const RodViews<Space>& rods) {
   const int num_rods = static_cast<int>(rods.size());
@@ -2035,14 +1934,13 @@ TEST(Mbody, GridOfSpheresStaysOverlapFreeAndRelaxes) {
     energy_trace.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
   }
 
-  // Eventually relaxes: elastic energy shortly after the kick vs. at the end should have dropped
-  // substantially, not just be bouncing around the same scale.
+  // Relaxes: the energy falls well below its value after the kick
   const double energy_after_kick = energy_trace[1];
   const double energy_final = energy_trace.back();
   EXPECT_LT(energy_final, 0.1 * energy_after_kick)
       << "energy_after_kick=" << energy_after_kick << " energy_final=" << energy_final;
 
-  // Stays stable throughout, not just at the end: energy should never blow up past its initial scale.
+  // Stable: the energy never exceeds twice its initial value
   const double energy_ceiling = 2.0 * energy_trace[0];
   for (size_t n = 0; n < energy_trace.size(); ++n) {
     EXPECT_LT(energy_trace[n], energy_ceiling) << "energy diverged at step " << n;
@@ -2054,45 +1952,11 @@ TEST(Mbody, GridOfSpheresStaysOverlapFreeAndRelaxes) {
 //! \name Chain mechanics
 //@{
 
-// T10: chain of spheres -- axial stiffness (Young's modulus) and cantilever bending (Euler-Bernoulli).
-//
-// T5/T6/T8 already exercise a chain/grid of springs structurally (Jacobians, dense-solve cross-check,
-// stability under a kick); this section instead checks the chain's *aggregate mechanical response*
-// against two textbook continuum predictions, closing the physics-analysis loop the same way T7 did
-// for single-spring relaxation.
-//
-// T10(a) uses linear springs alone (one per adjacent pair, as in the chain and grid fixtures above);
-// T10(b) adds TriplePointAngularSpringViews for bending -- one per *interior* sphere (vertex = that
-// sphere, outer points = its two neighbors), NOT the pairwise/orientation-based AngularSpringViews
-// (see TriplePointAngularSpringViews's own doc comment for why: that type's bend is a function of two
-// rods' independent orientation DOFs, which has no first-order resistance to a whole sub-chain
-// translating sideways relative to its neighbors -- a real shear zero-mode, fine for T5/T6/T8's
-// qualitative checks but wrong for a quantitative bending profile).
-//
-// Both discrete-to-continuum correspondences (EA := k_lin*spacing, EI := k_ang*spacing) are derived
-// the same way, symmetrically: a single-element force/moment balance, not a chain-wide or
-// energy-density argument (which can hide boundary-dependent effects). One spring under tension F
-// stretches by F/k_lin; strain over its length `a` is F/(k_lin*a), matching continuum strain F/(EA)
-// gives EA=k_lin*a. One joint under an applied moment M rotates (from straight) by M/k_ang; that
-// same rotation is, geometrically, the turning angle of a curve sampled at spacing `a`, i.e.
-// approximately kappa*a for curvature kappa -- so kappa*a = M/k_ang, matching the continuum
-// constitutive relation M=EI*kappa gives EI=k_ang*a. This is exactly the classical Hencky bar-chain
-// model's correspondence (rigid segments joined by rotational springs of stiffness EI/a) for bending,
-// and the standard "springs in series" result for axial. Both are per-element statements, independent
-// of how many elements make up a particular chain or how its ends are handled.
-//
-// What *is* chain- (and boundary-) dependent is how well a finite chain of such elements approximates
-// the continuum solution of a *specific* boundary value problem -- e.g. the textbook cantilever
-// deflection y(x) = F*(3*L*x^2 - x^3)/(6*EI), tip deflection y(L) = F*L^3/(3*EI). T10(a) shows the
-// axial correspondence is exact at *any* segment count (no curvature/higher-derivative structure to
-// discretize); T10(b) shows the bending correspondence reaching the continuum formula only in the
-// segment-count limit, and reaching the discrete chain's own exact deflection at every resolution
-// along the way -- a finite-difference error, not a wrong per-element coefficient.
+// A sphere chain's response against beam theory. With spacing a, a linear spring of stiffness k_lin gives
+// EA = k_lin a and a bend joint of stiffness k_ang gives EI = k_ang a: the Hencky bar chain. Bending uses
+// triple-point springs, since a pairwise angular spring does not resist a sub-chain sliding sideways.
 
-// Runs the axial-only chain (N=num_segments+1 spheres, physical length L fixed, spacing = L/N
-// shrinking as N grows) to static equilibrium under an equal-and-opposite pulling force at the two
-// ends, and returns the measured effective axial stiffness EA_measured := F*L/dL. See T10(a) below
-// for why this is expected to be *exact* at every resolution, not just in a many-segment limit.
+/// \brief The measured EA = F L / dL of an axial chain of length L pulled apart by tip_force at both ends.
 double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double tip_force) {
   const size_t num_spheres = num_segments + 1;
   const double spacing = L / static_cast<double>(num_segments);
@@ -2121,7 +1985,7 @@ double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double ti
   cfg.viscosity = 1.0;
   cfg.max_cg_iters = 500;
   cfg.cg_tol = 1e-12;
-  cfg.max_outer_iters = 1;  // no contacts -> nothing for the outer PGD loop to do
+  cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
 
   rods.force(0) = Vector3d{0.0, 0.0, -tip_force};
   rods.force(num_spheres - 1) = Vector3d{0.0, 0.0, tip_force};
@@ -2140,13 +2004,7 @@ double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double ti
   return tip_force * L / (L_final - L);
 }
 
-// T10(a): sweep the number of segments (fixed physical length L, fixed spring constant k_lin, so
-// spacing = L/N shrinks as N grows) and check the measured EA matches EA_expected := k_lin*spacing at
-// *every* resolution tested, not just asymptotically: unlike bending (T10(b)), an axial chain has no
-// curvature/higher-derivative structure -- every segment sees exactly the same tension F (force
-// balance on each interior sphere, regardless of segment count), so "springs in series" is exact at
-// any N. This is the axial analogue of T10(b)'s convergence sweep, checking the SAME kind of claim
-// (does the discrete spring constant reproduce the continuum modulus) the same way, for symmetry.
+// Every segment of an axial chain carries the same tension, so EA = k_lin a is exact at every segment count.
 TEST(Mbody, ChainAxialStiffnessConvergesWithSegmentCount) {
   const double L = 8.0, k_lin = 3.0, tip_force = 0.3;
   for (const size_t num_segments : {2, 4, 8, 16}) {
@@ -2157,41 +2015,11 @@ TEST(Mbody, ChainAxialStiffnessConvergesWithSegmentCount) {
   }
 }
 
-// T10(b): a chain of triple-point angular springs (bending), clamped at one end, plus a transverse
-// point force at the free end -- the classic Euler-Bernoulli cantilever setup. Bending here uses
-// TriplePointAngularSpringViews, not the pairwise/orientation-based AngularSpringViews: one spring per
-// *interior* sphere (vertex = that sphere, outer points = its two immediate neighbors), matching the
-// standard bead-chain/discrete-elastic-rod bending convention (a sliding window of 3 consecutive
-// nodes) -- see compute_triple_point_angular_spring_geometry.
-//
-// A "clamped" (zero displacement *and* zero slope) boundary needs *two* held spheres, not one: sphere
-// 1 fixes the wall position and sphere 0 fixes the wall tangent, as the direction from sphere 0 to
-// sphere 1.
-//
-// Unlike T10(a), a bending chain does not match the continuum Euler-Bernoulli formula at finite
-// resolution. The per-spring force law (checked against finite differences in
-// TriplePointAngularSpringJacobianMatchesFiniteDifference) and the EI=k_ang*spacing correspondence
-// (re-derived via a single-joint moment-curvature balance, the same way T10(a)'s EA=k_lin*spacing is
-// derived via a single-spring force balance) are exact statements about *one* spring. A chain of them
-// solves its own discrete problem, whose tip deflection is exactly F L^3 (N+1)(2N+1) / (6 N^2 EI) and
-// approaches the continuum value at first order in the spacing.
-
-// The chain's static equilibrium for a given set of free spheres, solved directly with no time
-// stepping: linearize the bend constraint, giving b0(u) = J u with
-// J(p, col) := d(theta_p)/d(y of sphere first_free + col), then solve k_ang J^T J u = f_ext for the
-// free spheres' transverse displacements. Dense std::vector algebra rather than a fixed-size Matrix
-// keeps the segment count a runtime value, which the refinement studies need out past N=100.
-//
-// A bend angle has no gradient at the straight rest configuration: along any transverse ray it
-// behaves like |delta|, so it has a directional derivative in every direction but no single linear
-// map. Linearizing therefore has to happen slightly off straight, which is what pre_bend is for --
-// it is an artifact of differentiating this constraint, not a property of the chain, so it lives
-// here rather than in make_bend_chain. A constant-curvature arc keeps every vertex's angle
-// resolvable, the end ones included, and the result does not depend on the amplitude, which
-// BendLinearizationIsIndependentOfPreBend checks.
-//
-// Restricting to each free sphere's y-component alone is exact, not an approximation: with the arc in
-// the y-z plane the bend axis is exactly the x-axis, so the three axes decouple.
+/// \brief The free spheres' transverse displacements at static equilibrium, solved directly.
+///
+/// Linearizes each bend angle, theta = J u, and solves k_ang J^T J u = f_ext. A bend angle has no gradient at
+/// straight, so the chain is first bent onto a shallow arc of amplitude pre_bend, which the answer does not depend on.
+/// With the arc in the y-z plane the bend axis is x, so the y-displacements decouple exactly.
 std::vector<double> solve_static_bend(size_t num_spheres, double spacing, double k_ang, size_t first_free,
                                       const std::vector<double>& f_ext, double pre_bend = 1e-6) {
   BendChain chain = make_bend_chain(num_spheres, spacing, k_ang);
@@ -2231,7 +2059,7 @@ std::vector<double> solve_static_bend(size_t num_spheres, double spacing, double
   return dense_solve(stiffness, f_ext);
 }
 
-// Cantilever: spheres 0 and 1 are the wall, 2..N+1 are free, and the load is at the free end.
+/// \brief Cantilever tip deflection. Spheres 0 and 1 are the wall, holding its position and slope.
 double run_static_bending_tip_dynamic(size_t num_segments, double L, double EI, double tip_force) {
   const double spacing = L / static_cast<double>(num_segments);
   std::vector<double> f_ext(num_segments, 0.0);
@@ -2239,8 +2067,7 @@ double run_static_bending_tip_dynamic(size_t num_segments, double L, double EI, 
   return solve_static_bend(num_segments + 2, spacing, EI / spacing, 2, f_ext).back();
 }
 
-// Simply supported: spheres 0 and N are the supports, 1..N-1 are free, and the load is at midspan.
-// num_segments must be even so midspan lands on a sphere.
+/// \brief Simply supported midspan deflection. Spheres 0 and N are the supports; num_segments must be even.
 double run_static_simply_supported_midspan(size_t num_segments, double L, double EI, double load) {
   const double spacing = L / static_cast<double>(num_segments);
   const size_t midspan = num_segments / 2 - 1;  // free spheres are 1..N-1
@@ -2249,16 +2076,11 @@ double run_static_simply_supported_midspan(size_t num_segments, double L, double
   return solve_static_bend(num_segments + 1, spacing, EI / spacing, 1, f_ext)[midspan];
 }
 
-// T10(b): the discrete cantilever has an exact closed form, so this does not have to settle for
-// "the error shrinks". Summing each joint's rotation M_j/k_ang against its lever arm, with
-// k_ang = EI/spacing, a Hencky bar chain of N segments under a tip load F deflects
+// A Hencky bar chain of N segments under a tip load deflects exactly
 //
-//   tip_N = F L^3 (N+1)(2N+1) / (6 N^2 EI)
+//   tip_N = F L^3 (N+1)(2N+1) / (6 N^2 EI),
 //
-// whose relative departure from Euler-Bernoulli's F L^3 / (3 EI) is exactly (3N+1)/(2N^2). The
-// scheme is therefore first order in the spacing with error constant 3/2, both derived rather than
-// fitted, and the static equilibrium must reproduce the formula at every resolution, not just
-// approach it.
+// first order in the spacing: its departure from Euler-Bernoulli's F L^3 / (3 EI) is (3N+1)/(2N^2).
 TEST(Mbody, ChainBendingMatchesHenckyBarChain) {
   const double L = 8.0, EI = 5.0, tip_force = 0.005;
   const double continuum = tip_force * L * L * L / (3.0 * EI);
@@ -2273,20 +2095,15 @@ TEST(Mbody, ChainBendingMatchesHenckyBarChain) {
     finest_scaled_error = n * std::abs(tip - continuum) / continuum;
   }
 
-  // Read as a convergence rate, N * rel_err = (3N+1)/(2N), which falls monotonically to 3/2.
+  // N rel_err = (3N+1)/(2N), which falls to 3/2
   EXPECT_NEAR(finest_scaled_error, 1.5, 0.005);
 }
 
-// The other classical boundary value problem for the same chain, and a sharper probe of the
-// discretization than the cantilever. Supported at both ends under a midspan load, the discrete
-// Hencky deflection is exactly
+// Supported at both ends under a midspan load, the chain deflects exactly
 //
-//   delta = P L^3 / (48 EI) * (1 + 2/N^2)
+//   delta = P L^3 / (48 EI) (1 + 2/N^2),
 //
-// by the same sum of joint moments against their lever arms. Unlike the cantilever's (3N+1)/(2N^2)
-// this is SECOND order with constant exactly 2 -- same elements, same springs, different boundary
-// treatment, which places the cantilever's lost order in how its wall holds two adjacent nodes rather
-// than in the element.
+// second order in the spacing. The cantilever loses an order to its wall holding two adjacent spheres.
 TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
   const double L = 8.0, EI = 5.0, load = 0.005;
   const double continuum = load * L * L * L / (48.0 * EI);
@@ -2301,13 +2118,11 @@ TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
     finest_scaled_error = n * n * std::abs(midspan - continuum) / continuum;
   }
 
-  // Read as a convergence rate, N^2 * rel_err is exactly 2 at every resolution, not just in the limit.
+  // N^2 rel_err is exactly 2 at every resolution
   EXPECT_NEAR(finest_scaled_error, 2.0, 1e-4);
 }
 
-// The pre-bend exists only so a constraint with no gradient at its rest state can be differentiated
-// at all, so it must not reach the answer. Two amplitudes a decade apart, on both boundary value
-// problems, have to agree far more tightly than either differs from its continuum limit.
+// The pre-bend must not reach the answer: amplitudes a decade apart agree on both boundary value problems.
 TEST(Mbody, BendLinearizationIsIndependentOfPreBend) {
   const double L = 8.0, EI = 5.0, load = 0.005;
   constexpr size_t num_segments = 16;
@@ -2332,15 +2147,10 @@ TEST(Mbody, BendLinearizationIsIndependentOfPreBend) {
 //! \name Solver building blocks
 //@{
 
-// Stage 2 test: T2 -- mundy::CGInvOp validated against a dense-inverse ground truth.
-//
-// Builds a random SPD system B^T M B + Kinv (the same structure UnitTestConvex.cpp's own
-// RandomMixedCongruentCCQP fixture exercises, but never solve-tests) via make_quadratic_form +
-// make_sum_op + make_diagonal_op, and checks CGInvOp's matrix-free apply(rhs) against the
-// same system's dense inverse(...) applied to the same rhs.
+// CGInvOp against the dense inverse of a random SPD system B^T M B + K^-1.
 
 TEST(Mbody, CGInvOpMatchesDenseInverse) {
-  constexpr int kNumConfig = 4;     // NZ: size of the intermediate (configurational) space
+  constexpr int kNumConfig = 4;     // configuration-space dimension
   constexpr int kNumBilateral = 3;  // NY: number of bilateral constraints
 
   std::mt19937 rng(42);
@@ -2379,12 +2189,10 @@ TEST(Mbody, CGInvOpMatchesDenseInverse) {
   }
   Kokkos::deep_copy(kinv_diag, kinv_diag_h);
 
-  // Dense ground truth: S = (B^T M B + Kinv)^{-1}.
+  // Dense reference: S = (B^T M B + K^-1)^-1
   const auto S_dense = inverse(transpose(B_dense) * M_dense * B_dense + Kinv_dense);
 
-  // The equivalent Kokkos::View-based operator pipeline (dense-matrix LinearOps, exercising
-  // KokkosBackend's BLAS-gemv DenseMatView path, exactly like UnitTestConvex.cpp's own Kokkos
-  // fixtures).
+  // The same system as matrix-free operators
   Kokkos::View<double**, TestMemSpace> M("M", kNumConfig, kNumConfig);
   Kokkos::View<double**, TestMemSpace> B("B", kNumConfig, kNumBilateral);
   Kokkos::View<double**, TestMemSpace> Bt("Bt", kNumBilateral, kNumConfig);
@@ -2436,9 +2244,7 @@ TEST(Mbody, CGInvOpMatchesDenseInverse) {
   }
 }
 
-// T6(c): the outer PGD solve converges to the same answer regardless of a deliberately bad initial
-// guess -- exercised directly at the solve_mixed_cqpp level (bypassing mundy::mbody::solve()'s
-// always-zero-init convention) on the T4 active-contact case.
+// PGD on the overlapping-contact LCP reaches the same multiplier from a start far from it.
 TEST(Mbody, BadInitialGuessStillConvergesToSameAnswer) {
   const double gap_x = 0.3;
   const double radius = 0.2;
@@ -2481,7 +2287,7 @@ TEST(Mbody, BadInitialGuessStillConvergesToSameAnswer) {
   const double x_zero_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_zero)(0);
   const double x_bad_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_bad)(0);
   EXPECT_NEAR(x_zero_value, x_bad_value, 1e-6);
-  EXPECT_GT(x_zero_value, 0.0);  // sanity: this is the active (overlapping) branch
+  EXPECT_GT(x_zero_value, 0.0);  // the overlapping, active case
 }
 
 //@}
