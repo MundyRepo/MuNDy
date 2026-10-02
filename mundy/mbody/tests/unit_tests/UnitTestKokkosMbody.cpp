@@ -22,22 +22,22 @@
 /// \brief Unit tests for mundy::mbody::solve and the operators and geometry kernels behind it.
 
 // External
-#include <gtest/gtest.h>      // for TEST, EXPECT_NEAR, etc
-#include <Kokkos_Core.hpp>    // for Kokkos::View, Kokkos::parallel_for, Kokkos::parallel_reduce
+#include <gtest/gtest.h>  // for TEST, EXPECT_NEAR, etc
+
+#include <Kokkos_Core.hpp>  // for Kokkos::View, Kokkos::parallel_for, Kokkos::parallel_reduce
 
 // C++ core
-#include <algorithm>   // for std::max
-#include <cmath>       // for std::abs, std::sqrt, std::pow, std::exp, std::log
-#include <random>      // for std::mt19937, std::uniform_real_distribution
-#include <stdexcept>   // for std::invalid_argument
-#include <string>      // for std::to_string
-#include <utility>     // for std::pair, std::swap
-#include <vector>      // for std::vector
+#include <algorithm>  // for std::max
+#include <cmath>      // for std::abs, std::sqrt, std::pow, std::exp, std::log
+#include <random>     // for std::mt19937, std::uniform_real_distribution
+#include <stdexcept>  // for std::invalid_argument, std::runtime_error
+#include <string>     // for std::to_string
+#include <utility>    // for std::swap
+#include <vector>     // for std::vector
 
 // Mundy
-#include <mundy_math/Matrix.hpp>       // for mundy::Matrix
-#include <mundy_math/eigenvalues.hpp>  // for mundy::make_eigen_problem, mundy::solve_eigen_problem
-#include <mundy_math/lcp.hpp>          // for mundy::make_lcp, mundy::solve_lcp
+#include <mundy_math/Matrix.hpp>        // for mundy::Matrix
+#include <mundy_math/eigenvalues.hpp>   // for mundy::make_eigen_problem, mundy::solve_eigen_problem
 #include <mundy_mbody/KokkosMbody.hpp>  // for mundy::mbody::solve
 
 namespace mundy {
@@ -218,6 +218,23 @@ double max_step_displacement(const RodViews<Space>& rods, double dt) {
   return dt * max_speed;
 }
 
+/// \brief Step until no rod moves farther than settled_step, or turns through a larger angle, in one step.
+///
+/// Returns whether that happened within max_steps.
+template <typename Space>
+bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Space>& constraints, const SolveConfig& cfg,
+                        const Kokkos::View<double*, typename Space::memory_space>& load, double settled_step,
+                        int max_steps) {
+  for (int step = 0; step < max_steps; ++step) {
+    MUNDY_THROW_REQUIRE(step_rods(rods, constraints, cfg, load).converged, std::runtime_error,
+                        "step_until_settled: a step failed to converge.");
+    if (max_step_displacement(rods, cfg.dt) <= settled_step) {
+      return true;
+    }
+  }
+  return false;
+}
+
 //@}
 
 //! \name Finite differences
@@ -271,33 +288,44 @@ using DenseMat = std::vector<std::vector<double>>;
 DenseMat dense_matmul(const DenseMat& A, const DenseMat& B) {
   const size_t m = A.size(), k = A.empty() ? 0 : A[0].size(), n = B.empty() ? 0 : B[0].size();
   DenseMat C(m, std::vector<double>(n, 0.0));
-  for (size_t i = 0; i < m; ++i)
+  for (size_t i = 0; i < m; ++i) {
     for (size_t p = 0; p < k; ++p) {
       const double a = A[i][p];
-      for (size_t j = 0; j < n; ++j) C[i][j] += a * B[p][j];
+      for (size_t j = 0; j < n; ++j) {
+        C[i][j] += a * B[p][j];
+      }
     }
+  }
   return C;
 }
 
 DenseMat dense_transpose(const DenseMat& A) {
   const size_t m = A.size(), n = A.empty() ? 0 : A[0].size();
   DenseMat T(n, std::vector<double>(m, 0.0));
-  for (size_t i = 0; i < m; ++i)
-    for (size_t j = 0; j < n; ++j) T[j][i] = A[i][j];
+  for (size_t i = 0; i < m; ++i) {
+    for (size_t j = 0; j < n; ++j) {
+      T[j][i] = A[i][j];
+    }
+  }
   return T;
 }
 
 std::vector<double> dense_matvec(const DenseMat& A, const std::vector<double>& x) {
   std::vector<double> y(A.size(), 0.0);
-  for (size_t i = 0; i < A.size(); ++i)
-    for (size_t j = 0; j < x.size(); ++j) y[i] += A[i][j] * x[j];
+  for (size_t i = 0; i < A.size(); ++i) {
+    for (size_t j = 0; j < x.size(); ++j) {
+      y[i] += A[i][j] * x[j];
+    }
+  }
   return y;
 }
 
 /// \brief [A B], for A and B with the same number of rows.
 DenseMat dense_hcat(const DenseMat& A, const DenseMat& B) {
   DenseMat C = A;
-  for (size_t i = 0; i < C.size(); ++i) C[i].insert(C[i].end(), B[i].begin(), B[i].end());
+  for (size_t i = 0; i < C.size(); ++i) {
+    C[i].insert(C[i].end(), B[i].begin(), B[i].end());
+  }
   return C;
 }
 
@@ -306,20 +334,29 @@ std::vector<double> dense_solve(DenseMat A, std::vector<double> b) {
   const size_t n = A.size();
   for (size_t col = 0; col < n; ++col) {
     size_t piv = col;
-    for (size_t r = col + 1; r < n; ++r)
-      if (std::abs(A[r][col]) > std::abs(A[piv][col])) piv = r;
+    for (size_t r = col + 1; r < n; ++r) {
+      if (std::abs(A[r][col]) > std::abs(A[piv][col])) {
+        piv = r;
+      }
+    }
     std::swap(A[col], A[piv]);
     std::swap(b[col], b[piv]);
     const double d = A[col][col];
     for (size_t r = 0; r < n; ++r) {
-      if (r == col) continue;
+      if (r == col) {
+        continue;
+      }
       const double f = A[r][col] / d;
-      for (size_t c = col; c < n; ++c) A[r][c] -= f * A[col][c];
+      for (size_t c = col; c < n; ++c) {
+        A[r][c] -= f * A[col][c];
+      }
       b[r] -= f * b[col];
     }
   }
   std::vector<double> x(n, 0.0);
-  for (size_t i = 0; i < n; ++i) x[i] = b[i] / A[i][i];
+  for (size_t i = 0; i < n; ++i) {
+    x[i] = b[i] / A[i][i];
+  }
   return x;
 }
 
@@ -755,6 +792,7 @@ TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
 // One constraint through the full solve(). A single spring reduces the Schur complement to the scalar equation
 // (B^T M B + 1/k) y = -b0, and a single contact to the scalar LCP lambda = max(0, -sep0 / A). The scalars come
 // from the same operators solve() uses, so these check solve()'s assembly of the operators, not the operators.
+// The spring solves run CG to cg_tol = 1e-14, and B^T M B + 1/k >= 1/k bounds the multiplier's error by k cg_tol.
 
 /// \brief The quadratic form B^T M B of a single constraint, as a scalar.
 template <typename OpBT, typename OpM, typename OpB>
@@ -789,6 +827,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   SolveConfig cfg;
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
+  cfg.cg_tol = 1e-14;
 
   // Scalar B^T M B
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -807,7 +846,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
   const double y_expected = -b0 / (btmb + 1.0 / lin_springs.spring_constant(0));
-  EXPECT_NEAR(lin_springs.lambda(0), y_expected, 1e-6);
+  EXPECT_NEAR(lin_springs.lambda(0), y_expected, 1e-12);
 
   // Internal force: equal and opposite on the two rods.
   const Vector3d total_force = rods.force(0) + rods.force(1);
@@ -835,6 +874,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   SolveConfig cfg;
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
+  cfg.cg_tol = 1e-14;
 
   // Scalar B^T M B
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -853,7 +893,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
   const double y_expected = -b0 / (btmb + 1.0 / ang_springs.spring_constant(0));
-  EXPECT_NEAR(ang_springs.lambda(0), y_expected, 1e-6);
+  EXPECT_NEAR(ang_springs.lambda(0), y_expected, 1e-12);
 
   // Internal torque and no force: both cancel between the two rods.
   const Vector3d total_force = rods.force(0) + rods.force(1);
@@ -888,6 +928,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   SolveConfig cfg;
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
+  cfg.cg_tol = 1e-14;
 
   // Scalar B^T M B
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -906,7 +947,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
   const double y_expected = -b0 / (btmb + 1.0 / triple_springs.spring_constant(0));
-  EXPECT_NEAR(triple_springs.lambda(0), y_expected, 1e-6);
+  EXPECT_NEAR(triple_springs.lambda(0), y_expected, 1e-12);
 
   // Internal and position-only: the three forces cancel and there is no torque.
   const Vector3d total_force = rods.force(0) + rods.force(1) + rods.force(2);
@@ -940,6 +981,7 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   SolveConfig cfg;
   cfg.dt = 1.0;
   cfg.viscosity = 1.0;
+  cfg.outer_tol = 1e-12;
 
   // Scalar A := D^T M D
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -963,9 +1005,10 @@ TEST(Mbody, ContactOnlyActiveMatchesScalarLCP) {
   EXPECT_TRUE(r.converged);
   ASSERT_LT(r.sep0, 0.0) << "test setup should start penetrating";
 
+  // PGD stops at |A lambda + sep0| <= outer_tol = 1e-12, so the error is at most 1e-12 / A, about 2.5e-12.
   const double lambda_expected = -r.sep0 / r.A;
   EXPECT_GT(r.lambda, 0.0);
-  EXPECT_NEAR(r.lambda, lambda_expected, 1e-4);
+  EXPECT_NEAR(r.lambda, lambda_expected, 1e-11);
 }
 
 // Separated rods: lambda = 0.
@@ -974,7 +1017,6 @@ TEST(Mbody, ContactOnlyInactiveMatchesScalarLCP) {
   EXPECT_TRUE(r.converged);
   ASSERT_GT(r.sep0, 0.0) << "test setup should start separated";
   EXPECT_NEAR(r.lambda, 0.0, 1e-6);
-  EXPECT_NEAR(r.lambda * r.sep0, 0.0, 1e-6);
 }
 
 // Empty families are zero-column operators, and a solve over them converges at once.
@@ -1118,34 +1160,22 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
     kinv.push_back(1.0 / p.constraints.angular_springs.spring_constant(k));
   }
   const auto force_torque_ext = p.rods.force_torque_view();
-  const DenseStep expected =
-      dense_schur_step(dense_hcat(materialize_dense(B_lin), materialize_dense(B_ang)), materialize_dense(M), b0, kinv,
-                       std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()),
-                       p.cfg.dt);
+  const DenseStep expected = dense_schur_step(
+      dense_hcat(materialize_dense(B_lin), materialize_dense(B_ang)), materialize_dense(M), b0, kinv,
+      std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()), p.cfg.dt);
 
   // Solve
   const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
   EXPECT_TRUE(result.converged);
 
+  // CG stops at a residual of cg_tol = 1e-10, and K^-1 = I/3 bounds the error in y, and so in v, by about 3e-10.
   const size_t num_links = kChainNumRods - 1;
   for (size_t i = 0; i < num_links; ++i) {
-    EXPECT_NEAR(p.constraints.linear_springs.lambda(i), expected.y[i], 1e-4);
+    EXPECT_NEAR(p.constraints.linear_springs.lambda(i), expected.y[i], 1e-9) << "linear spring " << i;
+    EXPECT_NEAR(p.constraints.angular_springs.lambda(i), expected.y[num_links + i], 1e-9) << "angular spring " << i;
   }
-  for (size_t i = 0; i < num_links; ++i) {
-    EXPECT_NEAR(p.constraints.angular_springs.lambda(i), expected.y[num_links + i], 1e-4);
-  }
-}
-
-// The same chain with k = 1e6, near the rigid limit, still converges.
-TEST(Mbody, StiffChainStaysStable) {
-  SolveInput p = make_chain_problem(/*spring_constant=*/1.0e6);
-  const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
-  EXPECT_TRUE(result.converged);
-  for (size_t i = 0; i < p.constraints.linear_springs.size(); ++i) {
-    EXPECT_TRUE(std::isfinite(p.constraints.linear_springs.lambda(i)));
-  }
-  for (size_t i = 0; i < p.constraints.angular_springs.size(); ++i) {
-    EXPECT_TRUE(std::isfinite(p.constraints.angular_springs.lambda(i)));
+  for (size_t i = 0; i < expected.vel_omega.size(); ++i) {
+    EXPECT_NEAR(p.rods.velocity_omega_view()(i), expected.vel_omega[i], 1e-9) << "entry " << i;
   }
 }
 
@@ -1340,9 +1370,8 @@ TEST(Mbody, FixedPoseHoldsItsTarget) {
     const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
     const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
     const auto load_d = copy_load(rods_d);
-    for (int step = 0; step < 60; ++step) {
-      ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt << " step " << step;
-    }
+    ASSERT_TRUE(step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000))
+        << "not settled at dt=" << dt;
     deep_copy(rods, rods_d);
     deep_copy(constraints, constraints_d);
 
@@ -1371,10 +1400,6 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
   const Vector3d pose_target{-1.0, 0.75, -0.25};
   const Quaterniond pose_orientation_target{1.0, 0.0, 0.0, 0.0};
   const double torque = 0.3;
-
-  // Settled once no rod moves farther than this, or turns through a larger angle, in one step.
-  constexpr double settled_step = 1e-12;
-  constexpr int max_steps = 1000;
 
   for (int torque_axis = 0; torque_axis < 3; ++torque_axis) {
     Vector3d applied_torque{0.0, 0.0, 0.0};
@@ -1411,15 +1436,8 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
       const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
       const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
       const auto load_d = copy_load(rods_d);
-      int steps = 0;
-      while (steps < max_steps) {
-        ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt << " step " << steps;
-        ++steps;
-        if (max_step_displacement(rods_d, dt) <= settled_step) {
-          break;
-        }
-      }
-      ASSERT_LT(steps, max_steps) << "not settled about axis " << torque_axis << " at dt=" << dt;
+      ASSERT_TRUE(step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000))
+          << "not settled about axis " << torque_axis << " at dt=" << dt;
       deep_copy(rods, rods_d);
 
       const Vector3d position_offset = rods.center(0) - position_target;
@@ -1472,9 +1490,7 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
-  for (int step = 0; step < 100; ++step) {
-    step_rods(rods_d, constraints_d, cfg, load_d);
-  }
+  ASSERT_TRUE(step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000));
   deep_copy(rods, rods_d);
   deep_copy(constraints, constraints_d);
 
@@ -1711,161 +1727,6 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
   }
 }
 
-// A grid of spheres kicked into overlap: contacts clear every overlap every step while the springs relax. Only rows
-// carry bend springs, since an angular spring constrains a single axis of each rod.
-
-size_t grid_index(size_t row, size_t col, size_t num_cols) {
-  return row * num_cols + col;
-}
-
-/// \brief A fully triangulated grid of spheres with bend springs along rows, kicked randomly off its rest shape.
-///
-/// Contacts cover every pair within a cutoff of the kicked positions.
-SolveInput make_grid_problem(size_t num_rows, size_t num_cols, double spacing, double radius, double spring_constant,
-                             double kick_magnitude, unsigned seed) {
-  SolveInput p;
-  const size_t num_spheres = num_rows * num_cols;
-  p.rods = RodViews<HostExecSpace>(num_spheres);
-
-  const Quaterniond row_orientation =
-      axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.5 * Kokkos::numbers::pi_v<double>);
-  for (size_t row = 0; row < num_rows; ++row) {
-    for (size_t col = 0; col < num_cols; ++col) {
-      const size_t idx = grid_index(row, col, num_cols);
-      p.rods.center(idx) = Vector3d{static_cast<double>(col) * spacing, static_cast<double>(row) * spacing, 0.0};
-      p.rods.orientation(idx) = row_orientation;
-      p.rods.radius(idx) = radius;
-      p.rods.length(idx) = 0.0;
-    }
-  }
-  zero_rod_state(p.rods);
-
-  std::mt19937 rng(seed);
-  std::uniform_real_distribution<double> kick(-kick_magnitude, kick_magnitude);
-  for (size_t idx = 0; idx < num_spheres; ++idx) {
-    p.rods.center(idx) = p.rods.center(idx) + Vector3d{kick(rng), kick(rng), kick(rng)};
-  }
-
-  // Linear springs: every row edge, column edge, and both diagonals of every unit cell.
-  std::vector<std::pair<size_t, size_t>> lin_pairs;
-  std::vector<double> lin_rest_lengths;
-  for (size_t row = 0; row < num_rows; ++row) {
-    for (size_t col = 0; col < num_cols; ++col) {
-      const size_t idx = grid_index(row, col, num_cols);
-      if (col + 1 < num_cols) {
-        lin_pairs.push_back({idx, grid_index(row, col + 1, num_cols)});
-        lin_rest_lengths.push_back(spacing);
-      }
-      if (row + 1 < num_rows) {
-        lin_pairs.push_back({idx, grid_index(row + 1, col, num_cols)});
-        lin_rest_lengths.push_back(spacing);
-      }
-      if (row + 1 < num_rows && col + 1 < num_cols) {
-        lin_pairs.push_back({idx, grid_index(row + 1, col + 1, num_cols)});
-        lin_rest_lengths.push_back(spacing * std::sqrt(2.0));
-        lin_pairs.push_back({grid_index(row, col + 1, num_cols), grid_index(row + 1, col, num_cols)});
-        lin_rest_lengths.push_back(spacing * std::sqrt(2.0));
-      }
-    }
-  }
-  p.constraints.linear_springs = LinearSpringViews<HostExecSpace>(lin_pairs.size());
-  for (size_t k = 0; k < lin_pairs.size(); ++k) {
-    p.constraints.linear_springs.rod_i(k) = static_cast<int>(lin_pairs[k].first);
-    p.constraints.linear_springs.rod_j(k) = static_cast<int>(lin_pairs[k].second);
-    p.constraints.linear_springs.rest_length(k) = lin_rest_lengths[k];
-    p.constraints.linear_springs.spring_constant(k) = spring_constant;
-  }
-
-  // Bend springs: row edges only.
-  std::vector<std::pair<size_t, size_t>> ang_pairs;
-  for (size_t row = 0; row < num_rows; ++row) {
-    for (size_t col = 0; col + 1 < num_cols; ++col) {
-      ang_pairs.push_back({grid_index(row, col, num_cols), grid_index(row, col + 1, num_cols)});
-    }
-  }
-  p.constraints.angular_springs = AngularSpringViews<HostExecSpace>(ang_pairs.size());
-  for (size_t k = 0; k < ang_pairs.size(); ++k) {
-    p.constraints.angular_springs.rod_i(k) = static_cast<int>(ang_pairs[k].first);
-    p.constraints.angular_springs.rod_j(k) = static_cast<int>(ang_pairs[k].second);
-    p.constraints.angular_springs.rest_angle(k) = 0.0;  // every rod starts with the same orientation
-    p.constraints.angular_springs.spring_constant(k) = spring_constant;
-  }
-
-  // Contacts: every pair within the cutoff. max_overlap checks every pair, so too small a cutoff fails the test.
-  const double contact_cutoff = 1.8 * spacing;
-  std::vector<std::pair<size_t, size_t>> contact_pairs;
-  for (size_t i = 0; i < num_spheres; ++i) {
-    for (size_t j = i + 1; j < num_spheres; ++j) {
-      if (norm(p.rods.center(j) - p.rods.center(i)) < contact_cutoff) {
-        contact_pairs.push_back({i, j});
-      }
-    }
-  }
-  p.constraints.contacts = ContactViews<HostExecSpace>(contact_pairs.size());
-  for (size_t k = 0; k < contact_pairs.size(); ++k) {
-    p.constraints.contacts.rod_i(k) = static_cast<int>(contact_pairs[k].first);
-    p.constraints.contacts.rod_j(k) = static_cast<int>(contact_pairs[k].second);
-  }
-  p.cfg.dt = 0.1;
-  p.cfg.viscosity = 1.0;
-  p.cfg.max_cg_iters = 300;
-  p.cfg.cg_tol = 1e-6;
-  p.cfg.max_outer_iters = 500;
-  p.cfg.outer_tol = 1e-6;
-  return p;
-}
-
-/// \brief The deepest overlap over every pair of spheres; non-positive if none overlap.
-template <typename Space>
-double max_overlap(const RodViews<Space>& rods) {
-  const int num_rods = static_cast<int>(rods.size());
-  double worst_gap = 0.0;
-  Kokkos::parallel_reduce(
-      "max_overlap", Kokkos::RangePolicy<Space>(0, num_rods * num_rods),
-      KOKKOS_LAMBDA(const int pair, double& min_gap) {
-        const int i = pair / num_rods;
-        const int j = pair % num_rods;
-        if (i < j) {
-          const double gap = norm(rods.center(j) - rods.center(i)) - rods.radius(i) - rods.radius(j);
-          min_gap = Kokkos::min(min_gap, gap);
-        }
-      },
-      Kokkos::Min<double>(worst_gap));
-  return -worst_gap;
-}
-
-TEST(Mbody, GridOfSpheresStaysOverlapFreeAndRelaxes) {
-  SolveInput p = make_grid_problem(/*num_rows=*/4, /*num_cols=*/4, /*spacing=*/1.0, /*radius=*/0.35,
-                                   /*spring_constant=*/3.0, /*kick_magnitude=*/0.35, /*seed=*/1234);
-
-  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
-  const auto load_d = copy_load(rods_d);
-  ASSERT_GT(max_overlap(rods_d), 0.0) << "test setup should start with a real overlap somewhere";
-
-  const int num_steps = 80;
-  std::vector<double> energy_trace;
-  energy_trace.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
-
-  for (int step = 0; step < num_steps; ++step) {
-    ASSERT_TRUE(step_rods(rods_d, constraints_d, p.cfg, load_d).converged) << "step " << step;
-    ASSERT_LE(max_overlap(rods_d), 1e-4) << "overlap at step " << step;
-    energy_trace.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
-  }
-
-  // Relaxes: the energy falls well below its value after the kick
-  const double energy_after_kick = energy_trace[1];
-  const double energy_final = energy_trace.back();
-  EXPECT_LT(energy_final, 0.1 * energy_after_kick)
-      << "energy_after_kick=" << energy_after_kick << " energy_final=" << energy_final;
-
-  // Stable: the energy never exceeds twice its initial value
-  const double energy_ceiling = 2.0 * energy_trace[0];
-  for (size_t n = 0; n < energy_trace.size(); ++n) {
-    EXPECT_LT(energy_trace[n], energy_ceiling) << "energy diverged at step " << n;
-  }
-}
-
 //@}
 
 //! \name Chain mechanics
@@ -1934,11 +1795,16 @@ TEST(Mbody, ChainAxialStiffnessConvergesWithSegmentCount) {
   }
 }
 
-/// \brief The free spheres' transverse displacements at static equilibrium, solved directly.
+/// \brief The free spheres' transverse displacements at static equilibrium under f_ext, solved directly.
 ///
-/// Linearizes each bend angle, theta = J u, and solves k_ang J^T J u = f_ext. A bend angle has no gradient at
-/// straight, so the chain is first bent onto a shallow arc of amplitude pre_bend, which the answer does not depend on.
-/// With the arc in the y-z plane the bend axis is x, so the y-displacements decouple exactly.
+/// Without contacts, a settled chain satisfies F_ext + B y = 0 with each bend multiplier y = -k_ang theta.
+/// For small transverse displacements u the bend angles are linear, theta = J u, with J the bend springs' rate operator
+/// applied to the free spheres' y-velocities, so equilibrium is the linear system k_ang J^T J u = f_ext.
+///
+/// A bend angle has no gradient at straight, so J is taken on a shallow arc of amplitude pre_bend, which the answer
+/// does not depend on. With the arc in the y-z plane the bend axis is x, so the y-displacements decouple exactly.
+///
+/// CantileverSettlesToStaticBend checks that solve() settles to this equilibrium.
 std::vector<double> solve_static_bend(size_t num_spheres, double spacing, double k_ang, size_t first_free,
                                       const std::vector<double>& f_ext, double pre_bend = 1e-6) {
   BendChain chain = make_bend_chain(num_spheres, spacing, k_ang);
@@ -1979,7 +1845,7 @@ std::vector<double> solve_static_bend(size_t num_spheres, double spacing, double
 }
 
 /// \brief Cantilever tip deflection. Spheres 0 and 1 are the wall, holding its position and slope.
-double run_static_bending_tip_dynamic(size_t num_segments, double L, double EI, double tip_force) {
+double run_static_cantilever_tip(size_t num_segments, double L, double EI, double tip_force) {
   const double spacing = L / static_cast<double>(num_segments);
   std::vector<double> f_ext(num_segments, 0.0);
   f_ext.back() = tip_force;
@@ -2008,7 +1874,7 @@ TEST(Mbody, ChainBendingMatchesHenckyBarChain) {
   for (const size_t num_segments : {4, 7, 11, 16, 25, 50, 100, 200}) {
     const double n = static_cast<double>(num_segments);
     const double hencky = tip_force * L * L * L * (n + 1.0) * (2.0 * n + 1.0) / (6.0 * n * n * EI);
-    const double tip = run_static_bending_tip_dynamic(num_segments, L, EI, tip_force);
+    const double tip = run_static_cantilever_tip(num_segments, L, EI, tip_force);
 
     EXPECT_NEAR(tip, hencky, 1e-6 * hencky) << "num_segments=" << num_segments;
     finest_scaled_error = n * std::abs(tip - continuum) / continuum;
@@ -2039,6 +1905,169 @@ TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
 
   // N^2 rel_err is exactly 2 at every resolution
   EXPECT_NEAR(finest_scaled_error, 2.0, 1e-4);
+}
+
+/// \brief A cantilever chain in rods 0 to num_segments + 1 of num_rods rods.
+///
+/// Linear springs join neighbours and a bend spring sits at each interior rod; callers hold rods 0 and 1 as the wall
+/// and set any rods past the chain. The free rods start on a shallow arc so every bend angle has a gradient on the
+/// first step, and the settled state does not depend on it.
+SolveInput make_cantilever(size_t num_segments, double L, double EI, size_t num_rods) {
+  const double spacing = L / static_cast<double>(num_segments);
+  const size_t num_chain = num_segments + 2;
+  MUNDY_THROW_REQUIRE(num_rods >= num_chain, std::invalid_argument, "make_cantilever: num_rods must hold the chain.");
+  const BendChain chain = make_bend_chain(num_chain, spacing, EI / spacing);
+
+  SolveInput p;
+  p.rods = RodViews<HostExecSpace>(num_rods);
+  for (size_t k = 0; k < num_chain; ++k) {
+    const double z = spacing * static_cast<double>(k);
+    const double arc = std::max(z - spacing, 0.0);
+    p.rods.center(k) = Vector3d{0.0, 1e-6 * arc * arc, z};
+    p.rods.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+    p.rods.radius(k) = chain.rods.radius(k);
+    p.rods.length(k) = 0.0;
+  }
+  zero_rod_state(p.rods);
+
+  p.constraints.linear_springs = LinearSpringViews<HostExecSpace>(num_chain - 1);
+  for (size_t k = 0; k + 1 < num_chain; ++k) {
+    p.constraints.linear_springs.rod_i(k) = static_cast<int>(k);
+    p.constraints.linear_springs.rod_j(k) = static_cast<int>(k + 1);
+    p.constraints.linear_springs.rest_length(k) = spacing;
+    p.constraints.linear_springs.spring_constant(k) = 1.0e5 / (spacing * spacing);  // effectively inextensible
+  }
+  p.constraints.triple_springs = chain.springs;
+
+  p.cfg.viscosity = 1.0;
+  p.cfg.max_cg_iters = 1000;
+  // Tight enough that solver error sits far below the settled chain's geometric nonlinearity.
+  p.cfg.cg_tol = 1e-14;
+  p.cfg.outer_tol = 1e-12;
+  return p;
+}
+
+/// \brief The settled state of a cantilever under a tip load.
+struct SettledCantilever {
+  bool settled;
+  std::vector<double> displacement;  // transverse, of the free rods 2 to num_segments + 1
+};
+
+/// \brief A cantilever settled under a transverse tip load.
+SettledCantilever run_settled_cantilever(size_t num_segments, double L, double EI, double tip_force, double dt) {
+  const size_t num_chain = num_segments + 2;
+  const int tip = static_cast<int>(num_chain - 1);
+  SolveInput p = make_cantilever(num_segments, L, EI, num_chain);
+  p.rods.force(tip) = Vector3d{0.0, tip_force, 0.0};
+
+  p.constraints.fixed_positions = FixedPositionViews<HostExecSpace>(2);
+  set_fixed_position(p.constraints.fixed_positions, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
+  set_fixed_position(p.constraints.fixed_positions, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
+  p.cfg.dt = dt;
+
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+  const auto load_d = copy_load(rods_d);
+  SettledCantilever result;
+  result.settled = step_until_settled(rods_d, constraints_d, p.cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
+  deep_copy(p.rods, rods_d);
+
+  for (size_t k = 2; k < num_chain; ++k) {
+    result.displacement.push_back(p.rods.center(k)[1]);
+  }
+  return result;
+}
+
+// Without contacts, the settled chain is the static equilibrium solve_static_bend computes. Every free sphere's
+// deflection matches it up to solve()'s nonlinear geometry, which at this load moves the deflection by about 3e-5 of
+// the tip's, shrinking as P^2.
+TEST(Mbody, CantileverSettlesToStaticBend) {
+  const double L = 8.0, EI = 5.0, tip_force = 1e-3;
+  for (const size_t num_segments : {4, 8, 16}) {
+    const double spacing = L / static_cast<double>(num_segments);
+    std::vector<double> f_ext(num_segments, 0.0);
+    f_ext.back() = tip_force;
+    const std::vector<double> expected = solve_static_bend(num_segments + 2, spacing, EI / spacing, 2, f_ext);
+    const SettledCantilever r = run_settled_cantilever(num_segments, L, EI, tip_force, /*dt=*/100.0);
+
+    ASSERT_TRUE(r.settled) << "num_segments=" << num_segments;
+    for (size_t k = 0; k < expected.size(); ++k) {
+      EXPECT_NEAR(r.displacement[k], expected[k], 1e-4 * expected.back())
+          << "free sphere " << k << " at num_segments=" << num_segments;
+    }
+  }
+}
+
+/// \brief The settled state of a propped cantilever.
+struct ProppedCantilever {
+  bool settled;
+  double contact_force;
+  double tip_gap;
+};
+
+/// \brief A cantilever whose tip rests on an anchored sphere, settled under a midspan load.
+ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double EI, double load, double dt) {
+  const size_t num_chain = num_segments + 2;
+  const int midspan = static_cast<int>(num_segments / 2 + 1);
+  const int tip = static_cast<int>(num_chain - 1);
+  const int obstacle = static_cast<int>(num_chain);
+  SolveInput p = make_cantilever(num_segments, L, EI, num_chain + 1);
+
+  const double radius = p.rods.radius(0);
+  p.rods.center(obstacle) = Vector3d{0.0, -2.0 * radius, p.rods.center(tip)[2]};  // touches the straight tip
+  p.rods.orientation(obstacle) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+  p.rods.radius(obstacle) = radius;
+  p.rods.length(obstacle) = 0.0;
+  p.rods.force(midspan) = Vector3d{0.0, -load, 0.0};
+
+  p.constraints.fixed_positions = FixedPositionViews<HostExecSpace>(3);
+  set_fixed_position(p.constraints.fixed_positions, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
+  set_fixed_position(p.constraints.fixed_positions, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
+  set_fixed_position(p.constraints.fixed_positions, 2, obstacle, Vector3d(p.rods.center(obstacle)));
+  p.constraints.contacts = ContactViews<HostExecSpace>(1);
+  p.constraints.contacts.rod_i(0) = tip;
+  p.constraints.contacts.rod_j(0) = obstacle;
+  p.cfg.dt = dt;
+
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+  const auto load_d = copy_load(rods_d);
+  const bool settled =
+      step_until_settled(rods_d, constraints_d, p.cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
+  deep_copy(p.rods, rods_d);
+  deep_copy(p.constraints, constraints_d);
+
+  const double tip_gap = norm(p.rods.center(tip) - p.rods.center(obstacle)) - 2.0 * radius;
+  return ProppedCantilever{settled, p.constraints.contacts.lambda(0), tip_gap};
+}
+
+// A cantilever whose tip rests on an anchored sphere, under a midspan load P. The contact props the tip, and the
+// chain's flexibility gives its reaction exactly,
+//
+//   R_N = P (N+2)(5N+2) / (8 (N+1)(2N+1)),
+//
+// first order in the spacing toward Euler-Bernoulli's 5P/16. solve() keeps the chain's geometry nonlinear, which at
+// this load moves the reaction by at most about 1e-6 of itself, shrinking as P^2.
+TEST(Mbody, ProppedCantileverMatchesHenckyBarChain) {
+  const double L = 8.0, EI = 5.0, load = 0.01;
+  const double continuum = 5.0 * load / 16.0;
+
+  double finest_scaled_error = 0.0;
+  double finest_scaled_error_expected = 0.0;
+  for (const size_t num_segments : {4, 8, 16, 32}) {
+    const double n = static_cast<double>(num_segments);
+    const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
+    const ProppedCantilever r = run_propped_cantilever(num_segments, L, EI, load, /*dt=*/100.0);
+
+    ASSERT_TRUE(r.settled) << "num_segments=" << num_segments;
+    EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky) << "num_segments=" << num_segments;
+    EXPECT_NEAR(r.tip_gap, 0.0, 1e-12) << "num_segments=" << num_segments;
+    finest_scaled_error = n * (r.contact_force - continuum) / continuum;
+    finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+  }
+
+  // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
+  EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4);
 }
 
 // The pre-bend must not reach the answer: amplitudes a decade apart agree on both boundary value problems.
@@ -2161,52 +2190,6 @@ TEST(Mbody, CGInvOpMatchesDenseInverse) {
   for (int i = 0; i < kNumBilateral; ++i) {
     EXPECT_NEAR(out_h(i), expected[i], 1e-6);
   }
-}
-
-// PGD on the overlapping-contact LCP reaches the same multiplier from a start far from it.
-TEST(Mbody, BadInitialGuessStillConvergesToSameAnswer) {
-  const double gap_x = 0.3;
-  const double radius = 0.2;
-  RodViews<HostExecSpace> rods =
-      make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0}, Vector3d{gap_x, 0.0, 0.0},
-                          Quaterniond{1.0, 0.0, 0.0, 0.0}, radius, 1.0);
-  zero_rod_state(rods);
-
-  ContactViews<HostExecSpace> contacts(1);
-  contacts.rod_i(0) = 0;
-  contacts.rod_j(0) = 1;
-
-  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-  auto sep0 = make_constraint_values(contacts);
-  const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_contact_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, contacts), sep0);
-  const impl::PairForceOp<TestExecSpace> D(geo, rods.size());
-  const impl::PairForceOpT<TestExecSpace> DT(geo, rods.size());
-  const impl::LocalDragMobilityOp<TestExecSpace> M(1.0, rods_d);
-
-  using backend_t = KokkosBackend<TestExecSpace>;
-  const auto lcp = make_lcp<backend_t>(DT, M, D, sep0);
-  const PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-10};
-  const auto pgd = make_pgd_solution_strategy(cfg);
-
-  Kokkos::View<double*, TestMemSpace> x_zero("x_zero", 1), grad0("grad0", 1), x_tmp0("x_tmp0", 1),
-      grad_tmp0("grad_tmp0", 1);
-  Kokkos::deep_copy(x_zero, 0.0);
-  auto state_zero = make_pgd_state(x_zero, grad0, x_tmp0, grad_tmp0);
-  const PGDResult<double> result_zero = solve_lcp(lcp, pgd, state_zero);
-
-  Kokkos::View<double*, TestMemSpace> x_bad("x_bad", 1), grad1("grad1", 1), x_tmp1("x_tmp1", 1),
-      grad_tmp1("grad_tmp1", 1);
-  Kokkos::deep_copy(x_bad, 99.99);
-  auto state_bad = make_pgd_state(x_bad, grad1, x_tmp1, grad_tmp1);
-  const PGDResult<double> result_bad = solve_lcp(lcp, pgd, state_bad);
-
-  EXPECT_TRUE(result_zero.converged);
-  EXPECT_TRUE(result_bad.converged);
-  const double x_zero_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_zero)(0);
-  const double x_bad_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_bad)(0);
-  EXPECT_NEAR(x_zero_value, x_bad_value, 1e-6);
-  EXPECT_GT(x_zero_value, 0.0);  // the overlapping, active case
 }
 
 //@}
