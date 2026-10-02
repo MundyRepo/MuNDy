@@ -458,6 +458,134 @@ class FixedPoseViews {
   scalar_view_t lambda_;
 };
 
+/// \brief Material points of two rods held coincident. lambda is an output (the force on rod_i).
+///
+/// The two-body peer of FixedPositionViews: the point at body_offset_i in rod_i's frame is held on the
+/// point at body_offset_j in rod_j's frame. Each pin is three scalar constraints, one per world axis of
+/// p_i - p_j, so its reaction comes back as a vector, and rod_j receives its negation. A pin is rigid: it
+/// has no compliance. rod_i and rod_j must differ.
+template <typename ExecSpace>
+class PinViews {
+ public:
+  using memory_space = typename ExecSpace::memory_space;
+  using int_view_t = Kokkos::View<int*, memory_space>;
+  using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  PinViews() = default;
+
+  explicit PinViews(size_t num_pins)
+      : rod_i_("rod_i", num_pins),
+        rod_j_("rod_j", num_pins),
+        body_offset_i_("body_offset_i", 3 * num_pins),
+        body_offset_j_("body_offset_j", 3 * num_pins),
+        lambda_("lambda", 3 * num_pins) {
+  }
+
+  //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
+  //@{
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION auto rod_i(int k)         const { return get_scalar<int>(&rod_i_(k)); }
+  KOKKOS_INLINE_FUNCTION auto rod_j(int k)         const { return get_scalar<int>(&rod_j_(k)); }
+  KOKKOS_INLINE_FUNCTION auto body_offset_i(int k) const { return get_vector3<double>(&body_offset_i_(3 * k)); }
+  KOKKOS_INLINE_FUNCTION auto body_offset_j(int k) const { return get_vector3<double>(&body_offset_j_(3 * k)); }
+  KOKKOS_INLINE_FUNCTION auto lambda(int k)        const { return get_vector3<double>(&lambda_(3 * k)); }
+  // clang-format on
+  //@}
+
+  //! \name Whole-array accessors
+  //@{
+  // clang-format off
+  int_view_t rod_i_view()            const { return rod_i_; }
+  int_view_t rod_j_view()            const { return rod_j_; }
+  scalar_view_t body_offset_i_view() const { return body_offset_i_; }
+  scalar_view_t body_offset_j_view() const { return body_offset_j_; }
+  scalar_view_t lambda_view()        const { return lambda_; }
+  // clang-format on
+  //@}
+
+  size_t size() const {
+    return rod_i_.extent(0);
+  }
+
+  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
+  size_t num_constraints() const {
+    return 3 * size();
+  }
+
+ private:
+  int_view_t rod_i_;
+  int_view_t rod_j_;
+  scalar_view_t body_offset_i_;
+  scalar_view_t body_offset_j_;
+  scalar_view_t lambda_;
+};
+
+/// \brief Distances between material points of two rods held at a rest length. lambda is an output.
+///
+/// The rigid counterpart of a linear spring, measured between the points at body_offset_i and
+/// body_offset_j in the two rods' own frames rather than between rod centres. Each entry is one scalar
+/// constraint, |p_j - p_i| - rest_length, whose multiplier is negative in tension. rest_length must be
+/// positive, since the distance is not differentiable where it vanishes, and rod_i and rod_j must differ.
+template <typename ExecSpace>
+class FixedLengthViews {
+ public:
+  using memory_space = typename ExecSpace::memory_space;
+  using int_view_t = Kokkos::View<int*, memory_space>;
+  using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  FixedLengthViews() = default;
+
+  explicit FixedLengthViews(size_t num_lengths)
+      : rod_i_("rod_i", num_lengths),
+        rod_j_("rod_j", num_lengths),
+        body_offset_i_("body_offset_i", 3 * num_lengths),
+        body_offset_j_("body_offset_j", 3 * num_lengths),
+        rest_length_("rest_length", num_lengths),
+        lambda_("lambda", num_lengths) {
+  }
+
+  //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
+  //@{
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION auto rod_i(int k)         const { return get_scalar<int>(&rod_i_(k)); }
+  KOKKOS_INLINE_FUNCTION auto rod_j(int k)         const { return get_scalar<int>(&rod_j_(k)); }
+  KOKKOS_INLINE_FUNCTION auto body_offset_i(int k) const { return get_vector3<double>(&body_offset_i_(3 * k)); }
+  KOKKOS_INLINE_FUNCTION auto body_offset_j(int k) const { return get_vector3<double>(&body_offset_j_(3 * k)); }
+  KOKKOS_INLINE_FUNCTION auto rest_length(int k)   const { return get_scalar<double>(&rest_length_(k)); }
+  KOKKOS_INLINE_FUNCTION auto lambda(int k)        const { return get_scalar<double>(&lambda_(k)); }
+  // clang-format on
+  //@}
+
+  //! \name Whole-array accessors
+  //@{
+  // clang-format off
+  int_view_t rod_i_view()            const { return rod_i_; }
+  int_view_t rod_j_view()            const { return rod_j_; }
+  scalar_view_t body_offset_i_view() const { return body_offset_i_; }
+  scalar_view_t body_offset_j_view() const { return body_offset_j_; }
+  scalar_view_t rest_length_view()   const { return rest_length_; }
+  scalar_view_t lambda_view()        const { return lambda_; }
+  // clang-format on
+  //@}
+
+  size_t size() const {
+    return rod_i_.extent(0);
+  }
+
+  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
+  size_t num_constraints() const {
+    return size();
+  }
+
+ private:
+  int_view_t rod_i_;
+  int_view_t rod_j_;
+  scalar_view_t body_offset_i_;
+  scalar_view_t body_offset_j_;
+  scalar_view_t rest_length_;
+  scalar_view_t lambda_;
+};
+
 /// \brief Rod-rod unilateral (spherocylinder-spherocylinder) contacts. lambda is an output (contact force magnitude).
 template <typename ExecSpace>
 class ContactViews {
@@ -530,6 +658,8 @@ struct IndexRange {
 struct ConstraintIndexMap {
   IndexRange linear_springs;
   IndexRange angular_springs;
+  IndexRange pins;
+  IndexRange fixed_lengths;
   IndexRange triple_springs;
   IndexRange fixed_positions;
   IndexRange fixed_poses;
@@ -545,6 +675,8 @@ template <typename ExecSpace>
 struct ConstraintSet {
   LinearSpringViews<ExecSpace> linear_springs{0};
   AngularSpringViews<ExecSpace> angular_springs{0};
+  PinViews<ExecSpace> pins{0};
+  FixedLengthViews<ExecSpace> fixed_lengths{0};
   TriplePointAngularSpringViews<ExecSpace> triple_springs{0};
   FixedPositionViews<ExecSpace> fixed_positions{0};
   FixedPoseViews<ExecSpace> fixed_poses{0};
@@ -564,6 +696,10 @@ ConstraintIndexMap make_constraint_index_map(const ConstraintSet<ExecSpace>& con
   offset = index_map.linear_springs.end;
   index_map.angular_springs = IndexRange{offset, offset + constraints.angular_springs.num_constraints()};
   offset = index_map.angular_springs.end;
+  index_map.pins = IndexRange{offset, offset + constraints.pins.num_constraints()};
+  offset = index_map.pins.end;
+  index_map.fixed_lengths = IndexRange{offset, offset + constraints.fixed_lengths.num_constraints()};
+  offset = index_map.fixed_lengths.end;
   index_map.triple_springs = IndexRange{offset, offset + constraints.triple_springs.num_constraints()};
   offset = index_map.triple_springs.end;
   index_map.fixed_positions = IndexRange{offset, offset + constraints.fixed_positions.num_constraints()};
@@ -656,6 +792,27 @@ void deep_copy(const FixedPoseViews<DstSpace>& dst, const FixedPoseViews<SrcSpac
 
 /// \brief Copy every field of src into dst; the two must have the same size.
 template <typename DstSpace, typename SrcSpace>
+void deep_copy(const PinViews<DstSpace>& dst, const PinViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
+  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
+  Kokkos::deep_copy(dst.body_offset_i_view(), src.body_offset_i_view());
+  Kokkos::deep_copy(dst.body_offset_j_view(), src.body_offset_j_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
+void deep_copy(const FixedLengthViews<DstSpace>& dst, const FixedLengthViews<SrcSpace>& src) {
+  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
+  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
+  Kokkos::deep_copy(dst.body_offset_i_view(), src.body_offset_i_view());
+  Kokkos::deep_copy(dst.body_offset_j_view(), src.body_offset_j_view());
+  Kokkos::deep_copy(dst.rest_length_view(), src.rest_length_view());
+  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+}
+
+/// \brief Copy every field of src into dst; the two must have the same size.
+template <typename DstSpace, typename SrcSpace>
 void deep_copy(const ContactViews<DstSpace>& dst, const ContactViews<SrcSpace>& src) {
   Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
   Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
@@ -667,6 +824,8 @@ template <typename DstSpace, typename SrcSpace>
 void deep_copy(const ConstraintSet<DstSpace>& dst, const ConstraintSet<SrcSpace>& src) {
   deep_copy(dst.linear_springs, src.linear_springs);
   deep_copy(dst.angular_springs, src.angular_springs);
+  deep_copy(dst.pins, src.pins);
+  deep_copy(dst.fixed_lengths, src.fixed_lengths);
   deep_copy(dst.triple_springs, src.triple_springs);
   deep_copy(dst.fixed_positions, src.fixed_positions);
   deep_copy(dst.fixed_poses, src.fixed_poses);
@@ -682,6 +841,10 @@ template <typename E>
 struct is_views_container<LinearSpringViews<E>> : std::true_type {};
 template <typename E>
 struct is_views_container<AngularSpringViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<PinViews<E>> : std::true_type {};
+template <typename E>
+struct is_views_container<FixedLengthViews<E>> : std::true_type {};
 template <typename E>
 struct is_views_container<TriplePointAngularSpringViews<E>> : std::true_type {};
 template <typename E>
@@ -731,6 +894,8 @@ auto create_mirror_view(const Space& space, const ConstraintSet<SrcSpace>& src) 
     ConstraintSet<Space> mirror;
     mirror.linear_springs = create_mirror_view(space, src.linear_springs);
     mirror.angular_springs = create_mirror_view(space, src.angular_springs);
+    mirror.pins = create_mirror_view(space, src.pins);
+    mirror.fixed_lengths = create_mirror_view(space, src.fixed_lengths);
     mirror.triple_springs = create_mirror_view(space, src.triple_springs);
     mirror.fixed_positions = create_mirror_view(space, src.fixed_positions);
     mirror.fixed_poses = create_mirror_view(space, src.fixed_poses);

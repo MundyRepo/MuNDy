@@ -245,6 +245,8 @@ static_assert(::mundy::LinearOperator<::mundy::KokkosBackend<Kokkos::DefaultExec
 ///   - contacts:        force_{i,j} = -+n,  torque_{i,j} = -+r_{i,j} x n
 ///   - linear springs:  force_{i,j} = -+d,  torque_{i,j} = 0
 ///   - angular springs: force_{i,j} = 0,    torque_{i,j} = -+a
+///   - pins:            force_{i,j} = +-e_c, torque_{i,j} = +-r_{i,j} x e_c
+///   - fixed lengths:   force_{i,j} = -+n,  torque_{i,j} = -+r_{i,j} x n
 /// force_i/torque_i (and force_j/torque_j) share one 6-wide-per-pair buffer; per-element accessors
 /// return views into it, *_view() expose it whole.
 template <typename ExecSpace>
@@ -885,6 +887,124 @@ PairGeometry<ExecSpace> compute_angular_spring_geometry(const RodViews<ExecSpace
         geo_l.torque_j(p) = axis;
         b0_l(p) = angle - springs_l.rest_angle(p);
       });
+
+  return geo;
+}
+
+/// \brief Pin Jacobian and initial offset, via rod poses.
+///
+/// Row c of a pin constrains the world component c of p_i - p_j, where p = center + R(q) body_offset moves at
+/// v + omega x r_world. Its Jacobian is force_i = e_c, torque_i = r_i x e_c, force_j = -e_c,
+/// torque_j = -r_j x e_c -- a fixed position's lever-arm form on each body -- and its constraint value is
+/// (p_i - p_j)[c].
+template <typename ExecSpace, typename B0View>
+  requires ConstraintValueView<B0View>
+PairGeometry<ExecSpace> compute_pin_geometry(const RodViews<ExecSpace>& rods, const PinViews<ExecSpace>& pins,
+                                             const B0View& b0) {
+  using memory_space = typename ExecSpace::memory_space;
+  const size_t num_pins = pins.size();
+  MUNDY_THROW_ASSERT(b0.extent(0) == pins.num_constraints(), std::invalid_argument,
+                     "compute_pin_geometry: b0 must have three entries per pin.");
+
+  Kokkos::View<int*, memory_space> owner_i("pin_owner_i", pins.num_constraints());
+  Kokkos::View<int*, memory_space> owner_j("pin_owner_j", pins.num_constraints());
+  PairGeometry<ExecSpace> geo(owner_i, owner_j);
+  if (num_pins == 0) {
+    return geo;
+  }
+
+  auto rods_l = rods;
+  auto geo_l = geo;
+  auto pins_l = pins;
+  auto owner_i_l = owner_i;
+  auto owner_j_l = owner_j;
+  auto b0_l = b0;
+  int num_self_pins = 0;
+  Kokkos::parallel_reduce(
+      "compute_pin_geometry", Kokkos::RangePolicy<ExecSpace>(0, num_pins),
+      KOKKOS_LAMBDA(const int a, int& self_pins) {
+        const int i = pins_l.rod_i(a);
+        const int j = pins_l.rod_j(a);
+        self_pins += (i == j) ? 1 : 0;
+
+        const Vector3d r_i = rods_l.orientation(i) * pins_l.body_offset_i(a);
+        const Vector3d r_j = rods_l.orientation(j) * pins_l.body_offset_j(a);
+        const Vector3d offset = (rods_l.center(i) + r_i) - (rods_l.center(j) + r_j);
+
+        for (int c = 0; c < 3; ++c) {
+          const int row = 3 * a + c;
+          Vector3d axis{0.0, 0.0, 0.0};
+          axis[c] = 1.0;
+
+          owner_i_l(row) = i;
+          owner_j_l(row) = j;
+          geo_l.force_i(row) = axis;
+          geo_l.torque_i(row) = cross(r_i, axis);
+          geo_l.force_j(row) = -axis;
+          geo_l.torque_j(row) = -cross(r_j, axis);
+          b0_l(row) = offset[c];
+        }
+      },
+      num_self_pins);
+  MUNDY_THROW_REQUIRE(num_self_pins == 0, std::invalid_argument, "compute_pin_geometry: a pin joins a rod to itself.");
+
+  return geo;
+}
+
+/// \brief Fixed-length Jacobian and initial stretch, via rod poses.
+///
+/// With n the unit vector from p_i to p_j, the distance |p_j - p_i| changes at
+/// n . (v_j + omega_j x r_j - v_i - omega_i x r_i), so force_i = -n, torque_i = -r_i x n, force_j = n,
+/// torque_j = r_j x n -- a linear spring's direction on a contact's lever arms -- and the constraint value is
+/// |p_j - p_i| - rest_length.
+template <typename ExecSpace, typename B0View>
+  requires ConstraintValueView<B0View>
+PairGeometry<ExecSpace> compute_fixed_length_geometry(const RodViews<ExecSpace>& rods,
+                                                      const FixedLengthViews<ExecSpace>& lengths, const B0View& b0) {
+  const size_t n = lengths.size();
+  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
+                     "compute_fixed_length_geometry: b0 must have one entry per fixed length.");
+  PairGeometry<ExecSpace> geo(lengths.rod_i_view(), lengths.rod_j_view());
+  if (n == 0) {
+    return geo;
+  }
+
+  constexpr int self_join = 1;
+  constexpr int nonpositive_rest_length = 2;
+  constexpr int coincident_points = 4;
+  auto rods_l = rods;
+  auto geo_l = geo;
+  auto lengths_l = lengths;
+  auto b0_l = b0;
+  int defects = 0;
+  Kokkos::parallel_reduce(
+      "compute_fixed_length_geometry", Kokkos::RangePolicy<ExecSpace>(0, n),
+      KOKKOS_LAMBDA(const int k, int& defect) {
+        const int i = geo_l.owner_i(k);
+        const int j = geo_l.owner_j(k);
+        const Vector3d r_i = rods_l.orientation(i) * lengths_l.body_offset_i(k);
+        const Vector3d r_j = rods_l.orientation(j) * lengths_l.body_offset_j(k);
+        const Vector3d sep = (rods_l.center(j) + r_j) - (rods_l.center(i) + r_i);
+        const double dist = norm(sep);
+        const double rest_length = lengths_l.rest_length(k);
+        defect |= (i == j) ? self_join : 0;
+        defect |= (rest_length <= 0.0) ? nonpositive_rest_length : 0;
+        defect |= (dist <= 1e-12) ? coincident_points : 0;
+        const Vector3d dir = sep / dist;
+
+        geo_l.force_i(k) = -dir;
+        geo_l.torque_i(k) = -cross(r_i, dir);
+        geo_l.force_j(k) = dir;
+        geo_l.torque_j(k) = cross(r_j, dir);
+        b0_l(k) = dist - rest_length;
+      },
+      Kokkos::BOr<int>(defects));
+  MUNDY_THROW_REQUIRE((defects & self_join) == 0, std::invalid_argument,
+                      "compute_fixed_length_geometry: a fixed length joins a rod to itself.");
+  MUNDY_THROW_REQUIRE((defects & nonpositive_rest_length) == 0, std::invalid_argument,
+                      "compute_fixed_length_geometry: a rest length is not positive.");
+  MUNDY_THROW_REQUIRE((defects & coincident_points) == 0, std::runtime_error,
+                      "compute_fixed_length_geometry: the endpoints of a fixed length are nearly coincident.");
 
   return geo;
 }
