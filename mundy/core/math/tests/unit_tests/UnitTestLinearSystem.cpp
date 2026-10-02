@@ -23,6 +23,9 @@
 
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <stdexcept>  // for std::runtime_error
+
 // Mundy
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Vector.hpp>
@@ -195,6 +198,31 @@ TEST(LinearSystem, CGInvOpReusedAcrossMultipleRhsAlwaysColdStarts) {
   for (int i = 0; i < 3; ++i) {
     EXPECT_NEAR(out2[i], expected2[i], 1e-6);
   }
+}
+
+// A = diag(1, 1, 0) with b = (1, 1, 1) off its range. The first step is exact, alpha = 3/2 and x = 3/2 b; the
+// second direction (0, 0, 3/2) lies in A's null space, so p^T A p = 0 and CG stops there, unconverged.
+TEST(LinearSystem, NotPositiveDefiniteStopsEarly) {
+  const Matrix3d A{1.0, 0.0, 0.0,  //
+                   0.0, 1.0, 0.0,  //
+                   0.0, 0.0, 0.0};
+  const Vector3d b{1.0, 1.0, 1.0};
+  const CGConfig<double> cfg;
+
+  // Strategy
+  auto prob = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
+  auto state = CGState(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
+  const auto result = solve_linear_system(prob, CGStrategy(L2Residual{}, cfg), state);
+  EXPECT_FALSE(result.converged);
+  EXPECT_EQ(result.num_iters, 1u);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(state.x()[i], 1.5);
+  }
+
+  // Inverse operator
+  auto cg_inv = CGInvOp(mm_backend_t{}, Matrix3d(A), cfg);
+  Vector3d out{0.0, 0.0, 0.0};
+  EXPECT_THROW(cg_inv.apply(b, out), std::runtime_error);
 }
 
 // A LinearSystem constructed and solved inside a kernel.
