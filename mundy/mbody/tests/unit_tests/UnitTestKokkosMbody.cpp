@@ -329,8 +329,6 @@ std::vector<double> dense_solve(DenseMat A, std::vector<double> b) {
 //@{
 
 constexpr size_t kChainNumRods = 6;
-constexpr size_t kChainNumSprings = 2 * (kChainNumRods - 1);  // linear + angular, one pair each link
-constexpr size_t kChainRodSpaceDim = 6 * kChainNumRods;
 
 /// \brief The inputs to one solve().
 struct SolveInput {
@@ -1057,70 +1055,73 @@ TEST(Mbody, EmptySpringBlockSchurComplementConvergesInZeroIterations) {
 
 // Several families in one solve, against a dense solve of the same Schur complement.
 
+/// \brief The multipliers and velocity/omega of one step.
+struct DenseStep {
+  std::vector<double> y;
+  std::vector<double> vel_omega;
+};
+
+/// \brief One step solved densely: b = b0 + dt B^T M F_ext, (dt B^T M B + K^-1) y = -b, and v = M (F_ext + B y).
+///
+/// The Schur complement's mobility is dt M, the displacement per unit force over one step.
+DenseStep dense_schur_step(const DenseMat& B, const DenseMat& M, const std::vector<double>& b0,
+                           const std::vector<double>& kinv, const std::vector<double>& force_torque_ext, double dt) {
+  const DenseMat BT = dense_transpose(B);
+  const std::vector<double> b_rate = dense_matvec(BT, dense_matvec(M, force_torque_ext));
+  std::vector<double> neg_b(b0.size());
+  for (size_t r = 0; r < b0.size(); ++r) {
+    neg_b[r] = -(b0[r] + dt * b_rate[r]);
+  }
+
+  DenseMat schur = dense_matmul(BT, dense_matmul(M, B));
+  for (size_t r = 0; r < schur.size(); ++r) {
+    for (size_t c = 0; c < schur.size(); ++c) {
+      schur[r][c] *= dt;
+    }
+    schur[r][r] += kinv[r];
+  }
+
+  DenseStep step;
+  step.y = dense_solve(schur, neg_b);
+  std::vector<double> total_force_torque = dense_matvec(B, step.y);
+  for (size_t i = 0; i < total_force_torque.size(); ++i) {
+    total_force_torque[i] += force_torque_ext[i];
+  }
+  step.vel_omega = dense_matvec(M, total_force_torque);
+  return step;
+}
+
 // A chain of linear and angular springs packed into one y-block.
 TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   SolveInput p = make_chain_problem(/*spring_constant=*/3.0);
 
-  // Dense reference, built before solve() updates the inputs
+  // Dense reference, built before solve() updates the inputs; B's columns follow the y-block order
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
-  auto b0_lin = make_constraint_values(constraints_d.linear_springs);
-  auto b0_ang = make_constraint_values(constraints_d.angular_springs);
-  const impl::PairGeometry<TestExecSpace> lin_geo =
-      impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin);
-  const impl::PairGeometry<TestExecSpace> ang_geo =
-      impl::compute_angular_spring_geometry(rods_d, constraints_d.angular_springs, b0_ang);
-  const impl::PairGeometry<TestExecSpace> spring_geo = impl::concat_pair_geometry(lin_geo, ang_geo);
-  const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, impl::concat_vectors(b0_lin, b0_ang));
-
-  const impl::PairForceOp<TestExecSpace> B(spring_geo, kChainNumRods);
-  const impl::PairForceOpT<TestExecSpace> BT(spring_geo, kChainNumRods);
+  auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
+  auto b0_ang_d = make_constraint_values(constraints_d.angular_springs);
+  const impl::PairForceOp<TestExecSpace> B_lin(
+      impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin_d), kChainNumRods);
+  const impl::PairForceOp<TestExecSpace> B_ang(
+      impl::compute_angular_spring_geometry(rods_d, constraints_d.angular_springs, b0_ang_d), kChainNumRods);
   const impl::LocalDragMobilityOp<TestExecSpace> M(p.cfg.viscosity, rods_d);
+  const auto b0_lin = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_lin_d);
+  const auto b0_ang = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_ang_d);
 
-  const std::vector<std::vector<double>> B_dense = materialize_dense(B);  // kChainRodSpaceDim x kChainNumSprings
-  const std::vector<std::vector<double>> M_dense = materialize_dense(M);  // kChainRodSpaceDim x kChainRodSpaceDim
-
-  // b = b0 + dt B^T M F_ext
-  Kokkos::View<double*, Kokkos::HostSpace> force_torque_ext("force_torque_ext", kChainRodSpaceDim);
-  for (size_t i = 0; i < kChainNumRods; ++i) {
-    rod_force(force_torque_ext, static_cast<int>(i)) = p.rods.force(i);
-    rod_torque(force_torque_ext, static_cast<int>(i)) = p.rods.torque(i);
+  std::vector<double> b0, kinv;
+  for (size_t k = 0; k < b0_lin.extent(0); ++k) {
+    b0.push_back(b0_lin(k));
+    kinv.push_back(1.0 / p.constraints.linear_springs.spring_constant(k));
   }
-  Kokkos::View<double*, TestMemSpace> m_force_torque_ext("m_force_torque_ext", kChainRodSpaceDim);
-  M.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, force_torque_ext), m_force_torque_ext);
-  Kokkos::View<double*, TestMemSpace> b_rate_d("b_rate", kChainNumSprings);
-  BT.apply(m_force_torque_ext, b_rate_d);
-  const auto b_rate = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b_rate_d);
-
-  Vector<double, kChainNumSprings> b_vec;
-  for (size_t i = 0; i < kChainNumSprings; ++i) {
-    b_vec[i] = b0(i) + p.cfg.dt * b_rate(i);
+  for (size_t k = 0; k < b0_ang.extent(0); ++k) {
+    b0.push_back(b0_ang(k));
+    kinv.push_back(1.0 / p.constraints.angular_springs.spring_constant(k));
   }
-
-  // dt B^T M B + K^-1: the Schur complement's mobility is dt M, the displacement per unit force over one step.
-  Matrix<double, kChainNumSprings, kChainNumSprings> btmb_plus_kinv =
-      Matrix<double, kChainNumSprings, kChainNumSprings>::zeros();
-  for (size_t i = 0; i < kChainNumSprings; ++i) {
-    for (size_t j = 0; j < kChainNumSprings; ++j) {
-      double sum = 0.0;
-      for (size_t k = 0; k < kChainRodSpaceDim; ++k) {
-        double mb_kj = 0.0;
-        for (size_t l = 0; l < kChainRodSpaceDim; ++l) {
-          mb_kj += M_dense[k][l] * B_dense[l][j];
-        }
-        sum += B_dense[k][i] * mb_kj;
-      }
-      btmb_plus_kinv(i, j) = p.cfg.dt * sum;
-    }
-  }
-  for (size_t i = 0; i < kChainNumSprings / 2; ++i) {
-    btmb_plus_kinv(i, i) += 1.0 / p.constraints.linear_springs.spring_constant(i);
-  }
-  for (size_t i = kChainNumSprings / 2; i < kChainNumSprings; ++i) {
-    btmb_plus_kinv(i, i) += 1.0 / p.constraints.angular_springs.spring_constant(i - kChainNumSprings / 2);
-  }
-
-  const Vector<double, kChainNumSprings> y_expected = -1.0 * (inverse(btmb_plus_kinv) * b_vec);
+  const auto force_torque_ext = p.rods.force_torque_view();
+  const DenseStep expected =
+      dense_schur_step(dense_hcat(materialize_dense(B_lin), materialize_dense(B_ang)), materialize_dense(M), b0, kinv,
+                       std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()),
+                       p.cfg.dt);
 
   // Solve
   const PGDResult<double> result = solve_on_device(p.rods, p.constraints, p.cfg);
@@ -1128,10 +1129,10 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
 
   const size_t num_links = kChainNumRods - 1;
   for (size_t i = 0; i < num_links; ++i) {
-    EXPECT_NEAR(p.constraints.linear_springs.lambda(i), y_expected[i], 1e-4);
+    EXPECT_NEAR(p.constraints.linear_springs.lambda(i), expected.y[i], 1e-4);
   }
   for (size_t i = 0; i < num_links; ++i) {
-    EXPECT_NEAR(p.constraints.angular_springs.lambda(i), y_expected[num_links + i], 1e-4);
+    EXPECT_NEAR(p.constraints.angular_springs.lambda(i), expected.y[num_links + i], 1e-4);
   }
 }
 
@@ -1210,10 +1211,6 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
         impl::compute_fixed_position_geometry(rods_d, constraints_d.fixed_positions, b0_fixed_d), num_spheres);
     const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
 
-    const DenseMat B_dense =
-        dense_hcat(dense_hcat(materialize_dense(B_lin), materialize_dense(B_triple)), materialize_dense(B_fixed));
-    const DenseMat BT_dense = dense_transpose(B_dense);
-    const DenseMat M_dense = materialize_dense(M);
     const auto b0_lin = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_lin_d);
     const auto b0_triple = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_triple_d);
     const auto b0_fixed = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_fixed_d);
@@ -1231,46 +1228,33 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
       b0.push_back(b0_fixed(k));
       kinv.push_back(0.0);  // rigid
     }
-
-    // b = b0 + dt B^T M F_ext and (dt B^T M B + K^-1) y = -b, then v = M (F_ext + B y).
-    std::vector<double> force_torque_ext(6 * num_spheres, 0.0);
-    for (size_t i = 0; i < 6 * num_spheres; ++i) {
-      force_torque_ext[i] = rods.force_torque_view()(i);
-    }
-    const std::vector<double> b_rate = dense_matvec(BT_dense, dense_matvec(M_dense, force_torque_ext));
-    std::vector<double> neg_b(b0.size());
-    for (size_t r = 0; r < b0.size(); ++r) {
-      neg_b[r] = -(b0[r] + dt * b_rate[r]);
-    }
-    DenseMat schur = dense_matmul(BT_dense, dense_matmul(M_dense, B_dense));
-    for (size_t r = 0; r < schur.size(); ++r) {
-      for (size_t c = 0; c < schur.size(); ++c) {
-        schur[r][c] *= dt;
-      }
-      schur[r][r] += kinv[r];
-    }
-    const std::vector<double> y_expected = dense_solve(schur, neg_b);
-    std::vector<double> total_force_torque = dense_matvec(B_dense, y_expected);
-    for (size_t i = 0; i < total_force_torque.size(); ++i) {
-      total_force_torque[i] += force_torque_ext[i];
-    }
-    const std::vector<double> vel_omega_expected = dense_matvec(M_dense, total_force_torque);
+    const auto force_torque_ext = rods.force_torque_view();
+    const DenseStep expected = dense_schur_step(
+        dense_hcat(dense_hcat(materialize_dense(B_lin), materialize_dense(B_triple)), materialize_dense(B_fixed)),
+        materialize_dense(M), b0, kinv,
+        std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()), dt);
 
     // Solve
     ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt;
 
     std::vector<double> y;
-    for (size_t k = 0; k < constraints.linear_springs.size(); ++k) y.push_back(constraints.linear_springs.lambda(k));
-    for (size_t k = 0; k < constraints.triple_springs.size(); ++k) y.push_back(constraints.triple_springs.lambda(k));
-    for (size_t k = 0; k < 2; ++k) {
-      for (int c = 0; c < 3; ++c) y.push_back(constraints.fixed_positions.lambda(k)[c]);
+    for (size_t k = 0; k < constraints.linear_springs.size(); ++k) {
+      y.push_back(constraints.linear_springs.lambda(k));
     }
-    ASSERT_EQ(y.size(), y_expected.size());
+    for (size_t k = 0; k < constraints.triple_springs.size(); ++k) {
+      y.push_back(constraints.triple_springs.lambda(k));
+    }
+    for (size_t k = 0; k < constraints.fixed_positions.size(); ++k) {
+      for (int c = 0; c < 3; ++c) {
+        y.push_back(constraints.fixed_positions.lambda(k)[c]);
+      }
+    }
+    ASSERT_EQ(y.size(), expected.y.size());
     for (size_t r = 0; r < y.size(); ++r) {
-      EXPECT_NEAR(y[r], y_expected[r], 1e-9) << "multiplier " << r << " at dt=" << dt;
+      EXPECT_NEAR(y[r], expected.y[r], 1e-9) << "multiplier " << r << " at dt=" << dt;
     }
     for (size_t i = 0; i < 6 * num_spheres; ++i) {
-      EXPECT_NEAR(rods.velocity_omega_view()(i), vel_omega_expected[i], 1e-12) << "entry " << i << " at dt=" << dt;
+      EXPECT_NEAR(rods.velocity_omega_view()(i), expected.vel_omega[i], 1e-12) << "entry " << i << " at dt=" << dt;
     }
     EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-12) << "dt=" << dt;
     EXPECT_NEAR(norm(rods.velocity(num_spheres - 1)), 0.0, 1e-12) << "dt=" << dt;
