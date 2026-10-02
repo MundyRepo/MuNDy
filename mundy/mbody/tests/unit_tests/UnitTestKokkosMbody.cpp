@@ -136,6 +136,34 @@ Kokkos::View<double*, Kokkos::HostSpace> make_vel_omega(const Vector3d& vel_i, c
 
 //@}
 
+//! \name Anchor setup
+//@{
+
+/// \brief Anchor a of anchors holds the point body_offset of rod at target.
+void set_fixed_position(const FixedPositionViews<HostExecSpace>& anchors, int a, int rod, const Vector3d& target,
+                        const Vector3d& body_offset = Vector3d{0.0, 0.0, 0.0},
+                        const Vector3d& compliance = Vector3d{0.0, 0.0, 0.0}) {
+  anchors.rod(a) = rod;
+  anchors.target_point(a) = target;
+  anchors.body_offset(a) = body_offset;
+  anchors.compliance(a) = compliance;
+}
+
+/// \brief Anchor a of anchors holds rod's point body_offset at target_point and its orientation at target_orientation.
+void set_fixed_pose(const FixedPoseViews<HostExecSpace>& anchors, int a, int rod, const Vector3d& target_point,
+                    const Quaterniond& target_orientation, const Vector3d& body_offset = Vector3d{0.0, 0.0, 0.0},
+                    const Vector3d& position_compliance = Vector3d{0.0, 0.0, 0.0},
+                    const Vector3d& orientation_compliance = Vector3d{0.0, 0.0, 0.0}) {
+  anchors.rod(a) = rod;
+  anchors.target_point(a) = target_point;
+  anchors.target_orientation(a) = target_orientation;
+  anchors.body_offset(a) = body_offset;
+  anchors.position_compliance(a) = position_compliance;
+  anchors.orientation_compliance(a) = orientation_compliance;
+}
+
+//@}
+
 //! \name Time stepping
 //@{
 
@@ -610,10 +638,8 @@ TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   zero_rod_state(rods);
 
   FixedPositionViews<HostExecSpace> anchors(1);
-  anchors.rod(0) = 1;
-  anchors.body_offset(0) = Vector3d{0.15, -0.1, 0.5};
-  anchors.target_point(0) = Vector3d{0.1, 0.1, 1.0};
-  anchors.compliance(0) = Vector3d{0.0, 0.0, 0.0};
+  set_fixed_position(anchors, 0, /*rod=*/1, /*target=*/Vector3d{0.1, 0.1, 1.0},
+                     /*body_offset=*/Vector3d{0.15, -0.1, 0.5});
 
   const auto anchors_d = create_mirror_view_and_copy(TestExecSpace{}, anchors);
   auto b0 = make_constraint_values(anchors);
@@ -667,14 +693,11 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
                                                        Vector3d{0.3, -0.2, 1.4}, rod_orientation);
     zero_rod_state(rods);
 
+    // The target orientation makes the orientation error exactly error_angle about error_axis.
     FixedPoseViews<HostExecSpace> anchors(1);
-    anchors.rod(0) = 1;
-    anchors.body_offset(0) = Vector3d{0.15, -0.1, 0.5};
-    anchors.target_point(0) = Vector3d{0.1, 0.1, 1.0};
-    // Chosen so the orientation error is exactly error_angle about error_axis.
-    anchors.target_orientation(0) = inverse(axis_angle_to_quaternion(error_axis, error_angle)) * rod_orientation;
-    anchors.position_compliance(0) = Vector3d{0.0, 0.0, 0.0};
-    anchors.orientation_compliance(0) = Vector3d{0.0, 0.0, 0.0};
+    set_fixed_pose(anchors, 0, /*rod=*/1, /*target_point=*/Vector3d{0.1, 0.1, 1.0},
+                   /*target_orientation=*/inverse(axis_angle_to_quaternion(error_axis, error_angle)) * rod_orientation,
+                   /*body_offset=*/Vector3d{0.15, -0.1, 0.5});
 
     const auto anchors_d = create_mirror_view_and_copy(TestExecSpace{}, anchors);
     auto b0 = make_constraint_values(anchors);
@@ -1153,15 +1176,10 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
       lin_springs.spring_constant(k) = 1.0e5 / (spacing * spacing);
     }
 
+    const int last = static_cast<int>(num_spheres - 1);
     FixedPositionViews<HostExecSpace> supports(2);
-    const Vector3d left = Vector3d(rods.center(0));
-    const Vector3d right = Vector3d(rods.center(num_spheres - 1));
-    for (int a = 0; a < 2; ++a) {
-      supports.rod(a) = (a == 0) ? 0 : static_cast<int>(num_spheres - 1);
-      supports.target_point(a) = (a == 0) ? left : right;
-      supports.body_offset(a) = Vector3d{0.0, 0.0, 0.0};
-      supports.compliance(a) = Vector3d{0.0, 0.0, 0.0};
-    }
+    set_fixed_position(supports, 0, /*rod=*/0, /*target=*/Vector3d(rods.center(0)));
+    set_fixed_position(supports, 1, /*rod=*/last, /*target=*/Vector3d(rods.center(last)));
 
     ConstraintSet<HostExecSpace> constraints;
     constraints.linear_springs = lin_springs;
@@ -1280,10 +1298,7 @@ TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
 
     ConstraintSet<HostExecSpace> constraints;
     constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-    constraints.fixed_positions.rod(0) = 0;
-    constraints.fixed_positions.target_point(0) = target;
-    constraints.fixed_positions.body_offset(0) = Vector3d{0.0, 0.0, 0.0};
-    constraints.fixed_positions.compliance(0) = Vector3d{0.0, 0.0, 0.0};  // rigid
+    set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, target);
 
     SolveConfig cfg;
     cfg.dt = dt;
@@ -1327,12 +1342,7 @@ TEST(Mbody, FixedPoseHoldsItsTarget) {
 
     ConstraintSet<HostExecSpace> constraints;
     constraints.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-    constraints.fixed_poses.rod(0) = 0;
-    constraints.fixed_poses.target_point(0) = target_point;
-    constraints.fixed_poses.target_orientation(0) = target_orientation;
-    constraints.fixed_poses.body_offset(0) = body_offset;
-    constraints.fixed_poses.position_compliance(0) = Vector3d{0.0, 0.0, 0.0};
-    constraints.fixed_poses.orientation_compliance(0) = Vector3d{0.0, 0.0, 0.0};
+    set_fixed_pose(constraints.fixed_poses, 0, /*rod=*/0, target_point, target_orientation, body_offset);
 
     SolveConfig cfg;
     cfg.dt = dt;
@@ -1397,19 +1407,12 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
       }
 
       ConstraintSet<HostExecSpace> constraints;
+      const Vector3d centre{0.0, 0.0, 0.0};
       constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-      constraints.fixed_positions.rod(0) = 0;
-      constraints.fixed_positions.target_point(0) = position_target;
-      constraints.fixed_positions.body_offset(0) = Vector3d{0.0, 0.0, 0.0};
-      constraints.fixed_positions.compliance(0) = position_compliance;
-
+      set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, position_target, centre, position_compliance);
       constraints.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-      constraints.fixed_poses.rod(0) = 1;
-      constraints.fixed_poses.target_point(0) = pose_target;
-      constraints.fixed_poses.target_orientation(0) = pose_orientation_target;
-      constraints.fixed_poses.body_offset(0) = Vector3d{0.0, 0.0, 0.0};
-      constraints.fixed_poses.position_compliance(0) = pose_compliance;
-      constraints.fixed_poses.orientation_compliance(0) = orientation_compliance;
+      set_fixed_pose(constraints.fixed_poses, 0, /*rod=*/1, pose_target, pose_orientation_target, centre,
+                     pose_compliance, orientation_compliance);
 
       SolveConfig cfg;
       cfg.dt = dt;
@@ -1472,10 +1475,7 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   constraints.contacts.rod_i(0) = 0;
   constraints.contacts.rod_j(0) = 1;
   constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-  constraints.fixed_positions.rod(0) = 0;
-  constraints.fixed_positions.target_point(0) = anchor_target;
-  constraints.fixed_positions.body_offset(0) = Vector3d{0.0, 0.0, 0.0};
-  constraints.fixed_positions.compliance(0) = Vector3d{0.0, 0.0, 0.0};  // rigid
+  set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, anchor_target);
 
   SolveConfig cfg;
   cfg.dt = 0.5;
@@ -1505,45 +1505,26 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
 // that only in debug builds, so the count itself is checked here.
 TEST(Mbody, DoublyAnchoredRodsAreDetected) {
   constexpr size_t kNumRods = 3;
-  const auto anchor_on = [](int rod) {
-    FixedPositionViews<HostExecSpace> anchors(1);
-    anchors.rod(0) = rod;
-    anchors.target_point(0) = Vector3d{0.0, 0.0, 0.0};
-    anchors.body_offset(0) = Vector3d{0.0, 0.0, 0.0};
-    anchors.compliance(0) = Vector3d{0.0, 0.0, 0.0};
-    return anchors;
-  };
+  const Vector3d origin{0.0, 0.0, 0.0};
 
   ConstraintSet<HostExecSpace> both_ends;
   both_ends.fixed_positions = FixedPositionViews<HostExecSpace>(2);
-  for (int a = 0; a < 2; ++a) {
-    both_ends.fixed_positions.rod(a) = 2 * a;  // rods 0 and 2
-    both_ends.fixed_positions.target_point(a) = Vector3d{0.0, 0.0, 0.0};
-    both_ends.fixed_positions.body_offset(a) = Vector3d{0.0, 0.0, 0.0};
-    both_ends.fixed_positions.compliance(a) = Vector3d{0.0, 0.0, 0.0};
-  }
+  set_fixed_position(both_ends.fixed_positions, 0, /*rod=*/0, origin);
+  set_fixed_position(both_ends.fixed_positions, 1, /*rod=*/2, origin);
   EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, both_ends), kNumRods), 0u);
 
   ConstraintSet<HostExecSpace> twice_on_one;
   twice_on_one.fixed_positions = FixedPositionViews<HostExecSpace>(2);
-  for (int a = 0; a < 2; ++a) {
-    twice_on_one.fixed_positions.rod(a) = 1;  // both on rod 1
-    twice_on_one.fixed_positions.target_point(a) = Vector3d{0.0, 0.0, 0.0};
-    twice_on_one.fixed_positions.body_offset(a) = Vector3d{0.0, 0.0, 0.0};
-    twice_on_one.fixed_positions.compliance(a) = Vector3d{0.0, 0.0, 0.0};
-  }
+  set_fixed_position(twice_on_one.fixed_positions, 0, /*rod=*/1, origin);
+  set_fixed_position(twice_on_one.fixed_positions, 1, /*rod=*/1, origin);
   EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, twice_on_one), kNumRods), 1u);
 
   // A position and a pose on one rod collide the same way: both constrain its translational block.
   ConstraintSet<HostExecSpace> mixed;
-  mixed.fixed_positions = anchor_on(1);
+  mixed.fixed_positions = FixedPositionViews<HostExecSpace>(1);
+  set_fixed_position(mixed.fixed_positions, 0, /*rod=*/1, origin);
   mixed.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-  mixed.fixed_poses.rod(0) = 1;
-  mixed.fixed_poses.target_point(0) = Vector3d{0.0, 0.0, 0.0};
-  mixed.fixed_poses.target_orientation(0) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-  mixed.fixed_poses.body_offset(0) = Vector3d{0.0, 0.0, 0.0};
-  mixed.fixed_poses.position_compliance(0) = Vector3d{0.0, 0.0, 0.0};
-  mixed.fixed_poses.orientation_compliance(0) = Vector3d{0.0, 0.0, 0.0};
+  set_fixed_pose(mixed.fixed_poses, 0, /*rod=*/1, origin, Quaterniond{1.0, 0.0, 0.0, 0.0});
   EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, mixed), kNumRods), 1u);
 
 #ifndef NDEBUG
