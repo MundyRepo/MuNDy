@@ -28,8 +28,8 @@
 // C++ core
 #include <algorithm>   // for std::max
 #include <cmath>       // for std::abs, std::sqrt, std::pow, std::exp, std::log
-#include <functional>  // for std::function
 #include <random>      // for std::mt19937, std::uniform_real_distribution
+#include <string>      // for std::to_string
 #include <utility>     // for std::pair, std::swap
 #include <vector>      // for std::vector
 
@@ -90,15 +90,16 @@ RodViews<HostExecSpace> make_two_rod_system(const Vector3d& center_i, const Quat
   return rods;
 }
 
-/// \brief A copy of a two-rod system moved by (velocity, omega) * eps.
+/// \brief A copy of rods moved by (velocity, omega) * eps.
 RodViews<HostExecSpace> perturb_rods(const RodViews<HostExecSpace>& rods,
                                      const Kokkos::View<double*, Kokkos::HostSpace>& vel_omega, double eps) {
-  RodViews<HostExecSpace> out = make_two_rod_system(rods.center(0), rods.orientation(0), rods.center(1),
-                                                    rods.orientation(1), rods.radius(0), rods.length(0));
+  RodViews<HostExecSpace> out(rods.size());
   for (size_t i = 0; i < rods.size(); ++i) {
     const Vector3d vel = rod_velocity(vel_omega, static_cast<int>(i));
     const Vector3d omega = rod_omega(vel_omega, static_cast<int>(i));
     out.center(i) = rods.center(i) + eps * vel;
+    out.radius(i) = rods.radius(i);
+    out.length(i) = rods.length(i);
 
     const double omega_norm = norm(omega);
     if (omega_norm > 1e-14) {
@@ -193,21 +194,22 @@ double max_step_displacement(const RodViews<Space>& rods, double dt) {
 //! \name Finite differences
 //@{
 
-/// \brief Expect a pair constraint's rate under vel_omega to match a central difference of value_of.
-void expect_rate_matches_finite_difference(std::function<double(const RodViews<HostExecSpace>&)> value_of,
-                                           const RodViews<HostExecSpace>& rods,
-                                           const impl::PairGeometry<TestExecSpace>& geo,
+/// \brief Expect each row of rate_op applied to vel_omega to match a central difference of value_of.
+template <typename ValueOf, typename RateOp>
+void expect_rate_matches_finite_difference(const ValueOf& value_of, const RodViews<HostExecSpace>& rods,
+                                           const RateOp& rate_op,
                                            const Kokkos::View<double*, Kokkos::HostSpace>& vel_omega, double tol) {
   constexpr double eps = 1e-6;
-  const RodViews<HostExecSpace> rods_plus = perturb_rods(rods, vel_omega, eps);
-  const RodViews<HostExecSpace> rods_minus = perturb_rods(rods, vel_omega, -eps);
-  const double finite_diff_rate = (value_of(rods_plus) - value_of(rods_minus)) / (2.0 * eps);
+  const Kokkos::View<double*, Kokkos::HostSpace> value_plus = value_of(perturb_rods(rods, vel_omega, eps));
+  const Kokkos::View<double*, Kokkos::HostSpace> value_minus = value_of(perturb_rods(rods, vel_omega, -eps));
 
-  impl::PairForceOpT<TestExecSpace> op_t(geo, rods.size());
-  Kokkos::View<double*, TestMemSpace> rate("rate", geo.size());
-  op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate);
+  Kokkos::View<double*, TestMemSpace> rate_d("rate", rate_op.range_size());
+  rate_op.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate_d);
+  const auto rate = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate_d);
 
-  EXPECT_NEAR(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate)(0), finite_diff_rate, tol);
+  for (size_t row = 0; row < rate.extent(0); ++row) {
+    EXPECT_NEAR(rate(row), (value_plus(row) - value_minus(row)) / (2.0 * eps), tol) << "row " << row;
+  }
 }
 
 //@}
@@ -439,13 +441,14 @@ TEST(Mbody, ContactJacobianMatchesFiniteDifference) {
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto sep = make_constraint_values(contacts);
     impl::compute_contact_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), contacts_d, sep);
-    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sep)(0);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sep);
   };
 
   const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
       Vector3d{0.3, -0.1, 0.2}, Vector3d{0.1, 0.2, -0.3}, Vector3d{-0.2, 0.4, 0.1}, Vector3d{-0.3, 0.1, 0.2});
 
-  expect_rate_matches_finite_difference(value_of, rods, geo, vel_omega, 1e-6);
+  const impl::PairForceOpT<TestExecSpace> rate_op(geo, rods.size());
+  expect_rate_matches_finite_difference(value_of, rods, rate_op, vel_omega, 1e-6);
 }
 
 TEST(Mbody, LinearSpringJacobianMatchesFiniteDifference) {
@@ -467,13 +470,14 @@ TEST(Mbody, LinearSpringJacobianMatchesFiniteDifference) {
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(springs);
     impl::compute_linear_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
-    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b)(0);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
 
   const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
       Vector3d{0.1, 0.2, 0.05}, Vector3d{0.4, -0.2, 0.1}, Vector3d{-0.3, 0.1, -0.2}, Vector3d{0.2, 0.3, -0.1});
 
-  expect_rate_matches_finite_difference(value_of, rods, geo, vel_omega, 1e-6);
+  const impl::PairForceOpT<TestExecSpace> rate_op(geo, rods.size());
+  expect_rate_matches_finite_difference(value_of, rods, rate_op, vel_omega, 1e-6);
 }
 
 TEST(Mbody, AngularSpringJacobianMatchesFiniteDifference) {
@@ -495,16 +499,16 @@ TEST(Mbody, AngularSpringJacobianMatchesFiniteDifference) {
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(springs);
     impl::compute_angular_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
-    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b)(0);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
 
   const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
       Vector3d{0.0, 0.0, 0.0}, Vector3d{0.3, -0.1, 0.2}, Vector3d{0.0, 0.0, 0.0}, Vector3d{-0.2, 0.4, 0.1});
 
-  expect_rate_matches_finite_difference(value_of, rods, geo, vel_omega, 1e-6);
+  const impl::PairForceOpT<TestExecSpace> rate_op(geo, rods.size());
+  expect_rate_matches_finite_difference(value_of, rods, rate_op, vel_omega, 1e-6);
 }
 
-// Three rods, so the two-rod finite-difference helper does not apply.
 TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
   RodViews<HostExecSpace> rods(3);
   rods.center(0) = Vector3d{0.3, -0.2, 0.1};
@@ -528,33 +532,19 @@ TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
   const impl::TripleGeometry<TestExecSpace> geo = impl::compute_triple_point_angular_spring_geometry(
       create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
 
+  auto value_of = [&](const RodViews<HostExecSpace>& r) {
+    auto b = make_constraint_values(springs);
+    impl::compute_triple_point_angular_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
+  };
+
   Kokkos::View<double*, Kokkos::HostSpace> vel_omega("vel_omega", 18);
   rod_velocity(vel_omega, 0) = Vector3d{0.3, -0.1, 0.2};
   rod_velocity(vel_omega, 1) = Vector3d{-0.2, 0.4, 0.1};
   rod_velocity(vel_omega, 2) = Vector3d{0.1, 0.2, -0.3};
 
-  // Central difference
-  constexpr double eps = 1e-6;
-  auto perturbed_b0 = [&](double sign) {
-    RodViews<HostExecSpace> r(3);
-    for (size_t i = 0; i < 3; ++i) {
-      r.center(i) = rods.center(i) + sign * eps * rod_velocity(vel_omega, static_cast<int>(i));
-      r.orientation(i) = rods.orientation(i);
-      r.radius(i) = rods.radius(i);
-      r.length(i) = rods.length(i);
-    }
-    auto b = make_constraint_values(springs);
-    impl::compute_triple_point_angular_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
-    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b)(0);
-  };
-  const double finite_diff_rate = (perturbed_b0(1.0) - perturbed_b0(-1.0)) / (2.0 * eps);
-
-  // Analytical rate
-  const impl::TripleForceOpT<TestExecSpace> op_t(geo, rods.size());
-  Kokkos::View<double*, TestMemSpace> rate("rate", 1);
-  op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate);
-
-  EXPECT_NEAR(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate)(0), finite_diff_rate, 1e-6);
+  const impl::TripleForceOpT<TestExecSpace> rate_op(geo, rods.size());
+  expect_rate_matches_finite_difference(value_of, rods, rate_op, vel_omega, 1e-6);
 }
 
 // <B x, y> == <x, B^T y> for random x and y. Rows share owners, as one constraint's rows on one rod do, so a
@@ -629,29 +619,17 @@ TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   const impl::SingleGeometry<TestExecSpace> geo =
       impl::compute_fixed_position_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), anchors_d, b0);
 
+  auto value_of = [&](const RodViews<HostExecSpace>& r) {
+    auto b = make_constraint_values(anchors);
+    impl::compute_fixed_position_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), anchors_d, b);
+    return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
+  };
+
   const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
       Vector3d{0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 0.0}, Vector3d{0.4, -0.3, 0.2}, Vector3d{-0.2, 0.5, 0.3});
 
-  // Analytical rate
-  const impl::SingleForceOpT<TestExecSpace> op_t(geo, rods.size());
-  Kokkos::View<double*, TestMemSpace> rate_d("rate", anchors.num_constraints());
-  op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate_d);
-
-  // Central difference
-  constexpr double eps = 1e-6;
-  auto b0_plus_d = make_constraint_values(anchors);
-  auto b0_minus_d = make_constraint_values(anchors);
-  impl::compute_fixed_position_geometry(
-      create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, eps)), anchors_d, b0_plus_d);
-  impl::compute_fixed_position_geometry(
-      create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, -eps)), anchors_d, b0_minus_d);
-  const auto rate = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate_d);
-  const auto b0_plus = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_plus_d);
-  const auto b0_minus = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_minus_d);
-
-  for (size_t c = 0; c < anchors.num_constraints(); ++c) {
-    EXPECT_NEAR(rate(c), (b0_plus(c) - b0_minus(c)) / (2.0 * eps), 1e-8) << "row " << c;
-  }
+  const impl::SingleForceOpT<TestExecSpace> rate_op(geo, rods.size());
+  expect_rate_matches_finite_difference(value_of, rods, rate_op, vel_omega, 1e-8);
 }
 
 // The inverse left Jacobian against a central difference of the rotation vector. The angles straddle the switch
@@ -702,30 +680,18 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
     const impl::SingleGeometry<TestExecSpace> geo =
         impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), anchors_d, b0);
 
+    auto value_of = [&](const RodViews<HostExecSpace>& r) {
+      auto b = make_constraint_values(anchors);
+      impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), anchors_d, b);
+      return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
+    };
+
     const Kokkos::View<double*, Kokkos::HostSpace> vel_omega = make_vel_omega(
         Vector3d{0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 0.0}, Vector3d{0.4, -0.3, 0.2}, Vector3d{-0.2, 0.5, 0.3});
 
-    // Analytical rate
-    const impl::SingleForceOpT<TestExecSpace> op_t(geo, rods.size());
-    Kokkos::View<double*, TestMemSpace> rate_d("rate", anchors.num_constraints());
-    op_t.apply(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, vel_omega), rate_d);
-
-    // Central difference
-    constexpr double eps = 1e-6;
-    auto b0_plus_d = make_constraint_values(anchors);
-    auto b0_minus_d = make_constraint_values(anchors);
-    impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, eps)),
-                                      anchors_d, b0_plus_d);
-    impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, perturb_rods(rods, vel_omega, -eps)),
-                                      anchors_d, b0_minus_d);
-    const auto rate = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate_d);
-    const auto b0_plus = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_plus_d);
-    const auto b0_minus = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_minus_d);
-
-    for (size_t row = 0; row < anchors.num_constraints(); ++row) {
-      EXPECT_NEAR(rate(row), (b0_plus(row) - b0_minus(row)) / (2.0 * eps), 1e-8)
-          << "row " << row << " at error_angle=" << error_angle;
-    }
+    SCOPED_TRACE("error_angle=" + std::to_string(error_angle));
+    const impl::SingleForceOpT<TestExecSpace> rate_op(geo, rods.size());
+    expect_rate_matches_finite_difference(value_of, rods, rate_op, vel_omega, 1e-8);
   }
 }
 
