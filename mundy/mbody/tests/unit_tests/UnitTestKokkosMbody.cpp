@@ -29,6 +29,7 @@
 #include <algorithm>   // for std::max
 #include <cmath>       // for std::abs, std::sqrt, std::pow, std::exp, std::log
 #include <random>      // for std::mt19937, std::uniform_real_distribution
+#include <stdexcept>   // for std::invalid_argument
 #include <string>      // for std::to_string
 #include <utility>     // for std::pair, std::swap
 #include <vector>      // for std::vector
@@ -734,6 +735,21 @@ TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
 // (B^T M B + 1/k) y = -b0, and a single contact to the scalar LCP lambda = max(0, -sep0 / A). The scalars come
 // from the same operators solve() uses, so these check solve()'s assembly of the operators, not the operators.
 
+/// \brief The quadratic form B^T M B of a single constraint, as a scalar.
+template <typename OpBT, typename OpM, typename OpB>
+double scalar_quadratic_form(const OpBT& BT, const OpM& M, const OpB& B) {
+  MUNDY_THROW_REQUIRE(B.domain_size() == 1, std::invalid_argument,
+                      "scalar_quadratic_form: B must have exactly one column.");
+  using backend_t = KokkosBackend<TestExecSpace>;
+  const auto btmb = make_quadratic_form<backend_t>(BT, M, B);
+
+  Kokkos::View<double*, TestMemSpace> one("one", 1), result("result", 1);
+  Kokkos::deep_copy(one, 1.0);
+  auto workspace = backend_t::make_workspace(btmb);
+  backend_t::apply(btmb, one, result, workspace);
+  return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, result)(0);
+}
+
 // Two rods joined by one linear spring.
 TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   RodViews<HostExecSpace> rods = make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0},
@@ -754,7 +770,6 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   cfg.viscosity = 1.0;
 
   // Scalar B^T M B
-  using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(lin_springs);
   const impl::PairGeometry<TestExecSpace> geo =
@@ -762,21 +777,15 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   const impl::PairForceOp<TestExecSpace> B(geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
-  const auto btmb_op = make_quadratic_form<backend_t>(BT, M, B);
-
-  Kokkos::View<double*, TestMemSpace> ones("ones", 1), btmb_result_d("btmb_result", 1);
-  Kokkos::deep_copy(ones, 1.0);
-  auto ws = backend_t::make_workspace(btmb_op);
-  backend_t::apply(btmb_op, ones, btmb_result_d, ws);
-  const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
-  const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
+  const double btmb = scalar_quadratic_form(BT, M, B);
+  const double b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d)(0);
 
   // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
-  const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / lin_springs.spring_constant(0));
+  const double y_expected = -b0 / (btmb + 1.0 / lin_springs.spring_constant(0));
   EXPECT_NEAR(lin_springs.lambda(0), y_expected, 1e-6);
 
   // Internal force: equal and opposite on the two rods.
@@ -807,7 +816,6 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   cfg.viscosity = 1.0;
 
   // Scalar B^T M B
-  using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(ang_springs);
   const impl::PairGeometry<TestExecSpace> geo =
@@ -815,21 +823,15 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   const impl::PairForceOp<TestExecSpace> B(geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
-  const auto btmb_op = make_quadratic_form<backend_t>(BT, M, B);
-
-  Kokkos::View<double*, TestMemSpace> ones("ones", 1), btmb_result_d("btmb_result", 1);
-  Kokkos::deep_copy(ones, 1.0);
-  auto ws = backend_t::make_workspace(btmb_op);
-  backend_t::apply(btmb_op, ones, btmb_result_d, ws);
-  const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
-  const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
+  const double btmb = scalar_quadratic_form(BT, M, B);
+  const double b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d)(0);
 
   // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
-  const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / ang_springs.spring_constant(0));
+  const double y_expected = -b0 / (btmb + 1.0 / ang_springs.spring_constant(0));
   EXPECT_NEAR(ang_springs.lambda(0), y_expected, 1e-6);
 
   // Internal torque and no force: both cancel between the two rods.
@@ -867,7 +869,6 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   cfg.viscosity = 1.0;
 
   // Scalar B^T M B
-  using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(triple_springs);
   const impl::TripleGeometry<TestExecSpace> geo = impl::compute_triple_point_angular_spring_geometry(
@@ -875,21 +876,15 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   const impl::TripleForceOp<TestExecSpace> B(geo, rods.size());
   const impl::TripleForceOpT<TestExecSpace> BT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
-  const auto btmb_op = make_quadratic_form<backend_t>(BT, M, B);
-
-  Kokkos::View<double*, TestMemSpace> ones("ones", 1), btmb_result_d("btmb_result", 1);
-  Kokkos::deep_copy(ones, 1.0);
-  auto ws = backend_t::make_workspace(btmb_op);
-  backend_t::apply(btmb_op, ones, btmb_result_d, ws);
-  const auto b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d);
-  const auto btmb_result = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, btmb_result_d);
+  const double btmb = scalar_quadratic_form(BT, M, B);
+  const double b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d)(0);
 
   // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
-  const double y_expected = -b0(0) / (btmb_result(0) + 1.0 / triple_springs.spring_constant(0));
+  const double y_expected = -b0 / (btmb + 1.0 / triple_springs.spring_constant(0));
   EXPECT_NEAR(triple_springs.lambda(0), y_expected, 1e-6);
 
   // Internal and position-only: the three forces cancel and there is no torque.
@@ -926,7 +921,6 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   cfg.viscosity = 1.0;
 
   // Scalar A := D^T M D
-  using backend_t = KokkosBackend<TestExecSpace>;
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto sep0 = make_constraint_values(contacts);
   const impl::PairGeometry<TestExecSpace> geo =
@@ -934,16 +928,10 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   const impl::PairForceOp<TestExecSpace> D(geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> DT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
-  const auto A_op = make_quadratic_form<backend_t>(DT, M, D);
-
-  Kokkos::View<double*, TestMemSpace> ones("ones", 1), A_result("A_result", 1);
-  Kokkos::deep_copy(ones, 1.0);
-  auto ws = backend_t::make_workspace(A_op);
-  backend_t::apply(A_op, ones, A_result, ws);
-
+  const double A_value = scalar_quadratic_form(DT, M, D);
   const double sep0_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sep0)(0);
-  const double A_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, A_result)(0);
 
+  // Solve
   const PGDResult<double> result = solve_on_device(rods, constraints, cfg);
   return ContactOnlyCaseResult{contacts.lambda(0), sep0_value, A_value, result.converged};
 }
