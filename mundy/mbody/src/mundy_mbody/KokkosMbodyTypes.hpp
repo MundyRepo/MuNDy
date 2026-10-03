@@ -32,7 +32,7 @@
 /// return the raw Kokkos::View.
 
 // C++ core
-#include <concepts>     // for std::constructible_from, std::convertible_to
+#include <concepts>     // for std::constructible_from, std::convertible_to, std::same_as
 #include <cstddef>      // for size_t
 #include <stdexcept>    // for std::invalid_argument
 #include <type_traits>  // for std::is_same_v, std::remove_cvref_t
@@ -46,7 +46,8 @@
 #include <mundy_math/Scalar.hpp>
 #include <mundy_math/Vector3.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
-#include <mundy_utils/tuple.hpp>         // for mundy::{make_tuple, get, tuple_size_v}
+#include <mundy_utils/tuple.hpp>         // for mundy::{tuple, make_tuple, get, tuple_size_v}
+#include <mundy_utils/type_traits.hpp>   // for mundy::count_type_v
 
 namespace mundy {
 
@@ -76,6 +77,15 @@ KOKKOS_INLINE_FUNCTION auto rod_omega(const GenVelocityView& gen_velocity, int i
 }
 //@}
 
+/// \brief What a views container holds: bodies, or constraints between them.
+enum class ContainerType { BODY, CONSTRAINT };
+
+/// \brief Whether a constraint's multipliers are constrained non-negative (UNILATERAL) or free (BILATERAL).
+enum class ConstraintType { UNILATERAL, BILATERAL };
+
+/// \brief The unit a row is measured in.
+enum class RowUnit { LENGTH, ANGLE };
+
 /// \brief The storage layout of a views container, specialized beside each one: fields(c), every view c stores.
 template <typename T>
 struct family_traits {};
@@ -83,6 +93,7 @@ struct family_traits {};
 /// \brief A container of flat views: constructible from its entry count, with every stored view exposed by fields.
 template <typename T>
 concept ViewsContainer = std::constructible_from<T, size_t> && requires(const T& c) {
+  { T::container_type } -> std::convertible_to<ContainerType>;
   family_traits<T>::fields(c);
   { c.size() } -> std::convertible_to<size_t>;
 };
@@ -97,8 +108,15 @@ class RodViews {
   using memory_space = typename ExecSpace::memory_space;
   using vector_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::BODY;
+
   /// \brief The number of generalized coordinates per rod: [force(3), torque(3)] and [velocity(3), omega(3)].
   static constexpr size_t rows_per_entry = 6;
+
+  /// \brief The unit of each generalized coordinate of a rod: translation, then rotation.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t row_in_entry) {
+    return row_in_entry < 3 ? RowUnit::LENGTH : RowUnit::ANGLE;
+  }
 
   RodViews() = default;
 
@@ -172,8 +190,20 @@ class LinearSpringViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 1;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 2;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::LENGTH;
+  }
 
   LinearSpringViews() = default;
 
@@ -226,6 +256,11 @@ class LinearSpringViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, the inverse of its spring constant.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t row) const {
+    return 1.0 / spring_constant_(row);
+  }
+
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
@@ -251,8 +286,20 @@ class AngularSpringViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 1;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 2;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::ANGLE;
+  }
 
   AngularSpringViews() = default;
 
@@ -295,6 +342,11 @@ class AngularSpringViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, the inverse of its spring constant.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t row) const {
+    return 1.0 / spring_constant_(row);
+  }
+
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
@@ -325,8 +377,20 @@ class TriplePointAngularSpringViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 1;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 3;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::ANGLE;
+  }
 
   TriplePointAngularSpringViews() = default;
 
@@ -372,6 +436,11 @@ class TriplePointAngularSpringViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, the inverse of its spring constant.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t row) const {
+    return 1.0 / spring_constant_(row);
+  }
+
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
@@ -405,8 +474,20 @@ class FixedPositionViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 3;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 1;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::LENGTH;
+  }
 
   FixedPositionViews() = default;
 
@@ -449,6 +530,11 @@ class FixedPositionViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, its stored compliance.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t row) const {
+    return compliance_(row);
+  }
+
  private:
   int_view_t rod_;
   scalar_view_t target_point_;
@@ -481,8 +567,20 @@ class FixedPoseViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 6;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 1;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t row_in_entry) {
+    return row_in_entry < 3 ? RowUnit::LENGTH : RowUnit::ANGLE;
+  }
 
   FixedPoseViews() = default;
 
@@ -530,6 +628,11 @@ class FixedPoseViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, its stored compliance.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t row) const {
+    return compliance_(row);
+  }
+
  private:
   int_view_t rod_;
   scalar_view_t target_point_;
@@ -561,8 +664,20 @@ class PinViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 3;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 2;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::LENGTH;
+  }
 
   PinViews() = default;
 
@@ -605,6 +720,11 @@ class PinViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, zero: a pin is rigid.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t /*row*/) const {
+    return 0.0;
+  }
+
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
@@ -635,8 +755,20 @@ class FixedLengthViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 1;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::BILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 2;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::LENGTH;
+  }
 
   FixedLengthViews() = default;
 
@@ -682,6 +814,11 @@ class FixedLengthViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, zero: a fixed length is rigid.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t /*row*/) const {
+    return 0.0;
+  }
+
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
@@ -708,8 +845,20 @@ class ContactViews {
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
   /// \brief The number of scalar constraints, and so of multipliers, per entry.
   static constexpr size_t rows_per_entry = 1;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::UNILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 2;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::LENGTH;
+  }
 
   ContactViews() = default;
 
@@ -744,6 +893,11 @@ class ContactViews {
     return rows_per_entry * size();
   }
 
+  /// \brief The compliance of row row, zero: a contact is rigid.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t /*row*/) const {
+    return 0.0;
+  }
+
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
@@ -757,85 +911,66 @@ struct family_traits<ContactViews<ExecSpace>> {
   }
 };
 
-/// \brief The half-open range [begin, end) that one constraint family occupies in a flat array.
-struct IndexRange {
-  size_t begin = 0;
-  size_t end = 0;
+/// \brief A family of constraints: a views container whose entries each own rows_per_entry multipliers.
+template <typename F>
+concept ConstraintFamily =
+    ViewsContainer<F> && (F::container_type == ContainerType::CONSTRAINT) && requires(const F& f) {
+      typename F::execution_space;
+      { F::rows_per_entry } -> std::convertible_to<size_t>;
+      { F::constraint_type } -> std::convertible_to<ConstraintType>;
+      { F::bodies_per_entry } -> std::convertible_to<size_t>;
+      { F::row_unit(size_t{0}) } -> std::same_as<RowUnit>;
+      { f.row_compliance(size_t{0}) } -> std::convertible_to<double>;
+      { f.num_rows() } -> std::convertible_to<size_t>;
+      f.lambda_view();
+    };
 
-  KOKKOS_INLINE_FUNCTION size_t size() const {
-    return end - begin;
+/// \brief Whether no type appears twice among Types.
+template <typename... Types>
+inline constexpr bool are_distinct_v = ((::mundy::count_type_v<Types, Types...> == 1) && ...);
+
+/// \brief Whether every given container has the same execution space; true for none.
+template <typename... Containers>
+inline constexpr bool share_execution_space_v = true;
+template <typename First, typename... Rest>
+inline constexpr bool share_execution_space_v<First, Rest...> =
+    (std::is_same_v<typename First::execution_space, typename Rest::execution_space> && ...);
+
+/// \brief Every constraint acting on a set of rods, one family per type.
+///
+/// Families are distinct types sharing one execution space and are reached by type through get<F>(set).
+template <typename... Families>
+class ConstraintSet {
+  static_assert((ConstraintFamily<Families> && ...), "ConstraintSet: every element must be a constraint family.");
+  static_assert(are_distinct_v<Families...>, "ConstraintSet: each family type may appear only once.");
+  static_assert(share_execution_space_v<Families...>, "ConstraintSet: every family must share one execution space.");
+
+ public:
+  ConstraintSet() = default;
+
+  explicit ConstraintSet(const Families&... families)
+    requires(sizeof...(Families) > 0)
+      : families_(families...) {
   }
+
+  template <typename F, typename... Fs>
+  friend const F& get(const ConstraintSet<Fs...>& set);
+
+ private:
+  ::mundy::tuple<Families...> families_;
 };
 
-/// \brief Where each bilateral family's constraints land in the flat multiplier vector.
-///
-/// The bilateral families hold differing numbers of constraints and are stored separately, but the
-/// solve works on one contiguous multiplier vector. Packing them is the standard compressed-row
-/// treatment of ragged data: an exclusive prefix scan over the per-family counts gives each family
-/// its start offset, and a family's own local index added to that offset is its flat position.
-///
-/// The constraint values, the compliance diagonal, the Jacobian operators and the multiplier
-/// write-back all index that vector. They agree by construction only if they share one mapping, so
-/// the packing order is decided in exactly one place and the result is passed, never re-derived.
-///
-/// A trivially copyable aggregate holding only sizes, so it captures by value into a kernel.
-struct ConstraintIndexMap {
-  IndexRange linear_springs;
-  IndexRange angular_springs;
-  IndexRange pins;
-  IndexRange fixed_lengths;
-  IndexRange triple_springs;
-  IndexRange fixed_positions;
-  IndexRange fixed_poses;
-  size_t total = 0;
-};
+/// \brief The family of type F in set.
+template <typename F, typename... Fs>
+const F& get(const ConstraintSet<Fs...>& set) {
+  return ::mundy::get<F>(set.families_);
+}
 
-/// \brief Every constraint acting on a set of rods over one solve.
-///
-/// Each family is independently optional: a default-constructed member is empty and contributes no
-/// constraints. Contacts are unilateral (their force magnitudes are constrained non-negative); every
-/// other family is bilateral, and the bilateral families share one flat multiplier vector.
-template <typename ExecSpace>
-struct ConstraintSet {
-  using execution_space = ExecSpace;
-  using memory_space = typename ExecSpace::memory_space;
-
-  LinearSpringViews<ExecSpace> linear_springs{0};
-  AngularSpringViews<ExecSpace> angular_springs{0};
-  PinViews<ExecSpace> pins{0};
-  FixedLengthViews<ExecSpace> fixed_lengths{0};
-  TriplePointAngularSpringViews<ExecSpace> triple_springs{0};
-  FixedPositionViews<ExecSpace> fixed_positions{0};
-  FixedPoseViews<ExecSpace> fixed_poses{0};
-  ContactViews<ExecSpace> contacts{0};
-};
-
-/// \brief Pack a constraint set's bilateral families into the flat multiplier vector.
-///
-/// Build this once per set and pass it along; it is derived from the family sizes, so a set whose
-/// families are reassigned needs a fresh one.
-template <typename ExecSpace>
-ConstraintIndexMap make_constraint_index_map(const ConstraintSet<ExecSpace>& constraints) {
-  ConstraintIndexMap index_map;
-  size_t offset = 0;
-
-  index_map.linear_springs = IndexRange{offset, offset + constraints.linear_springs.num_rows()};
-  offset = index_map.linear_springs.end;
-  index_map.angular_springs = IndexRange{offset, offset + constraints.angular_springs.num_rows()};
-  offset = index_map.angular_springs.end;
-  index_map.pins = IndexRange{offset, offset + constraints.pins.num_rows()};
-  offset = index_map.pins.end;
-  index_map.fixed_lengths = IndexRange{offset, offset + constraints.fixed_lengths.num_rows()};
-  offset = index_map.fixed_lengths.end;
-  index_map.triple_springs = IndexRange{offset, offset + constraints.triple_springs.num_rows()};
-  offset = index_map.triple_springs.end;
-  index_map.fixed_positions = IndexRange{offset, offset + constraints.fixed_positions.num_rows()};
-  offset = index_map.fixed_positions.end;
-  index_map.fixed_poses = IndexRange{offset, offset + constraints.fixed_poses.num_rows()};
-  offset = index_map.fixed_poses.end;
-
-  index_map.total = offset;
-  return index_map;
+/// \brief A constraint set holding the given families: distinct types sharing one execution space.
+template <typename... Families>
+  requires(ConstraintFamily<Families> && ...) && are_distinct_v<Families...> && share_execution_space_v<Families...>
+ConstraintSet<Families...> make_constraint_set(const Families&... families) {
+  return ConstraintSet<Families...>(families...);
 }
 
 //! \name Copying between memory spaces
@@ -855,24 +990,18 @@ void deep_copy(const Views<DstSpace>& dst, const Views<SrcSpace>& src) {
   }(std::make_index_sequence<::mundy::tuple_size_v<std::remove_cvref_t<decltype(dst_fields)>>>{});
 }
 
-/// \brief Copy every family of src into dst; each pair of families must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const ConstraintSet<DstSpace>& dst, const ConstraintSet<SrcSpace>& src) {
-  deep_copy(dst.linear_springs, src.linear_springs);
-  deep_copy(dst.angular_springs, src.angular_springs);
-  deep_copy(dst.pins, src.pins);
-  deep_copy(dst.fixed_lengths, src.fixed_lengths);
-  deep_copy(dst.triple_springs, src.triple_springs);
-  deep_copy(dst.fixed_positions, src.fixed_positions);
-  deep_copy(dst.fixed_poses, src.fixed_poses);
-  deep_copy(dst.contacts, src.contacts);
+/// \brief Copy every family of src into the family in the same position of dst; each pair must have the same size.
+template <typename... DstFamilies, typename... SrcFamilies>
+  requires(sizeof...(DstFamilies) == sizeof...(SrcFamilies))
+void deep_copy(const ConstraintSet<DstFamilies...>& dst, const ConstraintSet<SrcFamilies...>& src) {
+  (deep_copy(get<DstFamilies>(dst), get<SrcFamilies>(src)), ...);
 }
 
 /// \brief Whether T is a ConstraintSet specialization.
 template <typename T>
 struct is_constraint_set : std::false_type {};
-template <typename E>
-struct is_constraint_set<ConstraintSet<E>> : std::true_type {};
+template <typename... Families>
+struct is_constraint_set<ConstraintSet<Families...>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_constraint_set_v = is_constraint_set<T>::value;
@@ -890,22 +1019,13 @@ Views<Space> create_mirror(const Space& /*space*/, const Views<SrcSpace>& src) {
 }
 
 /// \brief A new zero-initialized constraint set shaped like src in Space's memory.
-template <typename Space, typename SrcSpace>
-ConstraintSet<Space> create_mirror(const Space& space, const ConstraintSet<SrcSpace>& src) {
-  ConstraintSet<Space> mirror;
-  mirror.linear_springs = create_mirror(space, src.linear_springs);
-  mirror.angular_springs = create_mirror(space, src.angular_springs);
-  mirror.pins = create_mirror(space, src.pins);
-  mirror.fixed_lengths = create_mirror(space, src.fixed_lengths);
-  mirror.triple_springs = create_mirror(space, src.triple_springs);
-  mirror.fixed_positions = create_mirror(space, src.fixed_positions);
-  mirror.fixed_poses = create_mirror(space, src.fixed_poses);
-  mirror.contacts = create_mirror(space, src.contacts);
-  return mirror;
+template <typename Space, typename... Families>
+auto create_mirror(const Space& space, const ConstraintSet<Families...>& src) {
+  return make_constraint_set(create_mirror(space, get<Families>(src))...);
 }
 
 /// \brief src itself when Space shares its memory space, else create_mirror(space, src).
-template <typename Space, MirrorableType T>
+template <typename Space, ViewsContainer T>
 auto create_mirror_view(const Space& space, const T& src) {
   static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror_view: Space must be an execution space.");
   if constexpr (std::is_same_v<typename Space::memory_space, typename T::memory_space>) {
@@ -913,6 +1033,12 @@ auto create_mirror_view(const Space& space, const T& src) {
   } else {
     return create_mirror(space, src);
   }
+}
+
+/// \brief A constraint set shaped like src in Space's memory, mirroring it family by family.
+template <typename Space, typename... Families>
+auto create_mirror_view(const Space& space, const ConstraintSet<Families...>& src) {
+  return make_constraint_set(create_mirror_view(space, get<Families>(src))...);
 }
 
 /// \brief create_mirror_view(space, src), holding a copy of src's contents.

@@ -22,8 +22,9 @@
 #define MUNDY_MBODY_KOKKOSMBODY_HPP_
 
 // C++ core
-#include <cmath>    // for std::log
-#include <ostream>  // for std::ostream
+#include <cmath>        // for std::log
+#include <ostream>      // for std::ostream
+#include <type_traits>  // for std::is_same_v
 
 // Mundy
 #include <mundy_math/linear_system.hpp>  // for mundy::CGConfig
@@ -109,9 +110,9 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
       });
 }
 
-/// \brief One linearly implicit step of a multibody system: a mixed LCP over its contacts and bilateral constraints.
+/// \brief One linearly implicit step of a multibody system: a mixed LCP over its unilateral and bilateral constraints.
 ///
-/// Solves, for contact force magnitudes x >= 0 and bilateral multipliers y in R^m:
+/// Solves, for unilateral multipliers x >= 0, such as contact force magnitudes, and bilateral multipliers y in R^m:
 ///   x*, y* = argmin_{x in Omega_x, y in R^m} q^T x + b^T y + 0.5 (Dx + By)^T M (Dx + By) + 0.5 y^T K^{-1} y
 /// via the Schur complement S := (B^T M B + K^{-1})^{-1}:
 ///   H := D^T M D - D^T M B S B^T M D,  g := q - D^T M B S b
@@ -119,11 +120,12 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 ///   y* = -S (b + B^T M D x*)
 ///
 /// Every constraint is linearized at the start of the step, C^k: q = Phi(C^k) + dt D^T U_free and
-/// b = psi(C^k) + dt B^T U_free, with U_free = V_ext + M F_ext. D maps contact force magnitudes to center-of-mass force
-/// and torque, and D^T maps center-of-mass translational and rotational velocity to the rate of change of separation.
-/// B and B^T do the same for the concatenated bilateral multipliers and the rates of change of their constraint
-/// values, in the packing order the constraint index map fixes. K^{-1} is the per-constraint compliance, zero for a
-/// rigidly held one. M is the local-drag rod mobility, dt M in the problem above. S is SPD and only its apply-action
+/// b = psi(C^k) + dt B^T U_free, with U_free = V_ext + M F_ext. D maps the unilateral multipliers to center-of-mass
+/// force and torque, and D^T maps center-of-mass translational and rotational velocity to the rates of change of their
+/// constraint values, such as a contact's separation. B and B^T do the same for the bilateral multipliers and the
+/// rates of change of their constraint values. K^{-1} is the per-constraint compliance, zero for a rigidly held one.
+/// The rigid rows must be independent: two of them holding the same degree of freedom, such as two anchors on one rod,
+/// leave S undefined. M is the local-drag rod mobility, dt M in the problem above. S is SPD and only its apply-action
 /// is cheap, so it is realized by a matrix-free CG, not an explicit inverse.
 ///
 /// On entry rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext. On exit
@@ -135,25 +137,26 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 /// A body held by a constraint contributes its reaction to B y, which cancels out of the relaxation's
 /// fixed point exactly; a body held by discarding its velocity after the solve leaves that reaction
 /// outside B, and the fixed point then carries an error of order dt times the body's mobility.
-template <typename ExecSpace>
-MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const ConstraintSet<ExecSpace>& constraints,
+template <typename ExecSpace, typename... Families>
+MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
                                const MixedLCPConfig& cfg) {
+  static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
+                "mbody::solve_mixed_lcp: rods and every constraint family must share one execution space.");
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
 
   const PGDConfig<double> pgd_cfg{cfg.max_outer_iters, cfg.outer_tol};
   const CGConfig<double> cg_cfg{cfg.max_cg_iters, cfg.cg_tol};
-  const impl::StepData<ExecSpace> step = impl::make_step_data(rods, constraints, cfg.dt, cfg.viscosity);
-  view_t psi("psi", step.index_map.total);
-  const impl::BilateralGeometry<ExecSpace> geo =
-      impl::compute_bilateral_geometry(rods, constraints, step.index_map, psi);
-  if (step.num_contacts == 0 && step.index_map.total == 0) {
+  const impl::StepData<ExecSpace, Families...> step = impl::make_step_data(rods, constraints, cfg.dt, cfg.viscosity);
+  view_t psi("psi", step.index_map.num_bilateral);
+  const auto geo = impl::compute_bilateral_geometry(rods, constraints, step.index_map, psi);
+  if (step.index_map.num_unilateral == 0 && step.index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedLCPResult{0, 0.0, 0.0 <= cfg.outer_tol};
   }
 
   const impl::LinearizedStep<ExecSpace> linearized =
       impl::solve_linearization(step, geo, psi, impl::Displacement<ExecSpace>{step.u_free, cfg.dt},
-                                view_t("x_start", step.num_contacts), pgd_cfg, cg_cfg);
+                                view_t("x_start", step.index_map.num_unilateral), pgd_cfg, cg_cfg);
   impl::write_step(rods, constraints, step.index_map, linearized);
   return MixedLCPResult{linearized.result.num_iters, linearized.result.residual, linearized.result.converged};
 }
@@ -161,12 +164,12 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
 /// \brief One step of a multibody system whose bilateral constraints hold at its end: a sequence of mixed LCPs.
 ///
 /// The step's configuration is the push-forward C(W) = C^k (+) G^k (dt V_ext + M (F_ext + W)) of the constraint wrench
-/// W. Contacts are linearized at C^k throughout, so they hold to the accuracy of that linearization. The bilateral rows
-/// are linearized afresh at each iterate's configuration C_n, starting from C_0 = C^k: iterate n solves the mixed LCP
-/// with B_n = B(C_n) and
+/// W. The unilateral rows are linearized at C^k throughout, so they hold to the accuracy of that linearization. The
+/// bilateral rows are linearized afresh at each iterate's configuration C_n, starting from C_0 = C^k: iterate n solves
+/// the mixed LCP with B_n = B(C_n) and
 ///   b_n = psi(C_n) - dt B_n^T M W_{n-1}   (n >= 1),
 /// the linear model of psi at C(W) about C_n, and moves the rods to C_{n+1} = C(W_n). Iterate 0 is solve_mixed_lcp's
-/// step.
+/// step, and the rigid rows must be independent as there.
 ///
 /// At a converged iterate, C* = C(W*) satisfies psi(C*) + K^{-1} y* = 0 for every bilateral row and
 /// W* = D x* + B(C*) y*: rigid rows hold exactly and compliant ones follow their constitutive law at the end of the
@@ -179,9 +182,11 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
 /// force/torque is F_ext + W, velocity/omega is U_free + M W, every family's lambda holds its multipliers, all of the
 /// returned iterate, and the rods have not moved. advance_rods can be used to perform the consistent time integration,
 /// which for a converged iterate reaches the configuration at which it was accepted.
-template <typename ExecSpace>
-MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const ConstraintSet<ExecSpace>& constraints,
+template <typename ExecSpace, typename... Families>
+MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
                                  const MixedSLCPConfig& cfg) {
+  static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
+                "mbody::solve_mixed_slcp: rods and every constraint family must share one execution space.");
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
   MUNDY_THROW_REQUIRE(cfg.max_iters >= 1, std::invalid_argument, "mbody::solve_mixed_slcp: max_iters must be >= 1.");
   MUNDY_THROW_REQUIRE(cfg.length_tol > 0.0 && cfg.angle_tol > 0.0, std::invalid_argument,
@@ -190,18 +195,20 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
 
   const PGDConfig<double> pgd_cfg{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol};
   const CGConfig<double> cg_cfg{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol};
-  const impl::StepData<ExecSpace> step = impl::make_step_data(rods, constraints, lcp_cfg.dt, lcp_cfg.viscosity);
-  const ConstraintIndexMap& index_map = step.index_map;
-  view_t psi("psi", index_map.total);
-  const impl::BilateralGeometry<ExecSpace> geo = impl::compute_bilateral_geometry(rods, constraints, index_map, psi);
-  if (step.num_contacts == 0 && index_map.total == 0) {
+  const impl::StepData<ExecSpace, Families...> step =
+      impl::make_step_data(rods, constraints, lcp_cfg.dt, lcp_cfg.viscosity);
+  const impl::ConstraintIndexMap<Families...>& index_map = step.index_map;
+  view_t psi("psi", index_map.num_bilateral);
+  const auto geo = impl::compute_bilateral_geometry(rods, constraints, index_map, psi);
+  if (index_map.num_unilateral == 0 && index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedSLCPResult{1, 0.0, true, MixedLCPResult{0, 0.0, 0.0 <= lcp_cfg.outer_tol}};
   }
 
   const impl::LinearizedStep<ExecSpace> first =
       impl::solve_linearization(step, geo, psi, impl::Displacement<ExecSpace>{step.u_free, lcp_cfg.dt},
-                                view_t("x_start", step.num_contacts), pgd_cfg, cg_cfg);
+                                view_t("x_start", index_map.num_unilateral), pgd_cfg, cg_cfg);
+  const Kokkos::View<RowUnit*, typename ExecSpace::memory_space> row_units = impl::make_row_units<ExecSpace>(index_map);
 
   // Trial configurations C_{n+1} = C^k (+) G^k dt U_n, in storage of their own: the mobility reads rods' poses.
   RodViews<ExecSpace> trial(step.num_rods);
@@ -216,11 +223,11 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
     Kokkos::deep_copy(trial.orientation_view(), rods.orientation_view());
     Kokkos::deep_copy(trial.velocity_omega_view(), iterate.velocity);
     advance_rods(trial, lcp_cfg.dt);
-    view_t trial_psi("trial_psi", index_map.total);
-    const impl::BilateralGeometry<ExecSpace> trial_geo =
-        impl::compute_bilateral_geometry(trial, constraints, index_map, trial_psi);
+    view_t trial_psi("trial_psi", index_map.num_bilateral);
+    const auto trial_geo = impl::compute_bilateral_geometry(trial, constraints, index_map, trial_psi);
 
-    const double merit = impl::slcp_merit(step, iterate, trial_geo, trial_psi, cfg.length_tol, cfg.angle_tol);
+    const double merit =
+        impl::slcp_merit(step, iterate, trial_geo, trial_psi, row_units, cfg.length_tol, cfg.angle_tol);
     if (num_iters == 1) {
       first_merit = merit;
     }

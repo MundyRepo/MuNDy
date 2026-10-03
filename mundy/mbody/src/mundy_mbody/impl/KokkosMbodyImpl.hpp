@@ -28,9 +28,11 @@
 /// that fill them.
 
 // C++ core
-#include <algorithm>    // for std::max
+#include <algorithm>    // for std::max, std::count
+#include <array>        // for std::array
 #include <concepts>     // for std::same_as
-#include <type_traits>  // for std::false_type, std::true_type
+#include <type_traits>  // for std::false_type, std::true_type, std::remove_cvref_t
+#include <utility>      // for std::declval, std::index_sequence, std::move
 
 // Kokkos
 #include <Kokkos_Core.hpp>
@@ -50,6 +52,8 @@
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
 #include <mundy_utils/throw_assert.hpp>
+#include <mundy_utils/tuple.hpp>        // for mundy::{tuple, make_tuple, tuple_cat, get, tuple_size_v}
+#include <mundy_utils/type_traits.hpp>  // for mundy::index_finder_v
 
 namespace mundy {
 
@@ -470,8 +474,8 @@ static_assert(::mundy::LinearOperator<::mundy::KokkosBackend<Kokkos::DefaultExec
 /// \brief Per-triple generalized Jacobian for a three-point (vertex-angle) bend spring.
 ///
 /// For a unit scalar multiplier the triple contributes force_1/force_2/force_3 to owner_1/owner_2/
-/// owner_3 -- no torque, since this constraint is a function of the three rods' positions alone (see
-/// compute_triple_point_angular_spring_geometry). owner_3 is the vertex the angle is measured at.
+/// owner_3 -- no torque, since this constraint is a function of the three rods' positions alone. owner_3 is the
+/// vertex the angle is measured at.
 template <typename ExecSpace>
 class TripleGeometry {
  public:
@@ -489,6 +493,17 @@ class TripleGeometry {
         jacobian_1_("jacobian_1", 3 * owner_1.extent(0)),
         jacobian_2_("jacobian_2", 3 * owner_1.extent(0)),
         jacobian_3_("jacobian_3", 3 * owner_1.extent(0)) {
+  }
+
+  // Wraps already-populated storage.
+  TripleGeometry(const int_view_t& owner_1, const int_view_t& owner_2, const int_view_t& owner_3,
+                 const vector_view_t& jacobian_1, const vector_view_t& jacobian_2, const vector_view_t& jacobian_3)
+      : owner_1_(owner_1),
+        owner_2_(owner_2),
+        owner_3_(owner_3),
+        jacobian_1_(jacobian_1),
+        jacobian_2_(jacobian_2),
+        jacobian_3_(jacobian_3) {
   }
 
   KOKKOS_INLINE_FUNCTION auto owner_1(int p) const {
@@ -514,6 +529,25 @@ class TripleGeometry {
     return owner_1_.extent(0);
   }
 
+  int_view_t owner_1_view() const {
+    return owner_1_;
+  }
+  int_view_t owner_2_view() const {
+    return owner_2_;
+  }
+  int_view_t owner_3_view() const {
+    return owner_3_;
+  }
+  vector_view_t jacobian_1_view() const {
+    return jacobian_1_;
+  }
+  vector_view_t jacobian_2_view() const {
+    return jacobian_2_;
+  }
+  vector_view_t jacobian_3_view() const {
+    return jacobian_3_;
+  }
+
  private:
   int_view_t owner_1_;
   int_view_t owner_2_;
@@ -522,6 +556,20 @@ class TripleGeometry {
   vector_view_t jacobian_2_;
   vector_view_t jacobian_3_;
 };
+
+/// \brief Whether T is one of the TripleGeometry specializations.
+template <typename T>
+struct is_triple_geometry : std::false_type {};
+
+template <typename ExecSpace>
+struct is_triple_geometry<TripleGeometry<ExecSpace>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_triple_geometry_v = is_triple_geometry<T>::value;
+
+/// \brief Matches exactly the TripleGeometry specializations.
+template <typename T>
+concept TripleGeometryType = is_triple_geometry_v<T>;
 
 /// \brief Maps one multiplier per triple to center-of-mass force (torque zero, see TripleGeometry).
 template <typename ExecSpace>
@@ -769,11 +817,11 @@ concept ConstraintValueView =
 /// \brief Contact normal/lever-arm Jacobian and initial signed separation, via spherocylinder centerlines.
 template <typename ExecSpace, typename Sep0View>
   requires ConstraintValueView<Sep0View>
-PairGeometry<ExecSpace> compute_contact_geometry(const RodViews<ExecSpace>& rods,
-                                                 const ContactViews<ExecSpace>& contacts, const Sep0View& sep0) {
+PairGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods, const ContactViews<ExecSpace>& contacts,
+                                         const Sep0View& sep0) {
   const size_t n = contacts.size();
   MUNDY_THROW_ASSERT(sep0.extent(0) == n, std::invalid_argument,
-                     "compute_contact_geometry: sep0 must have one entry per contact.");
+                     "compute_geometry: sep0 must have one entry per contact.");
   PairGeometry<ExecSpace> geo(contacts.rod_i_view(), contacts.rod_j_view());
   if (n == 0) {
     return geo;
@@ -822,11 +870,10 @@ PairGeometry<ExecSpace> compute_contact_geometry(const RodViews<ExecSpace>& rods
 /// \brief Linear spring direction Jacobian and initial stretch, via rod centers.
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-PairGeometry<ExecSpace> compute_linear_spring_geometry(const RodViews<ExecSpace>& rods,
-                                                       const LinearSpringViews<ExecSpace>& springs, const B0View& b0) {
+PairGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods, const LinearSpringViews<ExecSpace>& springs,
+                                         const B0View& b0) {
   const size_t n = springs.size();
-  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
-                     "compute_linear_spring_geometry: b0 must have one entry per spring.");
+  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument, "compute_geometry: b0 must have one entry per spring.");
   PairGeometry<ExecSpace> geo(springs.rod_i_view(), springs.rod_j_view());
   if (n == 0) {
     return geo;
@@ -858,12 +905,10 @@ PairGeometry<ExecSpace> compute_linear_spring_geometry(const RodViews<ExecSpace>
 /// \brief Angular spring axis Jacobian and initial bend angle, via rod tangents (orientation * e_z).
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-PairGeometry<ExecSpace> compute_angular_spring_geometry(const RodViews<ExecSpace>& rods,
-                                                        const AngularSpringViews<ExecSpace>& springs,
-                                                        const B0View& b0) {
+PairGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods, const AngularSpringViews<ExecSpace>& springs,
+                                         const B0View& b0) {
   const size_t n = springs.size();
-  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
-                     "compute_angular_spring_geometry: b0 must have one entry per spring.");
+  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument, "compute_geometry: b0 must have one entry per spring.");
   PairGeometry<ExecSpace> geo(springs.rod_i_view(), springs.rod_j_view());
   if (n == 0) {
     return geo;
@@ -907,12 +952,12 @@ PairGeometry<ExecSpace> compute_angular_spring_geometry(const RodViews<ExecSpace
 /// (p_i - p_j)[c].
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-PairGeometry<ExecSpace> compute_pin_geometry(const RodViews<ExecSpace>& rods, const PinViews<ExecSpace>& pins,
-                                             const B0View& b0) {
+PairGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods, const PinViews<ExecSpace>& pins,
+                                         const B0View& b0) {
   using memory_space = typename ExecSpace::memory_space;
   const size_t num_pins = pins.size();
   MUNDY_THROW_ASSERT(b0.extent(0) == pins.num_rows(), std::invalid_argument,
-                     "compute_pin_geometry: b0 must have three entries per pin.");
+                     "compute_geometry: b0 must have three entries per pin.");
 
   Kokkos::View<int*, memory_space> owner_i("pin_owner_i", pins.num_rows());
   Kokkos::View<int*, memory_space> owner_j("pin_owner_j", pins.num_rows());
@@ -954,7 +999,7 @@ PairGeometry<ExecSpace> compute_pin_geometry(const RodViews<ExecSpace>& rods, co
         }
       },
       num_self_pins);
-  MUNDY_THROW_REQUIRE(num_self_pins == 0, std::invalid_argument, "compute_pin_geometry: a pin joins a rod to itself.");
+  MUNDY_THROW_REQUIRE(num_self_pins == 0, std::invalid_argument, "compute_geometry: a pin joins a rod to itself.");
 
   return geo;
 }
@@ -967,11 +1012,11 @@ PairGeometry<ExecSpace> compute_pin_geometry(const RodViews<ExecSpace>& rods, co
 /// |p_j - p_i| - rest_length.
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-PairGeometry<ExecSpace> compute_fixed_length_geometry(const RodViews<ExecSpace>& rods,
-                                                      const FixedLengthViews<ExecSpace>& lengths, const B0View& b0) {
+PairGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods, const FixedLengthViews<ExecSpace>& lengths,
+                                         const B0View& b0) {
   const size_t n = lengths.size();
   MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
-                     "compute_fixed_length_geometry: b0 must have one entry per fixed length.");
+                     "compute_geometry: b0 must have one entry per fixed length.");
   PairGeometry<ExecSpace> geo(lengths.rod_i_view(), lengths.rod_j_view());
   if (n == 0) {
     return geo;
@@ -1008,11 +1053,11 @@ PairGeometry<ExecSpace> compute_fixed_length_geometry(const RodViews<ExecSpace>&
       },
       Kokkos::BOr<int>(defects));
   MUNDY_THROW_REQUIRE((defects & self_join) == 0, std::invalid_argument,
-                      "compute_fixed_length_geometry: a fixed length joins a rod to itself.");
+                      "compute_geometry: a fixed length joins a rod to itself.");
   MUNDY_THROW_REQUIRE((defects & nonpositive_rest_length) == 0, std::invalid_argument,
-                      "compute_fixed_length_geometry: a rest length is not positive.");
+                      "compute_geometry: a rest length is not positive.");
   MUNDY_THROW_REQUIRE((defects & coincident_points) == 0, std::runtime_error,
-                      "compute_fixed_length_geometry: the endpoints of a fixed length are nearly coincident.");
+                      "compute_geometry: the endpoints of a fixed length are nearly coincident.");
 
   return geo;
 }
@@ -1026,16 +1071,15 @@ PairGeometry<ExecSpace> compute_fixed_length_geometry(const RodViews<ExecSpace>&
 /// rest_angle is the constraint value; the per-rod Jacobians are d(angle)/dx = cross(v1, n_hat)/|v1|^2
 /// (mirror image for rod_j; force_3 = -(force_1 + force_2)), with v1 := center(rod_i) - center(rod_k)
 /// and n_hat the unit normal to the v1/v2 plane. n_hat is degenerate at angle 0 or pi and is resolved
-/// by mundy::perp, exactly as in compute_angular_spring_geometry. Position-only: no
+/// by mundy::perp, exactly as for an angular spring. Position-only: no
 /// orientation, no torque, so rod_i/rod_j/rod_k need not be distinct (only rod_i/rod_k and rod_j/rod_k
 /// must not coincide in position, checked below).
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-TripleGeometry<ExecSpace> compute_triple_point_angular_spring_geometry(
-    const RodViews<ExecSpace>& rods, const TriplePointAngularSpringViews<ExecSpace>& springs, const B0View& b0) {
+TripleGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods,
+                                           const TriplePointAngularSpringViews<ExecSpace>& springs, const B0View& b0) {
   const size_t n = springs.size();
-  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument,
-                     "compute_triple_point_angular_spring_geometry: b0 must have one entry per spring.");
+  MUNDY_THROW_ASSERT(b0.extent(0) == n, std::invalid_argument, "compute_geometry: b0 must have one entry per spring.");
   TripleGeometry<ExecSpace> geo(springs.rod_i_view(), springs.rod_j_view(), springs.rod_k_view());
   if (n == 0) {
     return geo;
@@ -1089,13 +1133,12 @@ TripleGeometry<ExecSpace> compute_triple_point_angular_spring_geometry(
 /// (p - target)[c]. A zero body offset leaves the torque rows zero and anchors the rod centre.
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-SingleGeometry<ExecSpace> compute_fixed_position_geometry(const RodViews<ExecSpace>& rods,
-                                                          const FixedPositionViews<ExecSpace>& anchors,
-                                                          const B0View& b0) {
+SingleGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods,
+                                           const FixedPositionViews<ExecSpace>& anchors, const B0View& b0) {
   using memory_space = typename ExecSpace::memory_space;
   const size_t num_anchors = anchors.size();
   MUNDY_THROW_ASSERT(b0.extent(0) == anchors.num_rows(), std::invalid_argument,
-                     "compute_fixed_position_geometry: b0 must have three entries per anchor.");
+                     "compute_geometry: b0 must have three entries per anchor.");
 
   Kokkos::View<int*, memory_space> owner("fixed_position_owner", anchors.num_rows());
   SingleGeometry<ExecSpace> geo(owner);
@@ -1182,12 +1225,12 @@ KOKKOS_INLINE_FUNCTION constexpr Matrix3<std::remove_const_t<T>> rotation_vector
 /// only near zero.
 template <typename ExecSpace, typename B0View>
   requires ConstraintValueView<B0View>
-SingleGeometry<ExecSpace> compute_fixed_pose_geometry(const RodViews<ExecSpace>& rods,
-                                                      const FixedPoseViews<ExecSpace>& anchors, const B0View& b0) {
+SingleGeometry<ExecSpace> compute_geometry(const RodViews<ExecSpace>& rods, const FixedPoseViews<ExecSpace>& anchors,
+                                           const B0View& b0) {
   using memory_space = typename ExecSpace::memory_space;
   const size_t num_anchors = anchors.size();
   MUNDY_THROW_ASSERT(b0.extent(0) == anchors.num_rows(), std::invalid_argument,
-                     "compute_fixed_pose_geometry: b0 must have six entries per anchor.");
+                     "compute_geometry: b0 must have six entries per anchor.");
 
   Kokkos::View<int*, memory_space> owner("fixed_pose_owner", anchors.num_rows());
   SingleGeometry<ExecSpace> geo(owner);
@@ -1231,50 +1274,18 @@ SingleGeometry<ExecSpace> compute_fixed_pose_geometry(const RodViews<ExecSpace>&
   return geo;
 }
 
-/// \brief How many rods carry more than one fixed-position or fixed-pose anchor.
-///
-/// Each anchor removes three or six of one rod's degrees of freedom by constraining the same
-/// translational block, so two of them on one rod give B linearly dependent columns and leave
-/// dt B^T M B singular wherever the hold is rigid. Two anchors on two *different* rods are fine and
-/// are the ordinary case: a beam supported at both ends.
-///
-/// The Schur complement's conjugate gradient takes its operator's definiteness on trust, so such a
-/// set would otherwise surface only as a failure to converge, a long way from its cause.
-template <typename ExecSpace>
-size_t count_doubly_anchored_rods(const ConstraintSet<ExecSpace>& constraints, size_t num_rods) {
-  auto fixed_positions = constraints.fixed_positions;
-  auto fixed_poses = constraints.fixed_poses;
-  if (fixed_positions.size() + fixed_poses.size() < 2) {
-    return 0;
-  }
-
-  Kokkos::View<int*, typename ExecSpace::memory_space> anchor_count("anchor_count", num_rods);
-  auto count = anchor_count;
-  if (fixed_positions.size() > 0) {
-    Kokkos::parallel_for(
-        "count_fixed_position_anchors", Kokkos::RangePolicy<ExecSpace>(0, fixed_positions.size()),
-        KOKKOS_LAMBDA(const int a) {
-          const int rod = fixed_positions.rod(a);
-          Kokkos::atomic_add(&count(rod), 1);
-        });
-  }
-  if (fixed_poses.size() > 0) {
-    Kokkos::parallel_for(
-        "count_fixed_pose_anchors", Kokkos::RangePolicy<ExecSpace>(0, fixed_poses.size()), KOKKOS_LAMBDA(const int a) {
-          const int rod = fixed_poses.rod(a);
-          Kokkos::atomic_add(&count(rod), 1);
-        });
-  }
-
-  size_t doubly_anchored = 0;
-  Kokkos::parallel_reduce(
-      "count_doubly_anchored_rods", Kokkos::RangePolicy<ExecSpace>(0, num_rods),
-      KOKKOS_LAMBDA(const int i, size_t& partial) { partial += (count(i) > 1) ? 1u : 0u; }, doubly_anchored);
-  return doubly_anchored;
-}
-
-//! \name Small vector/geometry utilities used to assemble the combined bilateral (y-)block
+//! \name Flat-vector and geometry utilities
 //@{
+
+/// \brief The half-open range [begin, end) that one constraint family occupies in a flat array.
+struct IndexRange {
+  size_t begin = 0;
+  size_t end = 0;
+
+  KOKKOS_INLINE_FUNCTION size_t size() const {
+    return end - begin;
+  }
+};
 
 /// \brief A Kokkos view that concat_vectors can allocate and copy into.
 ///
@@ -1340,78 +1351,309 @@ FirstGeometry concat_pair_geometry(const FirstGeometry& first, const OtherGeomet
                        concat_vectors(first.jacobian_j_view(), others.jacobian_j_view()...));
 }
 
+/// \brief One geometry holding every given triple geometry end to end, in the order passed.
+template <typename FirstGeometry, typename... OtherGeometries>
+  requires TripleGeometryType<FirstGeometry> && (std::same_as<OtherGeometries, FirstGeometry> && ...)
+FirstGeometry concat_triple_geometry(const FirstGeometry& first, const OtherGeometries&... others) {
+  return FirstGeometry(concat_vectors(first.owner_1_view(), others.owner_1_view()...),
+                       concat_vectors(first.owner_2_view(), others.owner_2_view()...),
+                       concat_vectors(first.owner_3_view(), others.owner_3_view()...),
+                       concat_vectors(first.jacobian_1_view(), others.jacobian_1_view()...),
+                       concat_vectors(first.jacobian_2_view(), others.jacobian_2_view()...),
+                       concat_vectors(first.jacobian_3_view(), others.jacobian_3_view()...));
+}
+
+/// \brief One geometry holding every given geometry of one arity end to end; a lone geometry is returned as is.
+template <typename FirstGeometry, typename... OtherGeometries>
+FirstGeometry concat_geometry(const FirstGeometry& first, const OtherGeometries&... others) {
+  if constexpr (sizeof...(OtherGeometries) == 0) {
+    return first;
+  } else if constexpr (SingleGeometryType<FirstGeometry>) {
+    return concat_single_geometry(first, others...);
+  } else if constexpr (PairGeometryType<FirstGeometry>) {
+    return concat_pair_geometry(first, others...);
+  } else {
+    return concat_triple_geometry(first, others...);
+  }
+}
+
 /// \brief The entries of a flat vector lying in a given index range.
 template <typename ViewType>
 KOKKOS_INLINE_FUNCTION auto subrange(const ViewType& v, const IndexRange& range) {
   return Kokkos::subview(v, Kokkos::pair<size_t, size_t>(range.begin, range.end));
 }
+//@}
 
-template <typename ExecSpace>
-Kokkos::View<double*, typename ExecSpace::memory_space> reciprocal(
-    const Kokkos::View<double*, typename ExecSpace::memory_space>& v) {
-  using memory_space = typename ExecSpace::memory_space;
-  Kokkos::View<double*, memory_space> out("reciprocal", v.extent(0));
-  if (v.extent(0) == 0) {
-    return out;
+//! \name Constraint packing
+//@{
+
+/// \brief Where each family's rows land in the flat unilateral and bilateral multiplier vectors.
+///
+/// The families hold differing numbers of rows and are stored separately, but the solve works on one contiguous
+/// vector per block. Packing them is the standard compressed-row treatment of ragged data: an exclusive prefix scan
+/// over the per-family row counts gives each family its start offset, and a family's own local row added to that
+/// offset is its flat position. Within a block, families pack by arity, pairs, then triples, then single-body rows,
+/// each in the set's order, so each arity's Jacobians concatenate into one operator.
+///
+/// The constraint values, the compliance diagonal, the Jacobian operators and the multiplier write-back all index
+/// these vectors. They agree by construction only if they share one mapping, so the packing order is decided in
+/// exactly one place and the result is passed, never re-derived.
+///
+/// A trivially copyable aggregate holding only sizes, so it captures by value into a kernel.
+template <typename... Families>
+struct ConstraintIndexMap {
+  Kokkos::Array<IndexRange, sizeof...(Families)> ranges{};
+  size_t num_unilateral = 0;
+  size_t num_bilateral = 0;
+
+  /// \brief The range of family F's rows in its block's vector.
+  template <typename F>
+  KOKKOS_INLINE_FUNCTION IndexRange range() const {
+    return ranges[::mundy::index_finder_v<F, Families...>];
   }
-  Kokkos::parallel_for(
-      "reciprocal", Kokkos::RangePolicy<ExecSpace>(0, v.extent(0)),
-      KOKKOS_LAMBDA(const int i) { out(i) = 1.0 / v(i); });
-  return out;
+};
+
+/// \brief The arity order in which each block packs its families.
+inline constexpr size_t arity_pack_order[] = {2, 3, 1};
+
+/// \brief Give family the next range of its block's vector, if it has the given arity.
+template <typename F, typename... Families>
+void place_family(ConstraintIndexMap<Families...>& index_map, const F& family, size_t arity, size_t& unilateral_end,
+                  size_t& bilateral_end) {
+  if (F::bodies_per_entry != arity) {
+    return;
+  }
+  size_t& end = F::constraint_type == ConstraintType::UNILATERAL ? unilateral_end : bilateral_end;
+  index_map.ranges[::mundy::index_finder_v<F, Families...>] = IndexRange{end, end + family.num_rows()};
+  end += family.num_rows();
+}
+
+/// \brief Pack a constraint set's families into its unilateral and bilateral vectors.
+///
+/// Build this once per set and pass it along; it is derived from the family sizes, so a set whose
+/// families are resized needs a fresh one.
+template <typename... Families>
+ConstraintIndexMap<Families...> make_constraint_index_map(const ConstraintSet<Families...>& constraints) {
+  ConstraintIndexMap<Families...> index_map;
+  size_t unilateral_end = 0;
+  size_t bilateral_end = 0;
+  for ([[maybe_unused]] const size_t arity : arity_pack_order) {
+    (place_family(index_map, get<Families>(constraints), arity, unilateral_end, bilateral_end), ...);
+  }
+  index_map.num_unilateral = unilateral_end;
+  index_map.num_bilateral = bilateral_end;
+  return index_map;
 }
 //@}
 
-//! \name The bilateral block at one configuration
+//! \name The unilateral and bilateral blocks at one configuration
 //@{
 
-/// \brief Every bilateral family's Jacobian at one configuration, grouped by arity in multiplier order.
-template <typename ExecSpace>
-struct BilateralGeometry {
-  PairGeometry<ExecSpace> pairs;      ///< linear springs, angular springs, pins, fixed lengths
-  TripleGeometry<ExecSpace> triples;  ///< triple-point angular springs
-  SingleGeometry<ExecSpace> singles;  ///< fixed positions, fixed poses
+/// \brief A block's Jacobian at one configuration: one concatenated geometry per arity present, in packing order.
+template <typename... Geometries>
+struct BlockGeometry {
+  ::mundy::tuple<Geometries...> groups;
 };
 
-/// \brief Every bilateral family's Jacobian and constraint value at rods' configuration.
-///
-/// psi has one entry per bilateral constraint, in the index map's order.
-template <typename ExecSpace, typename PsiView>
-  requires ConstraintValueView<PsiView>
-BilateralGeometry<ExecSpace> compute_bilateral_geometry(const RodViews<ExecSpace>& rods,
-                                                        const ConstraintSet<ExecSpace>& constraints,
-                                                        const ConstraintIndexMap& index_map, const PsiView& psi) {
-  MUNDY_THROW_ASSERT(psi.extent(0) == index_map.total, std::invalid_argument,
-                     "compute_bilateral_geometry: psi must have one entry per bilateral constraint.");
-  const PairGeometry<ExecSpace> lin_geo =
-      compute_linear_spring_geometry(rods, constraints.linear_springs, subrange(psi, index_map.linear_springs));
-  const PairGeometry<ExecSpace> ang_geo =
-      compute_angular_spring_geometry(rods, constraints.angular_springs, subrange(psi, index_map.angular_springs));
-  const PairGeometry<ExecSpace> pin_geo = compute_pin_geometry(rods, constraints.pins, subrange(psi, index_map.pins));
-  const PairGeometry<ExecSpace> length_geo =
-      compute_fixed_length_geometry(rods, constraints.fixed_lengths, subrange(psi, index_map.fixed_lengths));
-  const TripleGeometry<ExecSpace> triple_geo = compute_triple_point_angular_spring_geometry(
-      rods, constraints.triple_springs, subrange(psi, index_map.triple_springs));
-  const SingleGeometry<ExecSpace> fixed_position_geo =
-      compute_fixed_position_geometry(rods, constraints.fixed_positions, subrange(psi, index_map.fixed_positions));
-  const SingleGeometry<ExecSpace> fixed_pose_geo =
-      compute_fixed_pose_geometry(rods, constraints.fixed_poses, subrange(psi, index_map.fixed_poses));
-  return BilateralGeometry<ExecSpace>{concat_pair_geometry(lin_geo, ang_geo, pin_geo, length_geo), triple_geo,
-                                      concat_single_geometry(fixed_position_geo, fixed_pose_geo)};
+/// \brief The positions within Families of a block's families of one arity, in the set's order.
+template <ConstraintType Block, size_t Arity, typename... Families>
+struct BlockGroup {
+  static constexpr std::array<bool, sizeof...(Families)> is_member{
+      {(Families::constraint_type == Block && Families::bodies_per_entry == Arity)...}};
+  static constexpr size_t size = static_cast<size_t>(std::count(is_member.begin(), is_member.end(), true));
+  static constexpr std::array<size_t, size> positions = [] {
+    std::array<size_t, size> out{};
+    size_t n = 0;
+    for (size_t i = 0; i < is_member.size(); ++i) {
+      if (is_member[i]) {
+        out[n++] = i;
+      }
+    }
+    return out;
+  }();
+};
+
+/// \brief Stands in for a family's geometry in the other block.
+struct OutsideBlock {};
+
+/// \brief Family F's Jacobian and constraint values in its block's vector, or nothing if F is in the other block.
+template <ConstraintType Block, typename F, typename ExecSpace, typename ValueView, typename... Families>
+auto compute_block_family_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                                   const ConstraintIndexMap<Families...>& index_map, const ValueView& values) {
+  if constexpr (F::constraint_type == Block) {
+    return compute_geometry(rods, get<F>(constraints), subrange(values, index_map.template range<F>()));
+  } else {
+    return OutsideBlock{};
+  }
+}
+
+/// \brief A group's family geometries concatenated, or no geometry if the group is empty.
+template <typename Group, typename FamilyGeometries>
+auto concat_block_group(const FamilyGeometries& family_geometries) {
+  if constexpr (Group::size == 0) {
+    return ::mundy::tuple<>{};
+  } else {
+    return [&]<size_t... J>(std::index_sequence<J...>) {
+      return ::mundy::make_tuple(concat_geometry(::mundy::get<Group::positions[J]>(family_geometries)...));
+    }(std::make_index_sequence<Group::size>{});
+  }
+}
+
+/// \brief A block's Jacobian and constraint values at rods' configuration; an empty block is one empty pair group.
+template <ConstraintType Block, typename ExecSpace, typename ValueView, typename... Families>
+  requires ConstraintValueView<ValueView>
+auto compute_block_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                            const ConstraintIndexMap<Families...>& index_map, const ValueView& values) {
+  MUNDY_THROW_ASSERT(
+      values.extent(0) == (Block == ConstraintType::UNILATERAL ? index_map.num_unilateral : index_map.num_bilateral),
+      std::invalid_argument, "compute_block_geometry: values must have one entry per block row.");
+  const auto family_geometries =
+      ::mundy::make_tuple(compute_block_family_geometry<Block, Families>(rods, constraints, index_map, values)...);
+  const auto groups = ::mundy::tuple_cat(
+      ::mundy::tuple_cat(concat_block_group<BlockGroup<Block, arity_pack_order[0], Families...>>(family_geometries),
+                         concat_block_group<BlockGroup<Block, arity_pack_order[1], Families...>>(family_geometries)),
+      concat_block_group<BlockGroup<Block, arity_pack_order[2], Families...>>(family_geometries));
+  if constexpr (::mundy::tuple_size_v<std::remove_cvref_t<decltype(groups)>> == 0) {
+    return BlockGeometry<PairGeometry<ExecSpace>>{::mundy::make_tuple(PairGeometry<ExecSpace>{})};
+  } else {
+    return [&]<typename... Geometries>(const ::mundy::tuple<Geometries...>& g) {
+      return BlockGeometry<Geometries...>{g};
+    }(groups);
+  }
+}
+
+/// \brief The unilateral families' Jacobian at rods' configuration; phi receives their constraint values.
+template <typename ExecSpace, typename PhiView, typename... Families>
+auto compute_unilateral_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                                 const ConstraintIndexMap<Families...>& index_map, const PhiView& phi) {
+  return compute_block_geometry<ConstraintType::UNILATERAL>(rods, constraints, index_map, phi);
+}
+
+/// \brief The bilateral families' Jacobian at rods' configuration; psi receives their constraint values.
+template <typename ExecSpace, typename PsiView, typename... Families>
+auto compute_bilateral_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                                const ConstraintIndexMap<Families...>& index_map, const PsiView& psi) {
+  return compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, index_map, psi);
+}
+
+// The map from a geometry's multipliers to center-of-mass force and torque, per arity.
+template <typename ExecSpace>
+SingleForceOp<ExecSpace> make_force_op(const SingleGeometry<ExecSpace>& geo, size_t num_rods) {
+  return SingleForceOp<ExecSpace>(geo, num_rods);
+}
+template <typename ExecSpace>
+PairForceOp<ExecSpace> make_force_op(const PairGeometry<ExecSpace>& geo, size_t num_rods) {
+  return PairForceOp<ExecSpace>(geo, num_rods);
+}
+template <typename ExecSpace>
+TripleForceOp<ExecSpace> make_force_op(const TripleGeometry<ExecSpace>& geo, size_t num_rods) {
+  return TripleForceOp<ExecSpace>(geo, num_rods);
+}
+
+// The map from center-of-mass translational and rotational velocity to a geometry's constraint rates, per arity.
+template <typename ExecSpace>
+SingleForceOpT<ExecSpace> make_rate_op(const SingleGeometry<ExecSpace>& geo, size_t num_rods) {
+  return SingleForceOpT<ExecSpace>(geo, num_rods);
+}
+template <typename ExecSpace>
+PairForceOpT<ExecSpace> make_rate_op(const PairGeometry<ExecSpace>& geo, size_t num_rods) {
+  return PairForceOpT<ExecSpace>(geo, num_rods);
+}
+template <typename ExecSpace>
+TripleForceOpT<ExecSpace> make_rate_op(const TripleGeometry<ExecSpace>& geo, size_t num_rods) {
+  return TripleForceOpT<ExecSpace>(geo, num_rods);
+}
+
+/// \brief The operators side by side in the domain, [A B C] = [[A B] C]; a lone operator is returned as is.
+template <typename Backend, typename Op>
+Op concat_domain_ops(Op op) {
+  return op;
+}
+template <typename Backend, typename Op1, typename Op2, typename... Ops>
+auto concat_domain_ops(Op1 op1, Op2 op2, Ops... ops) {
+  return concat_domain_ops<Backend>(make_concat_domain_op<Backend>(std::move(op1), std::move(op2)), std::move(ops)...);
+}
+
+/// \brief The operators stacked in the range, [A; B; C] = [[A; B]; C]; a lone operator is returned as is.
+template <typename Backend, typename Op>
+Op concat_range_ops(Op op) {
+  return op;
+}
+template <typename Backend, typename Op1, typename Op2, typename... Ops>
+auto concat_range_ops(Op1 op1, Op2 op2, Ops... ops) {
+  return concat_range_ops<Backend>(make_concat_range_op<Backend>(std::move(op1), std::move(op2)), std::move(ops)...);
+}
+
+/// \brief A block's map from multipliers to center-of-mass force and torque (D or B).
+template <typename ExecSpace, typename... Geometries>
+auto make_block_force_op(const BlockGeometry<Geometries...>& block, size_t num_rods) {
+  return [&]<size_t... I>(std::index_sequence<I...>) {
+    return concat_domain_ops<KokkosBackend<ExecSpace>>(make_force_op(::mundy::get<I>(block.groups), num_rods)...);
+  }(std::index_sequence_for<Geometries...>{});
+}
+
+/// \brief A block's map from center-of-mass translational and rotational velocity to constraint rates (D^T or B^T).
+template <typename ExecSpace, typename... Geometries>
+auto make_block_rate_op(const BlockGeometry<Geometries...>& block, size_t num_rods) {
+  return [&]<size_t... I>(std::index_sequence<I...>) {
+    return concat_range_ops<KokkosBackend<ExecSpace>>(make_rate_op(::mundy::get<I>(block.groups), num_rods)...);
+  }(std::index_sequence_for<Geometries...>{});
+}
+
+/// \brief kinv(row) := the compliance of family's row.
+template <typename ExecSpace, typename F, typename KinvView>
+void fill_compliance(const F& family, const KinvView& kinv) {
+  if (kinv.extent(0) == 0) {
+    return;
+  }
+  Kokkos::parallel_for(
+      "fill_compliance", Kokkos::RangePolicy<ExecSpace>(0, kinv.extent(0)),
+      KOKKOS_LAMBDA(const int row) { kinv(row) = family.row_compliance(row); });
+}
+
+/// \brief Family F's compliances into its rows of kinv, if F is bilateral.
+template <typename ExecSpace, typename F, typename KinvView, typename... Families>
+void fill_family_compliance(const F& family, const KinvView& kinv, const ConstraintIndexMap<Families...>& index_map) {
+  if constexpr (F::constraint_type == ConstraintType::BILATERAL) {
+    fill_compliance<ExecSpace>(family, subrange(kinv, index_map.template range<F>()));
+  }
 }
 
 /// \brief The bilateral compliance diagonal K^-1 in the index map's order.
-///
-/// It is 1/k for springs, zero for pins and fixed lengths, and the anchors' own compliances.
-template <typename ExecSpace>
+template <typename ExecSpace, typename... Families>
 Kokkos::View<double*, typename ExecSpace::memory_space> compliance_diagonal(
-    const ConstraintSet<ExecSpace>& constraints) {
-  using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
-  return concat_vectors(reciprocal<ExecSpace>(constraints.linear_springs.spring_constant_view()),
-                        reciprocal<ExecSpace>(constraints.angular_springs.spring_constant_view()),
-                        view_t("pin_kinv", constraints.pins.num_rows()),
-                        view_t("fixed_length_kinv", constraints.fixed_lengths.num_rows()),
-                        reciprocal<ExecSpace>(constraints.triple_springs.spring_constant_view()),
-                        constraints.fixed_positions.compliance_view(), constraints.fixed_poses.compliance_view());
+    const ConstraintSet<Families...>& constraints, const ConstraintIndexMap<Families...>& index_map) {
+  Kokkos::View<double*, typename ExecSpace::memory_space> kinv("kinv", index_map.num_bilateral);
+  (fill_family_compliance<ExecSpace>(get<Families>(constraints), kinv, index_map), ...);
+  return kinv;
+}
+
+/// \brief units(row) := the unit of family F's row, for F's rows.
+template <typename ExecSpace, typename F, typename UnitView>
+void fill_row_units(const UnitView& units) {
+  if (units.extent(0) == 0) {
+    return;
+  }
+  Kokkos::parallel_for(
+      "fill_row_units", Kokkos::RangePolicy<ExecSpace>(0, units.extent(0)),
+      KOKKOS_LAMBDA(const int row) { units(row) = F::row_unit(row % F::rows_per_entry); });
+}
+
+/// \brief Family F's row units into its rows of units, if F is bilateral.
+template <typename ExecSpace, typename F, typename UnitView, typename... Families>
+void fill_family_row_units(const UnitView& units, const ConstraintIndexMap<Families...>& index_map) {
+  if constexpr (F::constraint_type == ConstraintType::BILATERAL) {
+    fill_row_units<ExecSpace, F>(subrange(units, index_map.template range<F>()));
+  }
+}
+
+/// \brief The unit of every bilateral row, in the index map's order.
+template <typename ExecSpace, typename... Families>
+Kokkos::View<RowUnit*, typename ExecSpace::memory_space> make_row_units(
+    const ConstraintIndexMap<Families...>& index_map) {
+  Kokkos::View<RowUnit*, typename ExecSpace::memory_space> units("row_units", index_map.num_bilateral);
+  (fill_family_row_units<ExecSpace, Families>(units, index_map), ...);
+  return units;
 }
 
 /// \brief The largest magnitudes of a quantity, split into its length and angle parts.
@@ -1420,19 +1662,11 @@ struct LengthAngleMax {
   double angle = 0.0;
 };
 
-/// \brief Whether a bilateral row measures an angle: an angular or triple-point spring, or a fixed pose's orientation.
-KOKKOS_INLINE_FUNCTION bool is_angle_row(const ConstraintIndexMap& index_map, size_t row) {
-  const IndexRange& poses = index_map.fixed_poses;
-  return (index_map.angular_springs.begin <= row && row < index_map.angular_springs.end) ||
-         (index_map.triple_springs.begin <= row && row < index_map.triple_springs.end) ||
-         (poses.begin <= row && row < poses.end && (row - poses.begin) % 6 >= 3);
-}
-
 /// \brief The largest |psi + K^-1 y| over the bilateral rows measured in length and over those measured in angle.
-template <typename ExecSpace, typename PsiView, typename KinvView, typename YView>
+template <typename ExecSpace, typename PsiView, typename KinvView, typename YView, typename UnitView>
 LengthAngleMax max_bilateral_residual(const PsiView& psi, const KinvView& kinv, const YView& y,
-                                      const ConstraintIndexMap& index_map) {
-  const size_t n = index_map.total;
+                                      const UnitView& row_units) {
+  const size_t n = row_units.extent(0);
   if (n == 0) {
     return LengthAngleMax{};
   }
@@ -1441,7 +1675,7 @@ LengthAngleMax max_bilateral_residual(const PsiView& psi, const KinvView& kinv, 
   Kokkos::parallel_reduce(
       "max_bilateral_residual_length", Kokkos::RangePolicy<ExecSpace>(0, n),
       KOKKOS_LAMBDA(const int row, double& m) {
-        if (!is_angle_row(index_map, row)) {
+        if (row_units(row) == RowUnit::LENGTH) {
           m = Kokkos::max(m, Kokkos::abs(psi(row) + kinv(row) * y(row)));
         }
       },
@@ -1449,7 +1683,7 @@ LengthAngleMax max_bilateral_residual(const PsiView& psi, const KinvView& kinv, 
   Kokkos::parallel_reduce(
       "max_bilateral_residual_angle", Kokkos::RangePolicy<ExecSpace>(0, n),
       KOKKOS_LAMBDA(const int row, double& m) {
-        if (is_angle_row(index_map, row)) {
+        if (row_units(row) == RowUnit::ANGLE) {
           m = Kokkos::max(m, Kokkos::abs(psi(row) + kinv(row) * y(row)));
         }
       },
@@ -1457,9 +1691,10 @@ LengthAngleMax max_bilateral_residual(const PsiView& psi, const KinvView& kinv, 
   return LengthAngleMax{Kokkos::max(length_max, 0.0), Kokkos::max(angle_max, 0.0)};
 }
 
-/// \brief The largest per-rod translation and rotation in a generalized displacement [translation(3), rotation(3)].
+/// \brief The largest per-rod translation and rotation in a generalized displacement, split by row unit.
 template <typename ExecSpace, typename DisplacementView>
 LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num_rods) {
+  using rods_t = RodViews<ExecSpace>;
   if (num_rods == 0) {
     return LengthAngleMax{};
   }
@@ -1468,16 +1703,20 @@ LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num
   Kokkos::parallel_reduce(
       "max_displacement_translation", Kokkos::RangePolicy<ExecSpace>(0, num_rods),
       KOKKOS_LAMBDA(const int i, double& m) {
-        for (int c = 0; c < 3; ++c) {
-          m = Kokkos::max(m, Kokkos::abs(displacement(6 * i + c)));
+        for (size_t c = 0; c < rods_t::rows_per_entry; ++c) {
+          if (rods_t::row_unit(c) == RowUnit::LENGTH) {
+            m = Kokkos::max(m, Kokkos::abs(displacement(rods_t::rows_per_entry * i + c)));
+          }
         }
       },
       Kokkos::Max<double>(translation_max));
   Kokkos::parallel_reduce(
       "max_displacement_rotation", Kokkos::RangePolicy<ExecSpace>(0, num_rods),
       KOKKOS_LAMBDA(const int i, double& m) {
-        for (int c = 3; c < 6; ++c) {
-          m = Kokkos::max(m, Kokkos::abs(displacement(6 * i + c)));
+        for (size_t c = 0; c < rods_t::rows_per_entry; ++c) {
+          if (rods_t::row_unit(c) == RowUnit::ANGLE) {
+            m = Kokkos::max(m, Kokkos::abs(displacement(rods_t::rows_per_entry * i + c)));
+          }
         }
       },
       Kokkos::Max<double>(rotation_max));
@@ -1490,17 +1729,19 @@ LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num
 
 /// \brief The parts of a step that no linearization changes.
 ///
-/// The contact block is linearized at the start of the step, C^k: its Jacobian and q = Phi(C^k) + dt D^T U_free.
+/// The unilateral block is linearized at the start of the step, C^k: its Jacobian and q = Phi(C^k) + dt D^T U_free.
 /// The mobility is that of C^k, and U_free = V_ext + M F_ext is the velocity without constraint forces.
-template <typename ExecSpace>
+template <typename ExecSpace, typename... Families>
 struct StepData {
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
+  using unilateral_geometry_t = decltype(compute_unilateral_geometry(
+      std::declval<const RodViews<ExecSpace>&>(), std::declval<const ConstraintSet<Families...>&>(),
+      std::declval<const ConstraintIndexMap<Families...>&>(), std::declval<const view_t&>()));
 
-  ConstraintIndexMap index_map;
+  ConstraintIndexMap<Families...> index_map;
   size_t num_rods;
-  size_t num_contacts;
   double dt;
-  PairGeometry<ExecSpace> contact_geo;
+  unilateral_geometry_t unilateral_geo;
   view_t q;
   view_t kinv;
   LocalDragMobilityOp<ExecSpace> mobility;
@@ -1508,20 +1749,19 @@ struct StepData {
 };
 
 /// \brief The step data of rods and constraints at their current configuration.
-template <typename ExecSpace>
-StepData<ExecSpace> make_step_data(const RodViews<ExecSpace>& rods, const ConstraintSet<ExecSpace>& constraints,
-                                   double dt, double viscosity) {
-  using view_t = typename StepData<ExecSpace>::view_t;
+template <typename ExecSpace, typename... Families>
+StepData<ExecSpace, Families...> make_step_data(const RodViews<ExecSpace>& rods,
+                                                const ConstraintSet<Families...>& constraints, double dt,
+                                                double viscosity) {
+  using view_t = typename StepData<ExecSpace, Families...>::view_t;
   using backend_t = KokkosBackend<ExecSpace>;
 
   const size_t num_rods = rods.size();
-  const size_t num_contacts = constraints.contacts.size();
-  MUNDY_THROW_ASSERT(count_doubly_anchored_rods(constraints, num_rods) == 0, std::invalid_argument,
-                     "mbody: a rod carries more than one fixed-position or fixed-pose anchor, leaving the bilateral "
-                     "block rank deficient.");
+  const ConstraintIndexMap<Families...> index_map = make_constraint_index_map(constraints);
+  const size_t num_unilateral = index_map.num_unilateral;
 
-  view_t q("q", num_contacts);
-  const PairGeometry<ExecSpace> contact_geo = compute_contact_geometry(rods, constraints.contacts, q);
+  view_t q("q", num_unilateral);
+  const auto unilateral_geo = compute_unilateral_geometry(rods, constraints, index_map, q);
   const LocalDragMobilityOp<ExecSpace> mobility(viscosity, rods);
 
   view_t u_free("u_free", rods.num_rows());
@@ -1530,39 +1770,20 @@ StepData<ExecSpace> make_step_data(const RodViews<ExecSpace>& rods, const Constr
   mobility.apply(rods.force_torque_view(), m_force_torque_ext);
   backend_t::axpby(1.0, m_force_torque_ext, 1.0, u_free);
 
-  if (num_contacts > 0) {
-    view_t gap_rate("gap_rate", num_contacts);
-    PairForceOpT<ExecSpace>(contact_geo, num_rods).apply(u_free, gap_rate);
-    backend_t::axpby(dt, gap_rate, 1.0, q);
+  if (num_unilateral > 0) {
+    view_t q_rate("q_rate", num_unilateral);
+    make_block_rate_op<ExecSpace>(unilateral_geo, num_rods).apply(u_free, q_rate);
+    backend_t::axpby(dt, q_rate, 1.0, q);
   }
 
-  return StepData<ExecSpace>{make_constraint_index_map(constraints), num_rods, num_contacts, dt, contact_geo, q,
-                             compliance_diagonal(constraints),       mobility, u_free};
-}
-
-/// \brief The bilateral map B of a bilateral geometry, from multipliers to center-of-mass force and torque.
-template <typename ExecSpace>
-auto make_bilateral_force_op(const BilateralGeometry<ExecSpace>& geo, size_t num_rods) {
-  using backend_t = KokkosBackend<ExecSpace>;
-  return make_concat_domain_op<backend_t>(
-      make_concat_domain_op<backend_t>(PairForceOp<ExecSpace>(geo.pairs, num_rods),
-                                       TripleForceOp<ExecSpace>(geo.triples, num_rods)),
-      SingleForceOp<ExecSpace>(geo.singles, num_rods));
-}
-
-/// \brief The bilateral map B^T, from center-of-mass translational and rotational velocity to constraint rates.
-template <typename ExecSpace>
-auto make_bilateral_rate_op(const BilateralGeometry<ExecSpace>& geo, size_t num_rods) {
-  using backend_t = KokkosBackend<ExecSpace>;
-  return make_concat_range_op<backend_t>(
-      make_concat_range_op<backend_t>(PairForceOpT<ExecSpace>(geo.pairs, num_rods),
-                                      TripleForceOpT<ExecSpace>(geo.triples, num_rods)),
-      SingleForceOpT<ExecSpace>(geo.singles, num_rods));
+  return StepData<ExecSpace, Families...>{
+      index_map, num_rods, dt, unilateral_geo, q, compliance_diagonal<ExecSpace>(constraints, index_map),
+      mobility,  u_free};
 }
 
 /// \brief One linearization's solution and the wrench and velocity it produces.
 ///
-/// x and y are the contact magnitudes and bilateral multipliers, bilateral_wrench is B y, wrench is W = D x + B y,
+/// x and y are the unilateral and bilateral multipliers, bilateral_wrench is B y, wrench is W = D x + B y,
 /// m_wrench is M W, and velocity is U_free + M W.
 template <typename ExecSpace>
 struct LinearizedStep {
@@ -1589,8 +1810,9 @@ struct Displacement {
 /// to_free_end is the displacement Delta from geo's configuration to the step's constraint-free end configuration, so
 /// the bilateral linear term b = psi + B^T Delta is the linear model about geo's configuration of psi at that end. The
 /// contact solve starts from x_start.
-template <typename ExecSpace>
-LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace>& step, const BilateralGeometry<ExecSpace>& geo,
+template <typename ExecSpace, typename BilateralGeometry, typename... Families>
+LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace, Families...>& step,
+                                              const BilateralGeometry& geo,
                                               const Kokkos::View<double*, typename ExecSpace::memory_space>& psi,
                                               const Displacement<ExecSpace>& to_free_end,
                                               const Kokkos::View<double*, typename ExecSpace::memory_space>& x_start,
@@ -1600,15 +1822,15 @@ LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace>& step, c
 
   const size_t num_rods = step.num_rods;
   const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * num_rods;
-  const size_t num_contacts = step.num_contacts;
-  const size_t num_bilateral = step.index_map.total;
-  const bool has_contacts = num_contacts > 0;
+  const size_t num_unilateral = step.index_map.num_unilateral;
+  const size_t num_bilateral = step.index_map.num_bilateral;
+  const bool has_unilateral = num_unilateral > 0;
   const bool has_bilateral = num_bilateral > 0;
 
-  const PairForceOp<ExecSpace> D(step.contact_geo, num_rods);
-  const PairForceOpT<ExecSpace> DT(step.contact_geo, num_rods);
-  const auto B = make_bilateral_force_op(geo, num_rods);
-  const auto BT = make_bilateral_rate_op(geo, num_rods);
+  const auto D = make_block_force_op<ExecSpace>(step.unilateral_geo, num_rods);
+  const auto DT = make_block_rate_op<ExecSpace>(step.unilateral_geo, num_rods);
+  const auto B = make_block_force_op<ExecSpace>(geo, num_rods);
+  const auto BT = make_block_rate_op<ExecSpace>(geo, num_rods);
   // The mixed CQPP's "M" is dt * mobility: it maps a constraint force to the displacement it causes over the step,
   // not to a velocity. The velocity this step returns uses raw M.
   const auto M_dt = make_scaled_op<backend_t>(step.dt, step.mobility);
@@ -1626,16 +1848,16 @@ LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace>& step, c
       make_sum_op<backend_t>(make_quadratic_form<backend_t>(BT, M_dt, B), make_diagonal_op<backend_t>(step.kinv));
   const auto S = make_cg_inv_op<backend_t>(btmb_plus_kinv, cg_cfg);
 
-  // x* (contact force magnitudes): the reduced CQPP, which without bilateral rows is the contact LCP. Without
-  // contacts x* is empty, and its projected residual is zero before any iteration.
+  // x* (unilateral multipliers): the reduced CQPP, which without bilateral rows is the LCP. Without unilateral rows
+  // x* is empty, and its projected residual is zero before any iteration.
   LinearizedStep<ExecSpace> out;
-  out.x = view_t("x", num_contacts);
+  out.x = view_t("x", num_unilateral);
   Kokkos::deep_copy(out.x, x_start);
   out.result = PGDResult<double>{0, 0.0, 0.0 <= pgd_cfg.tol};
-  if (has_contacts) {
-    view_t grad("grad", num_contacts);
-    view_t x_tmp("x_tmp", num_contacts);
-    view_t grad_tmp("grad_tmp", num_contacts);
+  if (has_unilateral) {
+    view_t grad("grad", num_unilateral);
+    view_t x_tmp("x_tmp", num_unilateral);
+    view_t grad_tmp("grad_tmp", num_unilateral);
 
     auto pgd = make_pgd_solution_strategy(pgd_cfg);
     auto pgd_state = make_pgd_state(out.x, grad, x_tmp, grad_tmp);
@@ -1651,14 +1873,14 @@ LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace>& step, c
 
   // y* = -S (b + B^T M D x*), and the constraint force/torque D x* + B y*.
   view_t Dx("Dx", num_rows);
-  if (has_contacts) {
+  if (has_unilateral) {
     D.apply(out.x, Dx);
   }
   out.y = view_t("y", num_bilateral);
   out.bilateral_wrench = view_t("bilateral_wrench", num_rows);
   if (has_bilateral) {
     view_t y_rhs("y_rhs", num_bilateral);
-    if (has_contacts) {
+    if (has_unilateral) {
       view_t MDx("MDx", num_rows);
       M_dt.apply(Dx, MDx);
       BT.apply(MDx, y_rhs);
@@ -1672,7 +1894,7 @@ LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace>& step, c
   }
   out.wrench = view_t("wrench", num_rows);
   Kokkos::deep_copy(out.wrench, out.bilateral_wrench);
-  if (has_contacts) {
+  if (has_unilateral) {
     backend_t::axpby(1.0, Dx, 1.0, out.wrench);
   }
 
@@ -1687,42 +1909,39 @@ LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace>& step, c
 /// \brief Apply a linearization to rods and constraints.
 ///
 /// force/torque gains W, velocity/omega becomes U_free + M W, and every family receives its multipliers.
-template <typename ExecSpace>
-void write_step(const RodViews<ExecSpace>& rods, const ConstraintSet<ExecSpace>& constraints,
-                const ConstraintIndexMap& index_map, const LinearizedStep<ExecSpace>& step) {
+template <typename ExecSpace, typename... Families>
+void write_step(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                const ConstraintIndexMap<Families...>& index_map, const LinearizedStep<ExecSpace>& step) {
   auto force_torque = rods.force_torque_view();
   KokkosBackend<ExecSpace>::axpby(1.0, step.wrench, 1.0, force_torque);
   Kokkos::deep_copy(rods.velocity_omega_view(), step.velocity);
 
-  Kokkos::deep_copy(constraints.contacts.lambda_view(), step.x);
-  Kokkos::deep_copy(constraints.linear_springs.lambda_view(), subrange(step.y, index_map.linear_springs));
-  Kokkos::deep_copy(constraints.angular_springs.lambda_view(), subrange(step.y, index_map.angular_springs));
-  Kokkos::deep_copy(constraints.pins.lambda_view(), subrange(step.y, index_map.pins));
-  Kokkos::deep_copy(constraints.fixed_lengths.lambda_view(), subrange(step.y, index_map.fixed_lengths));
-  Kokkos::deep_copy(constraints.triple_springs.lambda_view(), subrange(step.y, index_map.triple_springs));
-  Kokkos::deep_copy(constraints.fixed_positions.lambda_view(), subrange(step.y, index_map.fixed_positions));
-  Kokkos::deep_copy(constraints.fixed_poses.lambda_view(), subrange(step.y, index_map.fixed_poses));
+  (Kokkos::deep_copy(get<Families>(constraints).lambda_view(),
+                     subrange(Families::constraint_type == ConstraintType::UNILATERAL ? step.x : step.y,
+                              index_map.template range<Families>())),
+   ...);
 }
 
 /// \brief An iterate's largest acceptance residual over its tolerance, at the configuration it moves the rods to.
 ///
-/// The residuals are |psi + K^-1 y| there and M (B' y - B y), the displacement by which the bilateral force
-/// directions there would change the step, where B and B' map multipliers to center-of-mass force and torque at the
-/// iterate's linearization point and at that configuration. B y is the iterate's bilateral wrench.
-template <typename ExecSpace>
-double slcp_merit(const StepData<ExecSpace>& step, const LinearizedStep<ExecSpace>& iterate,
-                  const BilateralGeometry<ExecSpace>& trial_geo,
-                  const Kokkos::View<double*, typename ExecSpace::memory_space>& trial_psi, double length_tol,
+/// The residuals are |psi + K^-1 y| there, each in its row's unit, and M (B' y - B y), the displacement by which the
+/// bilateral force directions there would change the step, where B and B' map multipliers to center-of-mass force and
+/// torque at the iterate's linearization point and at that configuration. B y is the iterate's bilateral wrench.
+template <typename ExecSpace, typename BilateralGeometry, typename... Families>
+double slcp_merit(const StepData<ExecSpace, Families...>& step, const LinearizedStep<ExecSpace>& iterate,
+                  const BilateralGeometry& trial_geo,
+                  const Kokkos::View<double*, typename ExecSpace::memory_space>& trial_psi,
+                  const Kokkos::View<RowUnit*, typename ExecSpace::memory_space>& row_units, double length_tol,
                   double angle_tol) {
-  using view_t = typename StepData<ExecSpace>::view_t;
+  using view_t = typename StepData<ExecSpace, Families...>::view_t;
   using backend_t = KokkosBackend<ExecSpace>;
   const size_t num_rods = step.num_rods;
   const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * num_rods;
 
-  const LengthAngleMax rows = max_bilateral_residual<ExecSpace>(trial_psi, step.kinv, iterate.y, step.index_map);
+  const LengthAngleMax rows = max_bilateral_residual<ExecSpace>(trial_psi, step.kinv, iterate.y, row_units);
 
   view_t wrench_change("wrench_change", num_rows);
-  make_bilateral_force_op(trial_geo, num_rods).apply(iterate.y, wrench_change);
+  make_block_force_op<ExecSpace>(trial_geo, num_rods).apply(iterate.y, wrench_change);
   backend_t::axpby(-1.0, iterate.bilateral_wrench, 1.0, wrench_change);
   view_t displacement_change("displacement_change", num_rows);
   step.mobility.apply(step.dt, wrench_change, 0.0, displacement_change);
