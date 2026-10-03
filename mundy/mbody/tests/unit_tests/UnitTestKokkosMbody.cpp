@@ -58,7 +58,8 @@ using TestMemSpace = TestExecSpace::memory_space;
 using HostExecSpace = Kokkos::DefaultHostExecutionSpace;
 
 /// \brief solve_mixed_lcp() on TestExecSpace for host inputs, which are updated in place.
-MixedLCPResult solve_on_device(const RodViews<HostExecSpace>& rods, const ConstraintSet<HostExecSpace>& constraints,
+template <typename... Families>
+MixedLCPResult solve_on_device(const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints,
                                const MixedLCPConfig& cfg) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
@@ -80,6 +81,19 @@ auto copy_to(const T& src) {
   const auto out = create_mirror(Space{}, src);
   deep_copy(out, src);
   return out;
+}
+
+/// \brief How many entries of two equally long vectors differ in value; -0.0 and +0.0 are equal.
+template <typename ViewA, typename ViewB>
+size_t count_value_differences(const ViewA& a_view, const ViewB& b_view) {
+  const auto a = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, a_view);
+  const auto b = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b_view);
+  MUNDY_THROW_REQUIRE(a.extent(0) == b.extent(0), std::invalid_argument, "count_value_differences: length mismatch.");
+  size_t differences = 0;
+  for (size_t i = 0; i < a.extent(0); ++i) {
+    differences += (a(i) != b(i)) ? 1 : 0;
+  }
+  return differences;
 }
 
 /// \brief How many entries of two equally long vectors differ in their bit patterns.
@@ -107,7 +121,27 @@ static_assert(ViewsContainer<RodViews<HostExecSpace>> && ViewsContainer<LinearSp
                   ViewsContainer<FixedPositionViews<HostExecSpace>> && ViewsContainer<FixedPoseViews<HostExecSpace>> &&
                   ViewsContainer<ContactViews<HostExecSpace>>,
               "rods and every constraint family must be views containers");
-static_assert(!ViewsContainer<ConstraintSet<HostExecSpace>>, "a constraint set is copied family by family");
+static_assert(!ViewsContainer<ConstraintSet<PinViews<HostExecSpace>>>, "a constraint set is copied family by family");
+static_assert(ConstraintFamily<LinearSpringViews<HostExecSpace>> &&
+                  ConstraintFamily<AngularSpringViews<HostExecSpace>> && ConstraintFamily<PinViews<HostExecSpace>> &&
+                  ConstraintFamily<FixedLengthViews<HostExecSpace>> &&
+                  ConstraintFamily<TriplePointAngularSpringViews<HostExecSpace>> &&
+                  ConstraintFamily<FixedPositionViews<HostExecSpace>> &&
+                  ConstraintFamily<FixedPoseViews<HostExecSpace>> && ConstraintFamily<ContactViews<HostExecSpace>>,
+              "every constraint family must satisfy ConstraintFamily");
+static_assert(!ConstraintFamily<RodViews<HostExecSpace>>, "rods are bodies, not constraints");
+
+/// \brief Whether make_constraint_set accepts families of these types.
+template <typename... Families>
+concept FormsConstraintSet = requires(const Families&... families) { make_constraint_set(families...); };
+
+static_assert(FormsConstraintSet<PinViews<HostExecSpace>, ContactViews<HostExecSpace>>,
+              "distinct families sharing an execution space form a constraint set");
+static_assert(!FormsConstraintSet<PinViews<HostExecSpace>, PinViews<HostExecSpace>>,
+              "a family type may appear in a constraint set only once");
+static_assert(std::is_same_v<HostExecSpace, Kokkos::Serial> ||
+                  !FormsConstraintSet<PinViews<HostExecSpace>, ContactViews<Kokkos::Serial>>,
+              "the families of a constraint set must share one execution space");
 
 //@}
 
@@ -223,8 +257,8 @@ void reset_rod_state(const RodViews<Space>& rods, const Kokkos::View<double*, ty
 }
 
 /// \brief One backward-Euler step under a constant external load.
-template <typename Space>
-MixedLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Space>& constraints,
+template <typename Space, typename... Families>
+MixedLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
                          const MixedLCPConfig& cfg, const Kokkos::View<double*, typename Space::memory_space>& load) {
   reset_rod_state(rods, load);
   const MixedLCPResult result = solve_mixed_lcp(rods, constraints, cfg);
@@ -233,8 +267,8 @@ MixedLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Space>
 }
 
 /// \brief One step under a constant external load with its bilateral rows held at its end.
-template <typename Space>
-MixedSLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Space>& constraints,
+template <typename Space, typename... Families>
+MixedSLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
                           const MixedSLCPConfig& cfg, const Kokkos::View<double*, typename Space::memory_space>& load) {
   reset_rod_state(rods, load);
   const MixedSLCPResult result = solve_mixed_slcp(rods, constraints, cfg);
@@ -258,10 +292,10 @@ double max_step_displacement(const RodViews<Space>& rods, double dt) {
 /// \brief Step until no rod moves farther than settled_step, or turns through a larger angle, in one step.
 ///
 /// Returns whether that happened within max_steps.
-template <typename Space>
-bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Space>& constraints, const MixedLCPConfig& cfg,
-                        const Kokkos::View<double*, typename Space::memory_space>& load, double settled_step,
-                        int max_steps) {
+template <typename Space, typename... Families>
+bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
+                        const MixedLCPConfig& cfg, const Kokkos::View<double*, typename Space::memory_space>& load,
+                        double settled_step, int max_steps) {
   for (int step = 0; step < max_steps; ++step) {
     MUNDY_THROW_REQUIRE(step_rods(rods, constraints, cfg, load).converged, std::runtime_error,
                         "step_until_settled: a step failed to converge.");
@@ -431,9 +465,10 @@ double dense_inverse_frobenius_norm(const DenseMat& A) {
 constexpr size_t kChainNumRods = 6;
 
 /// \brief The inputs to one solve_mixed_lcp().
+template <typename... Families>
 struct SolveInput {
   RodViews<HostExecSpace> rods;
-  ConstraintSet<HostExecSpace> constraints;
+  ConstraintSet<Families...> constraints;
   MixedLCPConfig cfg;
 };
 
@@ -441,47 +476,46 @@ struct SolveInput {
 ///
 /// Each rod is turned a little from its neighbour so adjacent tangents are never parallel and every bend axis is
 /// defined.
-SolveInput make_chain_problem(double spring_constant) {
-  SolveInput p;
-  p.rods = RodViews<HostExecSpace>(kChainNumRods);
-
+SolveInput<LinearSpringViews<HostExecSpace>, AngularSpringViews<HostExecSpace>> make_chain_problem(
+    double spring_constant) {
+  RodViews<HostExecSpace> rods(kChainNumRods);
   const double spacing = 1.6;
   for (size_t k = 0; k < kChainNumRods; ++k) {
-    p.rods.center(k) = Vector3d{0.0, 0.0, spacing * static_cast<double>(k)};
-    p.rods.orientation(k) = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.15 * static_cast<double>(k));
-    p.rods.radius(k) = 0.2;
-    p.rods.length(k) = 1.0;
-    p.rods.force(k) = Vector3d{0.0, 0.0, 0.0};
-    p.rods.torque(k) = Vector3d{0.0, 0.0, 0.0};
-    p.rods.velocity(k) = Vector3d{0.0, 0.0, 0.0};
-    p.rods.omega(k) = Vector3d{0.0, 0.0, 0.0};
+    rods.center(k) = Vector3d{0.0, 0.0, spacing * static_cast<double>(k)};
+    rods.orientation(k) = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.15 * static_cast<double>(k));
+    rods.radius(k) = 0.2;
+    rods.length(k) = 1.0;
+    rods.force(k) = Vector3d{0.0, 0.0, 0.0};
+    rods.torque(k) = Vector3d{0.0, 0.0, 0.0};
+    rods.velocity(k) = Vector3d{0.0, 0.0, 0.0};
+    rods.omega(k) = Vector3d{0.0, 0.0, 0.0};
   }
-  p.rods.force(0) = Vector3d{0.3, -0.1, 0.0};
-  p.rods.torque(kChainNumRods - 1) = Vector3d{0.0, 0.2, -0.1};
+  rods.force(0) = Vector3d{0.3, -0.1, 0.0};
+  rods.torque(kChainNumRods - 1) = Vector3d{0.0, 0.2, -0.1};
 
   const size_t num_links = kChainNumRods - 1;
-  p.constraints.linear_springs = LinearSpringViews<HostExecSpace>(num_links);
-  p.constraints.angular_springs = AngularSpringViews<HostExecSpace>(num_links);
-
+  LinearSpringViews<HostExecSpace> linear_springs(num_links);
+  AngularSpringViews<HostExecSpace> angular_springs(num_links);
   for (size_t k = 0; k < num_links; ++k) {
-    p.constraints.linear_springs.rod_i(k) = static_cast<int>(k);
-    p.constraints.linear_springs.rod_j(k) = static_cast<int>(k + 1);
-    p.constraints.linear_springs.rest_length(k) = spacing - 0.1;  // slight initial stretch
-    p.constraints.linear_springs.spring_constant(k) = spring_constant;
+    linear_springs.rod_i(k) = static_cast<int>(k);
+    linear_springs.rod_j(k) = static_cast<int>(k + 1);
+    linear_springs.rest_length(k) = spacing - 0.1;  // slight initial stretch
+    linear_springs.spring_constant(k) = spring_constant;
 
-    p.constraints.angular_springs.rod_i(k) = static_cast<int>(k);
-    p.constraints.angular_springs.rod_j(k) = static_cast<int>(k + 1);
-    p.constraints.angular_springs.rest_angle(k) = 0.1;  // actual twist per link is 0.15, so a small initial bend
-    p.constraints.angular_springs.spring_constant(k) = spring_constant;
+    angular_springs.rod_i(k) = static_cast<int>(k);
+    angular_springs.rod_j(k) = static_cast<int>(k + 1);
+    angular_springs.rest_angle(k) = 0.1;  // actual twist per link is 0.15, so a small initial bend
+    angular_springs.spring_constant(k) = spring_constant;
   }
 
-  p.cfg.dt = 0.5;
-  p.cfg.viscosity = 1.0;
-  p.cfg.max_cg_iters = 500;
-  p.cfg.cg_tol = 1e-10;
-  p.cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
-  p.cfg.outer_tol = 1e-10;
-  return p;
+  MixedLCPConfig cfg;
+  cfg.dt = 0.5;
+  cfg.viscosity = 1.0;
+  cfg.max_cg_iters = 500;
+  cfg.cg_tol = 1e-10;
+  cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+  cfg.outer_tol = 1e-10;
+  return {rods, make_constraint_set(linear_springs, angular_springs), cfg};
 }
 
 /// \brief Sum over every spring of 0.5 k (stretch or bend)^2, from rod poses.
@@ -690,21 +724,21 @@ TEST(Mbody, CreateMirrorCopiesEveryField) {
 TEST(Mbody, CreateMirrorNeverAliases) {
   RodViews<HostExecSpace> rods(2);
   fill_distinct(rods.center_view(), 0);
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.pins = PinViews<HostExecSpace>(1);
-  fill_distinct(constraints.pins.lambda_view(), 0);
+  PinViews<HostExecSpace> pins(1);
+  fill_distinct(pins.lambda_view(), 0);
+  const auto constraints = make_constraint_set(pins);
 
   const auto rods_mirror = create_mirror(HostExecSpace{}, rods);
   const auto constraints_mirror = create_mirror(HostExecSpace{}, constraints);
   EXPECT_NE(rods_mirror.center_view().data(), rods.center_view().data());
-  EXPECT_NE(constraints_mirror.pins.lambda_view().data(), constraints.pins.lambda_view().data());
+  EXPECT_NE(get<PinViews<HostExecSpace>>(constraints_mirror).lambda_view().data(), pins.lambda_view().data());
   for (size_t i = 0; i < rods_mirror.center_view().extent(0); ++i) {
     EXPECT_EQ(rods_mirror.center_view()(i), 0.0) << "entry " << i;
   }
 
   EXPECT_EQ(create_mirror_view(HostExecSpace{}, rods).center_view().data(), rods.center_view().data());
-  EXPECT_EQ(create_mirror_view(HostExecSpace{}, constraints).pins.lambda_view().data(),
-            constraints.pins.lambda_view().data());
+  EXPECT_EQ(get<PinViews<HostExecSpace>>(create_mirror_view(HostExecSpace{}, constraints)).lambda_view().data(),
+            pins.lambda_view().data());
 }
 
 //@}
@@ -726,11 +760,11 @@ TEST(Mbody, ContactJacobianMatchesFiniteDifference) {
   const auto contacts_d = create_mirror_view_and_copy(TestExecSpace{}, contacts);
   auto sep0 = make_constraint_values(contacts);
   const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_contact_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), contacts_d, sep0);
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), contacts_d, sep0);
 
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto sep = make_constraint_values(contacts);
-    impl::compute_contact_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), contacts_d, sep);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), contacts_d, sep);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sep);
   };
 
@@ -755,11 +789,11 @@ TEST(Mbody, LinearSpringJacobianMatchesFiniteDifference) {
   const auto springs_d = create_mirror_view_and_copy(TestExecSpace{}, springs);
   auto b0 = make_constraint_values(springs);
   const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_linear_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
 
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(springs);
-    impl::compute_linear_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
 
@@ -784,11 +818,11 @@ TEST(Mbody, AngularSpringJacobianMatchesFiniteDifference) {
   const auto springs_d = create_mirror_view_and_copy(TestExecSpace{}, springs);
   auto b0 = make_constraint_values(springs);
   const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_angular_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
 
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(springs);
-    impl::compute_angular_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
 
@@ -819,12 +853,12 @@ TEST(Mbody, TriplePointAngularSpringJacobianMatchesFiniteDifference) {
 
   const auto springs_d = create_mirror_view_and_copy(TestExecSpace{}, springs);
   auto b0 = make_constraint_values(springs);
-  const impl::TripleGeometry<TestExecSpace> geo = impl::compute_triple_point_angular_spring_geometry(
-      create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
+  const impl::TripleGeometry<TestExecSpace> geo =
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), springs_d, b0);
 
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(springs);
-    impl::compute_triple_point_angular_spring_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), springs_d, b);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
 
@@ -965,11 +999,11 @@ TEST(Mbody, FixedPositionJacobianMatchesFiniteDifference) {
   const auto anchors_d = create_mirror_view_and_copy(TestExecSpace{}, anchors);
   auto b0 = make_constraint_values(anchors);
   const impl::SingleGeometry<TestExecSpace> geo =
-      impl::compute_fixed_position_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), anchors_d, b0);
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), anchors_d, b0);
 
   auto value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(anchors);
-    impl::compute_fixed_position_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), anchors_d, b);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), anchors_d, b);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
 
@@ -1023,11 +1057,11 @@ TEST(Mbody, FixedPoseJacobianMatchesFiniteDifference) {
     const auto anchors_d = create_mirror_view_and_copy(TestExecSpace{}, anchors);
     auto b0 = make_constraint_values(anchors);
     const impl::SingleGeometry<TestExecSpace> geo =
-        impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), anchors_d, b0);
+        impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, rods), anchors_d, b0);
 
     auto value_of = [&](const RodViews<HostExecSpace>& r) {
       auto b = make_constraint_values(anchors);
-      impl::compute_fixed_pose_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), anchors_d, b);
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), anchors_d, b);
       return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
     };
 
@@ -1061,11 +1095,11 @@ TEST(Mbody, HolonomicJacobians) {
   pins.body_offset_j(0) = offset_j;
   const auto pins_d = create_mirror_view_and_copy(TestExecSpace{}, pins);
   auto pin_b0 = make_constraint_values(pins);
-  const impl::PairGeometry<TestExecSpace> pin_geo = impl::compute_pin_geometry(rods_d, pins_d, pin_b0);
+  const impl::PairGeometry<TestExecSpace> pin_geo = impl::compute_geometry(rods_d, pins_d, pin_b0);
 
   auto pin_value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(pins);
-    impl::compute_pin_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), pins_d, b);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), pins_d, b);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
   {
@@ -1083,12 +1117,11 @@ TEST(Mbody, HolonomicJacobians) {
   lengths.rest_length(0) = 1.2;
   const auto lengths_d = create_mirror_view_and_copy(TestExecSpace{}, lengths);
   auto length_b0 = make_constraint_values(lengths);
-  const impl::PairGeometry<TestExecSpace> length_geo =
-      impl::compute_fixed_length_geometry(rods_d, lengths_d, length_b0);
+  const impl::PairGeometry<TestExecSpace> length_geo = impl::compute_geometry(rods_d, lengths_d, length_b0);
 
   auto length_value_of = [&](const RodViews<HostExecSpace>& r) {
     auto b = make_constraint_values(lengths);
-    impl::compute_fixed_length_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), lengths_d, b);
+    impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, r), lengths_d, b);
     return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b);
   };
   {
@@ -1103,35 +1136,36 @@ TEST(Mbody, HolonomicJacobians) {
 //! \name Constraint packing
 //@{
 
-// Every family non-empty, each at a distinct prime size, so swapping any two moves an offset. Also fixes the rows per
-// entry: three per pin and fixed position, six per fixed pose.
+// Every family non-empty, each at a distinct prime size, so swapping any two moves an offset, and passed out of packing
+// order: each block packs pairs, then triples, then single-body rows, each in the set's order, and contacts form the
+// unilateral block. Also fixes the rows per entry: three per pin and fixed position, six per fixed pose.
 TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.linear_springs = LinearSpringViews<HostExecSpace>(2);
-  constraints.angular_springs = AngularSpringViews<HostExecSpace>(3);
-  constraints.pins = PinViews<HostExecSpace>(13);
-  constraints.fixed_lengths = FixedLengthViews<HostExecSpace>(17);
-  constraints.triple_springs = TriplePointAngularSpringViews<HostExecSpace>(5);
-  constraints.fixed_positions = FixedPositionViews<HostExecSpace>(7);
-  constraints.fixed_poses = FixedPoseViews<HostExecSpace>(11);
+  const auto constraints = make_constraint_set(
+      FixedPoseViews<HostExecSpace>(11), TriplePointAngularSpringViews<HostExecSpace>(5),
+      LinearSpringViews<HostExecSpace>(2), ContactViews<HostExecSpace>(19), PinViews<HostExecSpace>(13),
+      FixedPositionViews<HostExecSpace>(7), AngularSpringViews<HostExecSpace>(3), FixedLengthViews<HostExecSpace>(17));
 
-  const ConstraintIndexMap index_map = make_constraint_index_map(constraints);
+  const auto index_map = impl::make_constraint_index_map(constraints);
 
-  EXPECT_EQ(index_map.linear_springs.begin, 0u);
-  EXPECT_EQ(index_map.linear_springs.size(), 2u);
-  EXPECT_EQ(index_map.angular_springs.begin, 2u);
-  EXPECT_EQ(index_map.angular_springs.size(), 3u);
-  EXPECT_EQ(index_map.pins.begin, 5u);
-  EXPECT_EQ(index_map.pins.size(), 39u);
-  EXPECT_EQ(index_map.fixed_lengths.begin, 44u);
-  EXPECT_EQ(index_map.fixed_lengths.size(), 17u);
-  EXPECT_EQ(index_map.triple_springs.begin, 61u);
-  EXPECT_EQ(index_map.triple_springs.size(), 5u);
-  EXPECT_EQ(index_map.fixed_positions.begin, 66u);
-  EXPECT_EQ(index_map.fixed_positions.size(), 21u);
-  EXPECT_EQ(index_map.fixed_poses.begin, 87u);
-  EXPECT_EQ(index_map.fixed_poses.size(), 66u);
-  EXPECT_EQ(index_map.total, 153u);
+  EXPECT_EQ(index_map.range<ContactViews<HostExecSpace>>().begin, 0u);
+  EXPECT_EQ(index_map.range<ContactViews<HostExecSpace>>().size(), 19u);
+  EXPECT_EQ(index_map.num_unilateral, 19u);
+
+  EXPECT_EQ(index_map.range<LinearSpringViews<HostExecSpace>>().begin, 0u);
+  EXPECT_EQ(index_map.range<LinearSpringViews<HostExecSpace>>().size(), 2u);
+  EXPECT_EQ(index_map.range<PinViews<HostExecSpace>>().begin, 2u);
+  EXPECT_EQ(index_map.range<PinViews<HostExecSpace>>().size(), 39u);
+  EXPECT_EQ(index_map.range<AngularSpringViews<HostExecSpace>>().begin, 41u);
+  EXPECT_EQ(index_map.range<AngularSpringViews<HostExecSpace>>().size(), 3u);
+  EXPECT_EQ(index_map.range<FixedLengthViews<HostExecSpace>>().begin, 44u);
+  EXPECT_EQ(index_map.range<FixedLengthViews<HostExecSpace>>().size(), 17u);
+  EXPECT_EQ(index_map.range<TriplePointAngularSpringViews<HostExecSpace>>().begin, 61u);
+  EXPECT_EQ(index_map.range<TriplePointAngularSpringViews<HostExecSpace>>().size(), 5u);
+  EXPECT_EQ(index_map.range<FixedPoseViews<HostExecSpace>>().begin, 66u);
+  EXPECT_EQ(index_map.range<FixedPoseViews<HostExecSpace>>().size(), 66u);
+  EXPECT_EQ(index_map.range<FixedPositionViews<HostExecSpace>>().begin, 132u);
+  EXPECT_EQ(index_map.range<FixedPositionViews<HostExecSpace>>().size(), 21u);
+  EXPECT_EQ(index_map.num_bilateral, 153u);
 }
 
 //@}
@@ -1171,8 +1205,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   lin_springs.rest_length(0) = 1.0;
   lin_springs.spring_constant(0) = 2.0;
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.linear_springs = lin_springs;
+  const auto constraints = make_constraint_set(lin_springs);
 
   MixedLCPConfig cfg;
   cfg.dt = 1.0;
@@ -1183,7 +1216,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(lin_springs);
   const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_linear_spring_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, lin_springs), b0_d);
+      impl::compute_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, lin_springs), b0_d);
   const impl::PairForceOp<TestExecSpace> B(geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
@@ -1218,8 +1251,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   ang_springs.rest_angle(0) = 0.0;
   ang_springs.spring_constant(0) = 2.0;
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.angular_springs = ang_springs;
+  const auto constraints = make_constraint_set(ang_springs);
 
   MixedLCPConfig cfg;
   cfg.dt = 1.0;
@@ -1230,7 +1262,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(ang_springs);
   const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_angular_spring_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, ang_springs), b0_d);
+      impl::compute_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, ang_springs), b0_d);
   const impl::PairForceOp<TestExecSpace> B(geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
@@ -1272,8 +1304,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   triple_springs.rest_angle(0) = Kokkos::numbers::pi_v<double>;
   triple_springs.spring_constant(0) = 2.0;
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.triple_springs = triple_springs;
+  const auto constraints = make_constraint_set(triple_springs);
 
   MixedLCPConfig cfg;
   cfg.dt = 1.0;
@@ -1283,8 +1314,8 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   // Scalar B^T M B
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto b0_d = make_constraint_values(triple_springs);
-  const impl::TripleGeometry<TestExecSpace> geo = impl::compute_triple_point_angular_spring_geometry(
-      rods_d, create_mirror_view_and_copy(TestExecSpace{}, triple_springs), b0_d);
+  const impl::TripleGeometry<TestExecSpace> geo =
+      impl::compute_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, triple_springs), b0_d);
   const impl::TripleForceOp<TestExecSpace> B(geo, rods.size());
   const impl::TripleForceOpT<TestExecSpace> BT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
@@ -1325,8 +1356,7 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   contacts.rod_i(0) = 0;
   contacts.rod_j(0) = 1;
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.contacts = contacts;
+  const auto constraints = make_constraint_set(contacts);
 
   MixedLCPConfig cfg;
   cfg.dt = 1.0;
@@ -1337,7 +1367,7 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   auto sep0 = make_constraint_values(contacts);
   const impl::PairGeometry<TestExecSpace> geo =
-      impl::compute_contact_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, contacts), sep0);
+      impl::compute_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, contacts), sep0);
   const impl::PairForceOp<TestExecSpace> D(geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> DT(geo, rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
@@ -1381,7 +1411,7 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   rods.force(1) = Vector3d{-0.2, 0.1, 0.05};
   rods.torque(1) = Vector3d{0.05, -0.1, 0.1};
 
-  const ConstraintSet<HostExecSpace> constraints;
+  const ConstraintSet<> constraints;
 
   MixedLCPConfig cfg;
   cfg.dt = 1.0;
@@ -1411,14 +1441,13 @@ TEST(Mbody, EmptySpringBlockSchurComplementConvergesInZeroIterations) {
                                                      Vector3d{0.0, 0.0, 1.6}, Quaterniond{1.0, 0.0, 0.0, 0.0});
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-  const ConstraintSet<TestExecSpace> empty;
+  const LinearSpringViews<TestExecSpace> lin_springs(0);
+  const AngularSpringViews<TestExecSpace> ang_springs(0);
 
-  auto b0_lin = make_constraint_values(empty.linear_springs);
-  auto b0_ang = make_constraint_values(empty.angular_springs);
-  const impl::PairGeometry<TestExecSpace> lin_geo =
-      impl::compute_linear_spring_geometry(rods_d, empty.linear_springs, b0_lin);
-  const impl::PairGeometry<TestExecSpace> ang_geo =
-      impl::compute_angular_spring_geometry(rods_d, empty.angular_springs, b0_ang);
+  auto b0_lin = make_constraint_values(lin_springs);
+  auto b0_ang = make_constraint_values(ang_springs);
+  const impl::PairGeometry<TestExecSpace> lin_geo = impl::compute_geometry(rods_d, lin_springs, b0_lin);
+  const impl::PairGeometry<TestExecSpace> ang_geo = impl::compute_geometry(rods_d, ang_springs, b0_ang);
   const impl::PairGeometry<TestExecSpace> spring_geo = impl::concat_pair_geometry(lin_geo, ang_geo);
 
   const impl::PairForceOp<TestExecSpace> B(spring_geo, rods.size());
@@ -1488,17 +1517,18 @@ DenseStep dense_schur_step(const DenseMat& B, const DenseMat& M, const std::vect
 
 // A chain of linear and angular springs packed into one y-block.
 TEST(Mbody, ChainMatchesIndependentDenseSolve) {
-  SolveInput p = make_chain_problem(/*spring_constant=*/3.0);
+  const auto p = make_chain_problem(/*spring_constant=*/3.0);
+  const auto& lin_springs = get<LinearSpringViews<HostExecSpace>>(p.constraints);
+  const auto& ang_springs = get<AngularSpringViews<HostExecSpace>>(p.constraints);
 
   // Dense reference, built before solve_mixed_lcp() updates the inputs; B's columns follow the y-block order
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
-  auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
-  auto b0_ang_d = make_constraint_values(constraints_d.angular_springs);
-  const impl::PairForceOp<TestExecSpace> B_lin(
-      impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin_d), kChainNumRods);
-  const impl::PairForceOp<TestExecSpace> B_ang(
-      impl::compute_angular_spring_geometry(rods_d, constraints_d.angular_springs, b0_ang_d), kChainNumRods);
+  const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
+  const auto ang_springs_d = create_mirror_view_and_copy(TestExecSpace{}, ang_springs);
+  auto b0_lin_d = make_constraint_values(lin_springs_d);
+  auto b0_ang_d = make_constraint_values(ang_springs_d);
+  const impl::PairForceOp<TestExecSpace> B_lin(impl::compute_geometry(rods_d, lin_springs_d, b0_lin_d), kChainNumRods);
+  const impl::PairForceOp<TestExecSpace> B_ang(impl::compute_geometry(rods_d, ang_springs_d, b0_ang_d), kChainNumRods);
   const impl::LocalDragMobilityOp<TestExecSpace> M(p.cfg.viscosity, rods_d);
   const auto b0_lin = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_lin_d);
   const auto b0_ang = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_ang_d);
@@ -1506,11 +1536,11 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   std::vector<double> b0, kinv;
   for (size_t k = 0; k < b0_lin.extent(0); ++k) {
     b0.push_back(b0_lin(k));
-    kinv.push_back(1.0 / p.constraints.linear_springs.spring_constant(k));
+    kinv.push_back(1.0 / lin_springs.spring_constant(k));
   }
   for (size_t k = 0; k < b0_ang.extent(0); ++k) {
     b0.push_back(b0_ang(k));
-    kinv.push_back(1.0 / p.constraints.angular_springs.spring_constant(k));
+    kinv.push_back(1.0 / ang_springs.spring_constant(k));
   }
   const auto force_torque_ext = p.rods.force_torque_view();
   const DenseStep expected = dense_schur_step(
@@ -1524,12 +1554,51 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   // CG stops at a residual of cg_tol = 1e-10, and K^-1 = I/3 bounds the error in y, and so in v, by about 3e-10.
   const size_t num_links = kChainNumRods - 1;
   for (size_t i = 0; i < num_links; ++i) {
-    EXPECT_NEAR(p.constraints.linear_springs.lambda(i), expected.y[i], 1e-9) << "linear spring " << i;
-    EXPECT_NEAR(p.constraints.angular_springs.lambda(i), expected.y[num_links + i], 1e-9) << "angular spring " << i;
+    EXPECT_NEAR(lin_springs.lambda(i), expected.y[i], 1e-9) << "linear spring " << i;
+    EXPECT_NEAR(ang_springs.lambda(i), expected.y[num_links + i], 1e-9) << "angular spring " << i;
   }
   for (size_t i = 0; i < expected.vel_omega.size(); ++i) {
     EXPECT_NEAR(p.rods.velocity_omega_view()(i), expected.vel_omega[i], 1e-9) << "entry " << i;
   }
+}
+
+// A family a set does not hold and an empty family it does hold contribute nothing: the chain solves to the same values
+// with only its springs as with every family present and the others empty. Serial execution fixes the order of every
+// atomic sum; an empty block may still turn a -0.0 into +0.0, so values, not bit patterns, are compared.
+TEST(Mbody, AbsentFamiliesMatchEmptyFamilies) {
+  const auto p = make_chain_problem(/*spring_constant=*/3.0);
+  const auto lin_springs = copy_to<Kokkos::Serial>(get<LinearSpringViews<HostExecSpace>>(p.constraints));
+  const auto ang_springs = copy_to<Kokkos::Serial>(get<AngularSpringViews<HostExecSpace>>(p.constraints));
+  const auto springs_only = make_constraint_set(lin_springs, ang_springs);
+  const auto every_family =
+      make_constraint_set(lin_springs, ang_springs, PinViews<Kokkos::Serial>(0), FixedLengthViews<Kokkos::Serial>(0),
+                          TriplePointAngularSpringViews<Kokkos::Serial>(0), FixedPositionViews<Kokkos::Serial>(0),
+                          FixedPoseViews<Kokkos::Serial>(0), ContactViews<Kokkos::Serial>(0));
+
+  // Mixed LCP
+  const auto rods_reduced = copy_to<Kokkos::Serial>(p.rods);
+  const auto rods_full = copy_to<Kokkos::Serial>(p.rods);
+  ASSERT_TRUE(solve_mixed_lcp(rods_reduced, springs_only, p.cfg).converged);
+  const auto lin_lambda_reduced = copy_to<Kokkos::Serial>(lin_springs).lambda_view();
+  const auto ang_lambda_reduced = copy_to<Kokkos::Serial>(ang_springs).lambda_view();
+  ASSERT_TRUE(solve_mixed_lcp(rods_full, every_family, p.cfg).converged);
+  EXPECT_EQ(count_value_differences(rods_reduced.force_torque_view(), rods_full.force_torque_view()), 0u);
+  EXPECT_EQ(count_value_differences(rods_reduced.velocity_omega_view(), rods_full.velocity_omega_view()), 0u);
+  EXPECT_EQ(count_value_differences(lin_lambda_reduced, lin_springs.lambda_view()), 0u);
+  EXPECT_EQ(count_value_differences(ang_lambda_reduced, ang_springs.lambda_view()), 0u);
+
+  // Mixed SLCP, which re-linearizes the springs
+  const MixedSLCPConfig slcp_cfg{p.cfg, 50, 1e-9, 1e-9};
+  const auto slcp_rods_reduced = copy_to<Kokkos::Serial>(p.rods);
+  const auto slcp_rods_full = copy_to<Kokkos::Serial>(p.rods);
+  const MixedSLCPResult reduced = solve_mixed_slcp(slcp_rods_reduced, springs_only, slcp_cfg);
+  ASSERT_TRUE(reduced.converged) << reduced;
+  ASSERT_GE(reduced.num_iters, 2u);
+  const MixedSLCPResult full = solve_mixed_slcp(slcp_rods_full, every_family, slcp_cfg);
+  EXPECT_EQ(full.num_iters, reduced.num_iters);
+  EXPECT_EQ(full.residual, reduced.residual);
+  EXPECT_EQ(count_value_differences(slcp_rods_reduced.force_torque_view(), slcp_rods_full.force_torque_view()), 0u);
+  EXPECT_EQ(count_value_differences(slcp_rods_reduced.velocity_omega_view(), slcp_rods_full.velocity_omega_view()), 0u);
 }
 
 // A simply supported beam: two anchors on different rods, coupled through the springs between them. B's columns act
@@ -1565,10 +1634,7 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     set_fixed_position(supports, 0, /*rod=*/0, /*target=*/Vector3d(rods.center(0)));
     set_fixed_position(supports, 1, /*rod=*/last, /*target=*/Vector3d(rods.center(last)));
 
-    ConstraintSet<HostExecSpace> constraints;
-    constraints.linear_springs = lin_springs;
-    constraints.triple_springs = chain.springs;
-    constraints.fixed_positions = supports;
+    const auto constraints = make_constraint_set(lin_springs, chain.springs, supports);
 
     MixedLCPConfig cfg;
     cfg.dt = dt;
@@ -1581,17 +1647,17 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
 
     // Dense reference, built before solve_mixed_lcp() updates the inputs; B's columns follow the y-block order
     const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-    auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
-    auto b0_triple_d = make_constraint_values(constraints_d.triple_springs);
-    auto b0_fixed_d = make_constraint_values(constraints_d.fixed_positions);
-    const impl::PairForceOp<TestExecSpace> B_lin(
-        impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin_d), num_spheres);
-    const impl::TripleForceOp<TestExecSpace> B_triple(
-        impl::compute_triple_point_angular_spring_geometry(rods_d, constraints_d.triple_springs, b0_triple_d),
-        num_spheres);
-    const impl::SingleForceOp<TestExecSpace> B_fixed(
-        impl::compute_fixed_position_geometry(rods_d, constraints_d.fixed_positions, b0_fixed_d), num_spheres);
+    const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
+    const auto triple_springs_d = create_mirror_view_and_copy(TestExecSpace{}, chain.springs);
+    const auto supports_d = create_mirror_view_and_copy(TestExecSpace{}, supports);
+    auto b0_lin_d = make_constraint_values(lin_springs_d);
+    auto b0_triple_d = make_constraint_values(triple_springs_d);
+    auto b0_fixed_d = make_constraint_values(supports_d);
+    const impl::PairForceOp<TestExecSpace> B_lin(impl::compute_geometry(rods_d, lin_springs_d, b0_lin_d), num_spheres);
+    const impl::TripleForceOp<TestExecSpace> B_triple(impl::compute_geometry(rods_d, triple_springs_d, b0_triple_d),
+                                                      num_spheres);
+    const impl::SingleForceOp<TestExecSpace> B_fixed(impl::compute_geometry(rods_d, supports_d, b0_fixed_d),
+                                                     num_spheres);
     const impl::LocalDragMobilityOp<TestExecSpace> M(cfg.viscosity, rods_d);
 
     const auto b0_lin = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_lin_d);
@@ -1601,11 +1667,11 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     std::vector<double> b0, kinv;
     for (size_t k = 0; k < b0_lin.extent(0); ++k) {
       b0.push_back(b0_lin(k));
-      kinv.push_back(1.0 / constraints.linear_springs.spring_constant(k));
+      kinv.push_back(1.0 / lin_springs.spring_constant(k));
     }
     for (size_t k = 0; k < b0_triple.extent(0); ++k) {
       b0.push_back(b0_triple(k));
-      kinv.push_back(1.0 / constraints.triple_springs.spring_constant(k));
+      kinv.push_back(1.0 / chain.springs.spring_constant(k));
     }
     for (size_t k = 0; k < b0_fixed.extent(0); ++k) {
       b0.push_back(b0_fixed(k));
@@ -1621,15 +1687,15 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
     ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged) << "dt=" << dt;
 
     std::vector<double> y;
-    for (size_t k = 0; k < constraints.linear_springs.size(); ++k) {
-      y.push_back(constraints.linear_springs.lambda(k));
+    for (size_t k = 0; k < lin_springs.size(); ++k) {
+      y.push_back(lin_springs.lambda(k));
     }
-    for (size_t k = 0; k < constraints.triple_springs.size(); ++k) {
-      y.push_back(constraints.triple_springs.lambda(k));
+    for (size_t k = 0; k < chain.springs.size(); ++k) {
+      y.push_back(chain.springs.lambda(k));
     }
-    for (size_t k = 0; k < constraints.fixed_positions.size(); ++k) {
+    for (size_t k = 0; k < supports.size(); ++k) {
       for (int c = 0; c < 3; ++c) {
-        y.push_back(constraints.fixed_positions.lambda(k)[c]);
+        y.push_back(supports.lambda(k)[c]);
       }
     }
     ASSERT_EQ(y.size(), expected.y.size());
@@ -1665,25 +1731,25 @@ TEST(Mbody, HolonomicDenseStep) {
   rods.force(3) = Vector3d{-0.1, 0.25, 0.2};
   rods.torque(3) = Vector3d{0.05, -0.1, 0.08};
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.linear_springs = LinearSpringViews<HostExecSpace>(1);
-  constraints.linear_springs.rod_i(0) = 0;
-  constraints.linear_springs.rod_j(0) = 1;
-  constraints.linear_springs.rest_length(0) = 1.0;
-  constraints.linear_springs.spring_constant(0) = 3.0;
-  constraints.pins = PinViews<HostExecSpace>(1);
-  constraints.pins.rod_i(0) = 1;
-  constraints.pins.rod_j(0) = 2;
-  constraints.pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.5};
-  constraints.pins.body_offset_j(0) = Vector3d{0.0, 0.0, -0.5};
-  constraints.fixed_lengths = FixedLengthViews<HostExecSpace>(1);
-  constraints.fixed_lengths.rod_i(0) = 2;
-  constraints.fixed_lengths.rod_j(0) = 3;
-  constraints.fixed_lengths.body_offset_i(0) = Vector3d{0.1, 0.0, 0.4};
-  constraints.fixed_lengths.body_offset_j(0) = Vector3d{0.0, -0.1, -0.4};
-  constraints.fixed_lengths.rest_length(0) = 0.35;
-  constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-  set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, Vector3d(rods.center(0)));
+  LinearSpringViews<HostExecSpace> lin_springs(1);
+  lin_springs.rod_i(0) = 0;
+  lin_springs.rod_j(0) = 1;
+  lin_springs.rest_length(0) = 1.0;
+  lin_springs.spring_constant(0) = 3.0;
+  PinViews<HostExecSpace> pins(1);
+  pins.rod_i(0) = 1;
+  pins.rod_j(0) = 2;
+  pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.5};
+  pins.body_offset_j(0) = Vector3d{0.0, 0.0, -0.5};
+  FixedLengthViews<HostExecSpace> lengths(1);
+  lengths.rod_i(0) = 2;
+  lengths.rod_j(0) = 3;
+  lengths.body_offset_i(0) = Vector3d{0.1, 0.0, 0.4};
+  lengths.body_offset_j(0) = Vector3d{0.0, -0.1, -0.4};
+  lengths.rest_length(0) = 0.35;
+  FixedPositionViews<HostExecSpace> anchors(1);
+  set_fixed_position(anchors, 0, /*rod=*/0, Vector3d(rods.center(0)));
+  const auto constraints = make_constraint_set(lin_springs, pins, lengths, anchors);
 
   MixedLCPConfig cfg;
   cfg.dt = 0.3;
@@ -1694,19 +1760,18 @@ TEST(Mbody, HolonomicDenseStep) {
 
   // Dense reference, built before solve_mixed_lcp() updates the inputs; B's columns follow the y-block order
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-  auto b0_lin_d = make_constraint_values(constraints_d.linear_springs);
-  auto b0_pin_d = make_constraint_values(constraints_d.pins);
-  auto b0_length_d = make_constraint_values(constraints_d.fixed_lengths);
-  auto b0_fixed_d = make_constraint_values(constraints_d.fixed_positions);
-  const impl::PairForceOp<TestExecSpace> B_lin(
-      impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin_d), kNumRods);
-  const impl::PairForceOp<TestExecSpace> B_pin(impl::compute_pin_geometry(rods_d, constraints_d.pins, b0_pin_d),
-                                               kNumRods);
-  const impl::PairForceOp<TestExecSpace> B_length(
-      impl::compute_fixed_length_geometry(rods_d, constraints_d.fixed_lengths, b0_length_d), kNumRods);
-  const impl::SingleForceOp<TestExecSpace> B_fixed(
-      impl::compute_fixed_position_geometry(rods_d, constraints_d.fixed_positions, b0_fixed_d), kNumRods);
+  const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
+  const auto pins_d = create_mirror_view_and_copy(TestExecSpace{}, pins);
+  const auto lengths_d = create_mirror_view_and_copy(TestExecSpace{}, lengths);
+  const auto anchors_d = create_mirror_view_and_copy(TestExecSpace{}, anchors);
+  auto b0_lin_d = make_constraint_values(lin_springs_d);
+  auto b0_pin_d = make_constraint_values(pins_d);
+  auto b0_length_d = make_constraint_values(lengths_d);
+  auto b0_fixed_d = make_constraint_values(anchors_d);
+  const impl::PairForceOp<TestExecSpace> B_lin(impl::compute_geometry(rods_d, lin_springs_d, b0_lin_d), kNumRods);
+  const impl::PairForceOp<TestExecSpace> B_pin(impl::compute_geometry(rods_d, pins_d, b0_pin_d), kNumRods);
+  const impl::PairForceOp<TestExecSpace> B_length(impl::compute_geometry(rods_d, lengths_d, b0_length_d), kNumRods);
+  const impl::SingleForceOp<TestExecSpace> B_fixed(impl::compute_geometry(rods_d, anchors_d, b0_fixed_d), kNumRods);
   const impl::LocalDragMobilityOp<TestExecSpace> M_op(cfg.viscosity, rods_d);
 
   std::vector<double> b0, kinv;
@@ -1717,7 +1782,7 @@ TEST(Mbody, HolonomicDenseStep) {
       kinv.push_back(compliance);
     }
   };
-  append_rows(b0_lin_d, 1.0 / constraints.linear_springs.spring_constant(0));
+  append_rows(b0_lin_d, 1.0 / lin_springs.spring_constant(0));
   append_rows(b0_pin_d, 0.0);
   append_rows(b0_length_d, 0.0);
   append_rows(b0_fixed_d, 0.0);
@@ -1736,13 +1801,13 @@ TEST(Mbody, HolonomicDenseStep) {
   // Solve
   ASSERT_TRUE(solve_on_device(rods, constraints, cfg).converged);
 
-  std::vector<double> y{constraints.linear_springs.lambda(0)};
+  std::vector<double> y{lin_springs.lambda(0)};
   for (int c = 0; c < 3; ++c) {
-    y.push_back(constraints.pins.lambda(0)[c]);
+    y.push_back(pins.lambda(0)[c]);
   }
-  y.push_back(constraints.fixed_lengths.lambda(0));
+  y.push_back(lengths.lambda(0));
   for (int c = 0; c < 3; ++c) {
-    y.push_back(constraints.fixed_positions.lambda(0)[c]);
+    y.push_back(anchors.lambda(0)[c]);
   }
   ASSERT_EQ(y.size(), expected.y.size());
   for (size_t r = 0; r < y.size(); ++r) {
@@ -1772,9 +1837,9 @@ TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
     rods.radius(0) = 0.2;
     rods.length(0) = 1.0;
 
-    ConstraintSet<HostExecSpace> constraints;
-    constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-    set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, target);
+    FixedPositionViews<HostExecSpace> anchors(1);
+    set_fixed_position(anchors, 0, /*rod=*/0, target);
+    const auto constraints = make_constraint_set(anchors);
 
     MixedLCPConfig cfg;
     cfg.dt = dt;
@@ -1798,7 +1863,7 @@ TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
     deep_copy(rods, rods_d);
     deep_copy(constraints, constraints_d);
     EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-10) << "dt=" << dt;
-    EXPECT_NEAR(norm(constraints.fixed_positions.lambda(0) + load), 0.0, 1e-10) << "dt=" << dt;
+    EXPECT_NEAR(norm(anchors.lambda(0) + load), 0.0, 1e-10) << "dt=" << dt;
   }
 }
 
@@ -1816,9 +1881,9 @@ TEST(Mbody, FixedPoseHoldsItsTarget) {
     rods.radius(0) = 0.2;
     rods.length(0) = 0.9;
 
-    ConstraintSet<HostExecSpace> constraints;
-    constraints.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-    set_fixed_pose(constraints.fixed_poses, 0, /*rod=*/0, target_point, target_orientation, body_offset);
+    FixedPoseViews<HostExecSpace> anchors(1);
+    set_fixed_pose(anchors, 0, /*rod=*/0, target_point, target_orientation, body_offset);
+    const auto constraints = make_constraint_set(anchors);
 
     MixedLCPConfig cfg;
     cfg.dt = dt;
@@ -1841,8 +1906,8 @@ TEST(Mbody, FixedPoseHoldsItsTarget) {
     EXPECT_NEAR(norm(rods.center(0) + r_world - target_point), 0.0, 1e-9) << "dt=" << dt;
     EXPECT_NEAR(norm(quaternion_to_rotation_vector(rods.orientation(0) * inverse(target_orientation))), 0.0, 1e-9)
         << "dt=" << dt;
-    EXPECT_NEAR(norm(constraints.fixed_poses.position_lambda(0) + load), 0.0, 1e-9) << "dt=" << dt;
-    EXPECT_NEAR(norm(constraints.fixed_poses.orientation_lambda(0) - cross(r_world, load)), 0.0, 1e-9) << "dt=" << dt;
+    EXPECT_NEAR(norm(anchors.position_lambda(0) + load), 0.0, 1e-9) << "dt=" << dt;
+    EXPECT_NEAR(norm(anchors.orientation_lambda(0) - cross(r_world, load)), 0.0, 1e-9) << "dt=" << dt;
   }
 }
 
@@ -1877,13 +1942,13 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
         rods.length(i) = 0.0;
       }
 
-      ConstraintSet<HostExecSpace> constraints;
       const Vector3d centre{0.0, 0.0, 0.0};
-      constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-      set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, position_target, centre, position_compliance);
-      constraints.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-      set_fixed_pose(constraints.fixed_poses, 0, /*rod=*/1, pose_target, pose_orientation_target, centre,
-                     pose_compliance, orientation_compliance);
+      FixedPositionViews<HostExecSpace> position_anchors(1);
+      set_fixed_position(position_anchors, 0, /*rod=*/0, position_target, centre, position_compliance);
+      FixedPoseViews<HostExecSpace> pose_anchors(1);
+      set_fixed_pose(pose_anchors, 0, /*rod=*/1, pose_target, pose_orientation_target, centre, pose_compliance,
+                     orientation_compliance);
+      const auto constraints = make_constraint_set(position_anchors, pose_anchors);
 
       MixedLCPConfig cfg;
       cfg.dt = dt;
@@ -1934,12 +1999,12 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
     rods.length(i) = 0.0;
   }
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.contacts = ContactViews<HostExecSpace>(1);
-  constraints.contacts.rod_i(0) = 0;
-  constraints.contacts.rod_j(0) = 1;
-  constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-  set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, anchor_target);
+  ContactViews<HostExecSpace> contacts(1);
+  contacts.rod_i(0) = 0;
+  contacts.rod_j(0) = 1;
+  FixedPositionViews<HostExecSpace> anchors(1);
+  set_fixed_position(anchors, 0, /*rod=*/0, anchor_target);
+  const auto constraints = make_constraint_set(contacts, anchors);
 
   MixedLCPConfig cfg;
   cfg.dt = 0.5;
@@ -1958,50 +2023,9 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
 
   EXPECT_NEAR(norm(rods.center(0) - anchor_target), 0.0, 1e-10);
   EXPECT_NEAR(norm(rods.center(1) - rods.center(0)), 2.0 * radius, 1e-9);
-  EXPECT_NEAR(constraints.contacts.lambda(0), push, 1e-9);
+  EXPECT_NEAR(contacts.lambda(0), push, 1e-9);
   // The driven sphere sits above, so the contact presses the held one downward and the anchor pulls up.
-  EXPECT_NEAR(norm(Vector3d(constraints.fixed_positions.lambda(0)) - Vector3d{0.0, 0.0, push}), 0.0, 1e-9);
-}
-
-// Two anchors on one rod duplicate its constraint columns and leave the bilateral block rank deficient.
-// solve_mixed_lcp() rejects that only in debug builds, so the count itself is checked here.
-TEST(Mbody, DoublyAnchoredRodsAreDetected) {
-  constexpr size_t kNumRods = 3;
-  const Vector3d origin{0.0, 0.0, 0.0};
-
-  ConstraintSet<HostExecSpace> both_ends;
-  both_ends.fixed_positions = FixedPositionViews<HostExecSpace>(2);
-  set_fixed_position(both_ends.fixed_positions, 0, /*rod=*/0, origin);
-  set_fixed_position(both_ends.fixed_positions, 1, /*rod=*/2, origin);
-  EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, both_ends), kNumRods), 0u);
-
-  ConstraintSet<HostExecSpace> twice_on_one;
-  twice_on_one.fixed_positions = FixedPositionViews<HostExecSpace>(2);
-  set_fixed_position(twice_on_one.fixed_positions, 0, /*rod=*/1, origin);
-  set_fixed_position(twice_on_one.fixed_positions, 1, /*rod=*/1, origin);
-  EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, twice_on_one), kNumRods), 1u);
-
-  // A position and a pose on one rod collide the same way: both constrain its translational block.
-  ConstraintSet<HostExecSpace> mixed;
-  mixed.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-  set_fixed_position(mixed.fixed_positions, 0, /*rod=*/1, origin);
-  mixed.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-  set_fixed_pose(mixed.fixed_poses, 0, /*rod=*/1, origin, Quaterniond{1.0, 0.0, 0.0, 0.0});
-  EXPECT_EQ(impl::count_doubly_anchored_rods(create_mirror_view_and_copy(TestExecSpace{}, mixed), kNumRods), 1u);
-
-#ifndef NDEBUG
-  // solve_mixed_lcp() checks this with a debug-only assert.
-  RodViews<HostExecSpace> rods(kNumRods);
-  for (size_t i = 0; i < kNumRods; ++i) {
-    rods.center(i) = Vector3d{0.0, 0.0, static_cast<double>(i)};
-    rods.orientation(i) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-    rods.radius(i) = 0.2;
-    rods.length(i) = 0.0;
-  }
-  zero_rod_state(rods);
-  MixedLCPConfig cfg;
-  EXPECT_ANY_THROW(solve_on_device(rods, twice_on_one, cfg));
-#endif
+  EXPECT_NEAR(norm(Vector3d(anchors.lambda(0)) - Vector3d{0.0, 0.0, push}), 0.0, 1e-9);
 }
 
 //@}
@@ -2061,8 +2085,7 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
   lin_springs.rest_length(0) = 1.0;
   lin_springs.spring_constant(0) = spring_constant;
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.linear_springs = lin_springs;
+  const auto constraints = make_constraint_set(lin_springs);
 
   MixedLCPConfig cfg;
   cfg.dt = dt;
@@ -2074,12 +2097,13 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
   zero_rod_state(rods);
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
   const auto load_d = copy_load(rods_d);
 
-  std::vector<double> stretch{summed_stretch(rods_d, constraints_d.linear_springs)};
+  std::vector<double> stretch{summed_stretch(rods_d, lin_springs_d)};
   for (int step = 0; step < num_steps; ++step) {
     EXPECT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "step " << step;
-    stretch.push_back(summed_stretch(rods_d, constraints_d.linear_springs));
+    stretch.push_back(summed_stretch(rods_d, lin_springs_d));
   }
   return stretch;
 }
@@ -2132,28 +2156,31 @@ TEST(Mbody, SpringRelaxationStableAcrossWideDtSweep) {
 }
 
 /// \brief lambda_max(K B^T M B) for the springs of p, from K^1/2 B^T M B K^1/2, which shares its spectrum.
-double spring_network_stiffness(const SolveInput& p) {
+template <typename... Families>
+double spring_network_stiffness(const SolveInput<Families...>& p) {
   using backend_t = KokkosBackend<TestExecSpace>;
+  const auto& lin_springs = get<LinearSpringViews<HostExecSpace>>(p.constraints);
+  const auto& ang_springs = get<AngularSpringViews<HostExecSpace>>(p.constraints);
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
-  auto b0_lin = make_constraint_values(constraints_d.linear_springs);
-  auto b0_ang = make_constraint_values(constraints_d.angular_springs);
-  const impl::PairGeometry<TestExecSpace> geo =
-      impl::concat_pair_geometry(impl::compute_linear_spring_geometry(rods_d, constraints_d.linear_springs, b0_lin),
-                                 impl::compute_angular_spring_geometry(rods_d, constraints_d.angular_springs, b0_ang));
+  const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
+  const auto ang_springs_d = create_mirror_view_and_copy(TestExecSpace{}, ang_springs);
+  auto b0_lin = make_constraint_values(lin_springs_d);
+  auto b0_ang = make_constraint_values(ang_springs_d);
+  const impl::PairGeometry<TestExecSpace> geo = impl::concat_pair_geometry(
+      impl::compute_geometry(rods_d, lin_springs_d, b0_lin), impl::compute_geometry(rods_d, ang_springs_d, b0_ang));
   const impl::PairForceOp<TestExecSpace> B(geo, p.rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(geo, p.rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(p.cfg.viscosity, rods_d);
 
   // Spring rows are packed linear then angular, matching the concatenated geometry.
-  const size_t num_linear = p.constraints.linear_springs.size();
+  const size_t num_linear = lin_springs.size();
   const size_t num_springs = geo.size();
   Kokkos::View<double*, Kokkos::HostSpace> sqrt_k("sqrt_k", num_springs), q0("q0", num_springs);
   std::mt19937 rng(20261001);
   std::uniform_real_distribution<double> dist(-1.0, 1.0);
   for (size_t row = 0; row < num_springs; ++row) {
-    sqrt_k(row) = std::sqrt(row < num_linear ? p.constraints.linear_springs.spring_constant(row)
-                                             : p.constraints.angular_springs.spring_constant(row - num_linear));
+    sqrt_k(row) =
+        std::sqrt(row < num_linear ? lin_springs.spring_constant(row) : ang_springs.spring_constant(row - num_linear));
     q0(row) = dist(rng);
   }
   const auto K_half = make_diagonal_op<backend_t>(Kokkos::create_mirror_view_and_copy(TestMemSpace{}, sqrt_k));
@@ -2176,19 +2203,21 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
   const double dt_crit = 2.0 / spring_network_stiffness(make_chain_problem(/*spring_constant=*/3.0));
 
   for (const double cfl : {0.5, 0.9, 1.1, 2.0, 10.0, 100.0}) {
-    SolveInput p = make_chain_problem(/*spring_constant=*/3.0);
+    auto p = make_chain_problem(/*spring_constant=*/3.0);
     p.cfg.dt = cfl * dt_crit;
     p.cfg.cg_tol = 1e-13;
 
     zero_rod_state(p.rods);  // no external load: the springs relax toward rest
     const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
     const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+    const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
+    const auto& ang_springs_d = get<AngularSpringViews<TestExecSpace>>(constraints_d);
     const auto load_d = copy_load(rods_d);
 
-    std::vector<double> energy{elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs)};
+    std::vector<double> energy{elastic_energy(rods_d, lin_springs_d, ang_springs_d)};
     for (int step = 0; step < 40; ++step) {
       ASSERT_TRUE(step_rods(rods_d, constraints_d, p.cfg, load_d).converged) << "cfl=" << cfl << " step " << step;
-      energy.push_back(elastic_energy(rods_d, constraints_d.linear_springs, constraints_d.angular_springs));
+      energy.push_back(elastic_energy(rods_d, lin_springs_d, ang_springs_d));
     }
 
     // Round-off floor relative to the initial energy, which the largest steps decay toward.
@@ -2211,66 +2240,67 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
 ///
 /// Rods 0-3 are held by a pose anchor and joined by a spring, a pin and a fixed length; rod 3 presses onto a sphere
 /// held by a position anchor.
-SolveInput make_fallback_problem() {
+auto make_fallback_problem() {
   constexpr size_t kNumRods = 5;
   const Vector3d tilt_axis{0.6, 0.8, 0.0};
   const double tilts[4] = {0.0, 0.3, -0.5, 0.8};
 
-  SolveInput p;
-  p.rods = RodViews<HostExecSpace>(kNumRods);
+  RodViews<HostExecSpace> rods(kNumRods);
   for (size_t k = 0; k < 4; ++k) {
     const double s = static_cast<double>(k);
-    p.rods.center(k) = Vector3d{0.1 * s, -0.05 * s, 1.1 * s};
-    p.rods.orientation(k) = axis_angle_to_quaternion(tilt_axis, tilts[k]);
-    p.rods.radius(k) = 0.2;
-    p.rods.length(k) = 1.0;
+    rods.center(k) = Vector3d{0.1 * s, -0.05 * s, 1.1 * s};
+    rods.orientation(k) = axis_angle_to_quaternion(tilt_axis, tilts[k]);
+    rods.radius(k) = 0.2;
+    rods.length(k) = 1.0;
   }
-  p.rods.center(4) = Vector3d(p.rods.center(3)) + Vector3d{0.35, 0.0, 0.0};  // within 0.35 of rod 3's centerline
-  p.rods.orientation(4) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-  p.rods.radius(4) = 0.2;
-  p.rods.length(4) = 0.0;
-  zero_rod_state(p.rods);
-  p.rods.force(2) = Vector3d{0.3, -0.2, 0.1};
-  p.rods.force(3) = Vector3d{0.4, 0.25, 0.2};
-  p.rods.torque(3) = Vector3d{0.05, -0.1, 0.08};
+  rods.center(4) = Vector3d(rods.center(3)) + Vector3d{0.35, 0.0, 0.0};  // within 0.35 of rod 3's centerline
+  rods.orientation(4) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+  rods.radius(4) = 0.2;
+  rods.length(4) = 0.0;
+  zero_rod_state(rods);
+  rods.force(2) = Vector3d{0.3, -0.2, 0.1};
+  rods.force(3) = Vector3d{0.4, 0.25, 0.2};
+  rods.torque(3) = Vector3d{0.05, -0.1, 0.08};
 
-  p.constraints.linear_springs = LinearSpringViews<HostExecSpace>(1);
-  p.constraints.linear_springs.rod_i(0) = 0;
-  p.constraints.linear_springs.rod_j(0) = 1;
-  p.constraints.linear_springs.rest_length(0) = 1.0;
-  p.constraints.linear_springs.spring_constant(0) = 3.0;
-  p.constraints.pins = PinViews<HostExecSpace>(1);
-  p.constraints.pins.rod_i(0) = 1;
-  p.constraints.pins.rod_j(0) = 2;
-  p.constraints.pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.5};
-  p.constraints.pins.body_offset_j(0) = Vector3d{0.0, 0.0, -0.5};
-  p.constraints.fixed_lengths = FixedLengthViews<HostExecSpace>(1);
-  p.constraints.fixed_lengths.rod_i(0) = 2;
-  p.constraints.fixed_lengths.rod_j(0) = 3;
-  p.constraints.fixed_lengths.body_offset_i(0) = Vector3d{0.1, 0.0, 0.4};
-  p.constraints.fixed_lengths.body_offset_j(0) = Vector3d{0.0, -0.1, -0.4};
-  p.constraints.fixed_lengths.rest_length(0) = 0.35;
-  p.constraints.fixed_poses = FixedPoseViews<HostExecSpace>(1);
-  set_fixed_pose(p.constraints.fixed_poses, 0, /*rod=*/0, Vector3d(p.rods.center(0)),
-                 Quaterniond(p.rods.orientation(0)), /*body_offset=*/Vector3d{0.0, 0.0, -0.5});
-  p.constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-  set_fixed_position(p.constraints.fixed_positions, 0, /*rod=*/4, Vector3d(p.rods.center(4)));
-  p.constraints.contacts = ContactViews<HostExecSpace>(1);
-  p.constraints.contacts.rod_i(0) = 3;
-  p.constraints.contacts.rod_j(0) = 4;
+  LinearSpringViews<HostExecSpace> lin_springs(1);
+  lin_springs.rod_i(0) = 0;
+  lin_springs.rod_j(0) = 1;
+  lin_springs.rest_length(0) = 1.0;
+  lin_springs.spring_constant(0) = 3.0;
+  PinViews<HostExecSpace> pins(1);
+  pins.rod_i(0) = 1;
+  pins.rod_j(0) = 2;
+  pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.5};
+  pins.body_offset_j(0) = Vector3d{0.0, 0.0, -0.5};
+  FixedLengthViews<HostExecSpace> lengths(1);
+  lengths.rod_i(0) = 2;
+  lengths.rod_j(0) = 3;
+  lengths.body_offset_i(0) = Vector3d{0.1, 0.0, 0.4};
+  lengths.body_offset_j(0) = Vector3d{0.0, -0.1, -0.4};
+  lengths.rest_length(0) = 0.35;
+  FixedPoseViews<HostExecSpace> pose_anchors(1);
+  set_fixed_pose(pose_anchors, 0, /*rod=*/0, Vector3d(rods.center(0)), Quaterniond(rods.orientation(0)),
+                 /*body_offset=*/Vector3d{0.0, 0.0, -0.5});
+  FixedPositionViews<HostExecSpace> position_anchors(1);
+  set_fixed_position(position_anchors, 0, /*rod=*/4, Vector3d(rods.center(4)));
+  ContactViews<HostExecSpace> contacts(1);
+  contacts.rod_i(0) = 3;
+  contacts.rod_j(0) = 4;
 
-  p.cfg.dt = 0.3;
-  p.cfg.viscosity = 1.0;
-  p.cfg.max_cg_iters = 1000;
-  p.cfg.cg_tol = 1e-10;
-  p.cfg.outer_tol = 1e-10;
-  return p;
+  MixedLCPConfig cfg;
+  cfg.dt = 0.3;
+  cfg.viscosity = 1.0;
+  cfg.max_cg_iters = 1000;
+  cfg.cg_tol = 1e-10;
+  cfg.outer_tol = 1e-10;
+  return SolveInput{rods, make_constraint_set(lin_springs, pins, lengths, pose_anchors, position_anchors, contacts),
+                    cfg};
 }
 
 // A sequence that cannot converge returns its first linearization, which is the mixed LCP step, bit for bit. Serial
 // execution fixes the order of every atomic sum, so the two solves round identically.
 TEST(Mbody, Fallback) {
-  const SolveInput p = make_fallback_problem();
+  const auto p = make_fallback_problem();
   const auto rods_lcp = copy_to<Kokkos::Serial>(p.rods);
   const auto constraints_lcp = copy_to<Kokkos::Serial>(p.constraints);
   const auto rods_slcp = copy_to<Kokkos::Serial>(p.rods);
@@ -2281,7 +2311,9 @@ TEST(Mbody, Fallback) {
   const MixedSLCPResult slcp = solve_mixed_slcp(rods_slcp, constraints_slcp, MixedSLCPConfig{p.cfg, 3, 1e-300, 1e-300});
   ASSERT_FALSE(slcp.converged) << slcp;
   EXPECT_GE(slcp.num_iters, 2u);
-  ASSERT_GT(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, constraints_lcp.contacts.lambda_view())(0), 0.0)
+  ASSERT_GT(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{},
+                                                get<ContactViews<Kokkos::Serial>>(constraints_lcp).lambda_view())(0),
+            0.0)
       << "the contact should press";
 
   // The returned step
@@ -2290,19 +2322,24 @@ TEST(Mbody, Fallback) {
   EXPECT_EQ(slcp.accepted_lcp_result.converged, lcp.converged);
   EXPECT_EQ(count_bit_differences(rods_slcp.force_torque_view(), rods_lcp.force_torque_view()), 0u);
   EXPECT_EQ(count_bit_differences(rods_slcp.velocity_omega_view(), rods_lcp.velocity_omega_view()), 0u);
-  EXPECT_EQ(count_bit_differences(constraints_slcp.contacts.lambda_view(), constraints_lcp.contacts.lambda_view()), 0u);
-  EXPECT_EQ(count_bit_differences(constraints_slcp.linear_springs.lambda_view(),
-                                  constraints_lcp.linear_springs.lambda_view()),
+  EXPECT_EQ(count_bit_differences(get<ContactViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
+                                  get<ContactViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
             0u);
-  EXPECT_EQ(count_bit_differences(constraints_slcp.pins.lambda_view(), constraints_lcp.pins.lambda_view()), 0u);
-  EXPECT_EQ(
-      count_bit_differences(constraints_slcp.fixed_lengths.lambda_view(), constraints_lcp.fixed_lengths.lambda_view()),
-      0u);
-  EXPECT_EQ(count_bit_differences(constraints_slcp.fixed_positions.lambda_view(),
-                                  constraints_lcp.fixed_positions.lambda_view()),
+  EXPECT_EQ(count_bit_differences(get<LinearSpringViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
+                                  get<LinearSpringViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
             0u);
-  EXPECT_EQ(
-      count_bit_differences(constraints_slcp.fixed_poses.lambda_view(), constraints_lcp.fixed_poses.lambda_view()), 0u);
+  EXPECT_EQ(count_bit_differences(get<PinViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
+                                  get<PinViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedLengthViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
+                                  get<FixedLengthViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedPositionViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
+                                  get<FixedPositionViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedPoseViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
+                                  get<FixedPoseViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
+            0u);
 }
 
 // A bob held at length L from an anchored sphere under a constant force F turns in the plane normal to its axis, where
@@ -2327,13 +2364,13 @@ TEST(Mbody, PendulumStep) {
   zero_rod_state(rods);
   rods.force(1) = Vector3d{0.0, -f, 0.0};
 
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.fixed_positions = FixedPositionViews<HostExecSpace>(1);
-  set_fixed_position(constraints.fixed_positions, 0, /*rod=*/0, Vector3d{0.0, 0.0, 0.0});
-  constraints.fixed_lengths = FixedLengthViews<HostExecSpace>(1);
-  constraints.fixed_lengths.rod_i(0) = 0;
-  constraints.fixed_lengths.rod_j(0) = 1;
-  constraints.fixed_lengths.rest_length(0) = L;
+  FixedPositionViews<HostExecSpace> anchors(1);
+  set_fixed_position(anchors, 0, /*rod=*/0, Vector3d{0.0, 0.0, 0.0});
+  FixedLengthViews<HostExecSpace> lengths(1);
+  lengths.rod_i(0) = 0;
+  lengths.rod_j(0) = 1;
+  lengths.rest_length(0) = L;
+  const auto constraints = make_constraint_set(anchors, lengths);
 
   MixedSLCPConfig cfg;
   cfg.inner_lcp_config.dt = 0.1 * tau;
@@ -2393,8 +2430,7 @@ double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double ti
     lin_springs.rest_length(k) = spacing;
     lin_springs.spring_constant(k) = k_lin;
   }
-  ConstraintSet<HostExecSpace> constraints;
-  constraints.linear_springs = lin_springs;
+  const auto constraints = make_constraint_set(lin_springs);
 
   MixedLCPConfig cfg;
   cfg.dt = 2.0;
@@ -2452,9 +2488,9 @@ std::vector<double> solve_static_bend(size_t num_spheres, double spacing, double
   const size_t num_interior = chain.springs.size();
   const size_t num_free = f_ext.size();
   auto b0 = make_constraint_values(chain.springs);
-  const impl::TripleGeometry<TestExecSpace> geo = impl::compute_triple_point_angular_spring_geometry(
-      create_mirror_view_and_copy(TestExecSpace{}, chain.rods),
-      create_mirror_view_and_copy(TestExecSpace{}, chain.springs), b0);
+  const impl::TripleGeometry<TestExecSpace> geo =
+      impl::compute_geometry(create_mirror_view_and_copy(TestExecSpace{}, chain.rods),
+                             create_mirror_view_and_copy(TestExecSpace{}, chain.springs), b0);
   const impl::TripleForceOpT<TestExecSpace> op_t(geo, num_spheres);
 
   DenseMat jacobian(num_interior, std::vector<double>(num_free, 0.0));
@@ -2548,39 +2584,39 @@ TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
 /// Linear springs join neighbours and a bend spring sits at each interior rod; callers hold rods 0 and 1 as the wall
 /// and set any rods past the chain. The free rods start on a shallow arc so every bend angle has a gradient on the
 /// first step, and the settled state does not depend on it.
-SolveInput make_cantilever(size_t num_segments, double L, double EI, size_t num_rods) {
+SolveInput<LinearSpringViews<HostExecSpace>, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(
+    size_t num_segments, double L, double EI, size_t num_rods) {
   const double spacing = L / static_cast<double>(num_segments);
   const size_t num_chain = num_segments + 2;
   MUNDY_THROW_REQUIRE(num_rods >= num_chain, std::invalid_argument, "make_cantilever: num_rods must hold the chain.");
   const BendChain chain = make_bend_chain(num_chain, spacing, EI / spacing);
 
-  SolveInput p;
-  p.rods = RodViews<HostExecSpace>(num_rods);
+  RodViews<HostExecSpace> rods(num_rods);
   for (size_t k = 0; k < num_chain; ++k) {
     const double z = spacing * static_cast<double>(k);
     const double arc = std::max(z - spacing, 0.0);
-    p.rods.center(k) = Vector3d{0.0, 1e-6 * arc * arc, z};
-    p.rods.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-    p.rods.radius(k) = chain.rods.radius(k);
-    p.rods.length(k) = 0.0;
+    rods.center(k) = Vector3d{0.0, 1e-6 * arc * arc, z};
+    rods.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+    rods.radius(k) = chain.rods.radius(k);
+    rods.length(k) = 0.0;
   }
-  zero_rod_state(p.rods);
+  zero_rod_state(rods);
 
-  p.constraints.linear_springs = LinearSpringViews<HostExecSpace>(num_chain - 1);
+  LinearSpringViews<HostExecSpace> lin_springs(num_chain - 1);
   for (size_t k = 0; k + 1 < num_chain; ++k) {
-    p.constraints.linear_springs.rod_i(k) = static_cast<int>(k);
-    p.constraints.linear_springs.rod_j(k) = static_cast<int>(k + 1);
-    p.constraints.linear_springs.rest_length(k) = spacing;
-    p.constraints.linear_springs.spring_constant(k) = 1.0e5 / (spacing * spacing);  // effectively inextensible
+    lin_springs.rod_i(k) = static_cast<int>(k);
+    lin_springs.rod_j(k) = static_cast<int>(k + 1);
+    lin_springs.rest_length(k) = spacing;
+    lin_springs.spring_constant(k) = 1.0e5 / (spacing * spacing);  // effectively inextensible
   }
-  p.constraints.triple_springs = chain.springs;
 
-  p.cfg.viscosity = 1.0;
-  p.cfg.max_cg_iters = 1000;
+  MixedLCPConfig cfg;
+  cfg.viscosity = 1.0;
+  cfg.max_cg_iters = 1000;
   // Tight enough that solver error sits far below the settled chain's geometric nonlinearity.
-  p.cfg.cg_tol = 1e-14;
-  p.cfg.outer_tol = 1e-12;
-  return p;
+  cfg.cg_tol = 1e-14;
+  cfg.outer_tol = 1e-12;
+  return {rods, make_constraint_set(lin_springs, chain.springs), cfg};
 }
 
 /// \brief The settled state of a cantilever under a tip load.
@@ -2593,16 +2629,18 @@ struct SettledCantilever {
 SettledCantilever run_settled_cantilever(size_t num_segments, double L, double EI, double tip_force, double dt) {
   const size_t num_chain = num_segments + 2;
   const int tip = static_cast<int>(num_chain - 1);
-  SolveInput p = make_cantilever(num_segments, L, EI, num_chain);
+  auto p = make_cantilever(num_segments, L, EI, num_chain);
   p.rods.force(tip) = Vector3d{0.0, tip_force, 0.0};
 
-  p.constraints.fixed_positions = FixedPositionViews<HostExecSpace>(2);
-  set_fixed_position(p.constraints.fixed_positions, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
-  set_fixed_position(p.constraints.fixed_positions, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
+  FixedPositionViews<HostExecSpace> wall(2);
+  set_fixed_position(wall, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
+  set_fixed_position(wall, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
+  const auto constraints = make_constraint_set(get<LinearSpringViews<HostExecSpace>>(p.constraints),
+                                               get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), wall);
   p.cfg.dt = dt;
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
   SettledCantilever result;
   result.settled = step_until_settled(rods_d, constraints_d, p.cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
@@ -2647,7 +2685,7 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
   const int midspan = static_cast<int>(num_segments / 2 + 1);
   const int tip = static_cast<int>(num_chain - 1);
   const int obstacle = static_cast<int>(num_chain);
-  SolveInput p = make_cantilever(num_segments, L, EI, num_chain + 1);
+  auto p = make_cantilever(num_segments, L, EI, num_chain + 1);
 
   const double radius = p.rods.radius(0);
   p.rods.center(obstacle) = Vector3d{0.0, -2.0 * radius, p.rods.center(tip)[2]};  // touches the straight tip
@@ -2656,25 +2694,28 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
   p.rods.length(obstacle) = 0.0;
   p.rods.force(midspan) = Vector3d{0.0, -load, 0.0};
 
-  p.constraints.fixed_positions = FixedPositionViews<HostExecSpace>(3);
-  set_fixed_position(p.constraints.fixed_positions, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
-  set_fixed_position(p.constraints.fixed_positions, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
-  set_fixed_position(p.constraints.fixed_positions, 2, obstacle, Vector3d(p.rods.center(obstacle)));
-  p.constraints.contacts = ContactViews<HostExecSpace>(1);
-  p.constraints.contacts.rod_i(0) = tip;
-  p.constraints.contacts.rod_j(0) = obstacle;
+  FixedPositionViews<HostExecSpace> anchors(3);
+  set_fixed_position(anchors, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
+  set_fixed_position(anchors, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
+  set_fixed_position(anchors, 2, obstacle, Vector3d(p.rods.center(obstacle)));
+  ContactViews<HostExecSpace> contacts(1);
+  contacts.rod_i(0) = tip;
+  contacts.rod_j(0) = obstacle;
+  const auto constraints =
+      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(p.constraints),
+                          get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), anchors, contacts);
   p.cfg.dt = dt;
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
   const bool settled =
       step_until_settled(rods_d, constraints_d, p.cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
   deep_copy(p.rods, rods_d);
-  deep_copy(p.constraints, constraints_d);
+  deep_copy(constraints, constraints_d);
 
   const double tip_gap = norm(p.rods.center(tip) - p.rods.center(obstacle)) - 2.0 * radius;
-  return ProppedCantilever{settled, p.constraints.contacts.lambda(0), tip_gap};
+  return ProppedCantilever{settled, contacts.lambda(0), tip_gap};
 }
 
 // A cantilever whose tip rests on an anchored sphere, under a midspan load P. The contact props the tip, and the
