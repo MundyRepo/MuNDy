@@ -2299,7 +2299,7 @@ auto make_fallback_problem() {
 
 // A sequence that cannot converge returns its first linearization, which is the mixed LCP step, bit for bit. Serial
 // execution fixes the order of every atomic sum, so the two solves round identically.
-TEST(Mbody, Fallback) {
+TEST(Mbody, SlcpFallsBackToFirstLinearization) {
   const auto p = make_fallback_problem();
   const auto rods_lcp = copy_to<Kokkos::Serial>(p.rods);
   const auto constraints_lcp = copy_to<Kokkos::Serial>(p.constraints);
@@ -2348,7 +2348,7 @@ TEST(Mbody, Fallback) {
 //
 // An accepted iterate's force direction changes the step by at most sqrt(2) length_tol in the plane, which turns the
 // bob by at most sqrt(2) length_tol / |r_k + dt m F|, to first order in the iterate's angular error.
-TEST(Mbody, PendulumStep) {
+TEST(Mbody, SlcpPendulumMatchesRadialProjection) {
   const double radius = 0.2, L = 1.0, f = 0.5, theta0 = 1.2;
   const double m = expected_inv_drag_perp(radius, 0.0, 1.0);
   const double tau = L / (m * f);
@@ -2398,6 +2398,192 @@ TEST(Mbody, PendulumStep) {
   EXPECT_NEAR(norm(r), L, cfg.length_tol);
   EXPECT_NEAR(std::atan2(r[0], -r[1]), std::atan2(std::sin(theta0), std::cos(theta0) + h),
               std::sqrt(2.0) * cfg.length_tol / p_norm);
+}
+
+/// \brief The largest |psi + K^-1 lambda| over family's rows at rods' configuration, over its length rows and angle
+/// rows.
+template <typename Space, typename Family>
+impl::LengthAngleMax constitutive_residual(const RodViews<Space>& rods, const Family& family) {
+  Kokkos::View<double*, typename Space::memory_space> psi("psi", family.num_rows());
+  impl::compute_geometry(rods, family, psi);
+  const auto lambda = family.lambda_view();
+  double length_max = 0.0;
+  double angle_max = 0.0;
+  Kokkos::parallel_reduce(
+      "constitutive_residual_length", Kokkos::RangePolicy<Space>(0, family.num_rows()),
+      KOKKOS_LAMBDA(const int row, double& m) {
+        if (Family::row_unit(row % Family::rows_per_entry) == RowUnit::LENGTH) {
+          m = Kokkos::max(m, Kokkos::abs(psi(row) + family.row_compliance(row) * lambda(row)));
+        }
+      },
+      Kokkos::Max<double>(length_max));
+  Kokkos::parallel_reduce(
+      "constitutive_residual_angle", Kokkos::RangePolicy<Space>(0, family.num_rows()),
+      KOKKOS_LAMBDA(const int row, double& m) {
+        if (Family::row_unit(row % Family::rows_per_entry) == RowUnit::ANGLE) {
+          m = Kokkos::max(m, Kokkos::abs(psi(row) + family.row_compliance(row) * lambda(row)));
+        }
+      },
+      Kokkos::Max<double>(angle_max));
+  return impl::LengthAngleMax{Kokkos::max(length_max, 0.0), Kokkos::max(angle_max, 0.0)};
+}
+
+// Three rods clamped at the bottom end of the first by a rigid pose anchor and pinned end to end, under a tip force and
+// torque. Rotating the rods moves the pinned points at second order in the step, which a single linearization leaves
+// as a pin violation; at the end of an accepted SLCP step every pin and pose row is within its tolerance.
+TEST(Mbody, SlcpHoldsRigidConstraintsAtStepEnd) {
+  constexpr size_t kNumRods = 3;
+  const Vector3d tilt_axis{0.6, 0.8, 0.0};
+  const double tilts[kNumRods] = {0.0, 0.3, -0.4};
+  const Vector3d half{0.0, 0.0, 0.5};
+
+  RodViews<HostExecSpace> rods(kNumRods);
+  Vector3d bottom{0.0, 0.0, 0.0};
+  for (size_t k = 0; k < kNumRods; ++k) {
+    const Quaterniond orientation = axis_angle_to_quaternion(tilt_axis, tilts[k]);
+    rods.orientation(k) = orientation;
+    rods.center(k) = bottom + orientation * half;
+    rods.radius(k) = 0.2;
+    rods.length(k) = 1.0;
+    bottom = Vector3d(rods.center(k)) + orientation * half;
+  }
+  zero_rod_state(rods);
+  rods.force(kNumRods - 1) = Vector3d{0.4, -0.2, 0.1};
+  rods.torque(kNumRods - 1) = Vector3d{0.05, 0.1, -0.08};
+
+  PinViews<HostExecSpace> pins(kNumRods - 1);
+  for (size_t k = 0; k + 1 < kNumRods; ++k) {
+    pins.rod_i(k) = static_cast<int>(k);
+    pins.rod_j(k) = static_cast<int>(k + 1);
+    pins.body_offset_i(k) = half;
+    pins.body_offset_j(k) = -half;
+  }
+  FixedPoseViews<HostExecSpace> clamp(1);
+  set_fixed_pose(clamp, 0, /*rod=*/0, Vector3d{0.0, 0.0, 0.0}, Quaterniond(rods.orientation(0)), -half);
+  const auto constraints = make_constraint_set(pins, clamp);
+
+  MixedSLCPConfig cfg;
+  cfg.inner_lcp_config.dt = 0.5;
+  cfg.inner_lcp_config.viscosity = 1.0;
+  cfg.inner_lcp_config.max_cg_iters = 500;
+  cfg.inner_lcp_config.cg_tol = 1e-13;
+  cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+  cfg.max_iters = 50;
+  cfg.length_tol = 1e-8;
+  cfg.angle_tol = 1e-8;
+
+  // Step
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, copy_load(rods_d));
+  ASSERT_TRUE(result.converged) << result;
+  EXPECT_GE(result.num_iters, 2u);
+
+  // Every row at the end of the step
+  const impl::LengthAngleMax pin_residual = constitutive_residual(rods_d, get<PinViews<TestExecSpace>>(constraints_d));
+  const impl::LengthAngleMax clamp_residual =
+      constitutive_residual(rods_d, get<FixedPoseViews<TestExecSpace>>(constraints_d));
+  EXPECT_LE(pin_residual.length, cfg.length_tol);
+  EXPECT_LE(clamp_residual.length, cfg.length_tol);
+  EXPECT_LE(clamp_residual.angle, cfg.angle_tol);
+
+  // A single linearization of the same step leaves the pins open
+  const auto lcp_rods_d = copy_to<TestExecSpace>(rods);
+  const auto lcp_constraints_d = copy_to<TestExecSpace>(constraints);
+  ASSERT_TRUE(step_rods(lcp_rods_d, lcp_constraints_d, cfg.inner_lcp_config, copy_load(lcp_rods_d)).converged);
+  EXPECT_GT(constitutive_residual(lcp_rods_d, get<PinViews<TestExecSpace>>(lcp_constraints_d)).length,
+            100.0 * cfg.length_tol);
+}
+
+// A spring of each kind and compliant position and pose anchors, all preloaded, under a force and a torque, with the
+// families passed out of packing order. At the end of an accepted SLCP step each row follows its constitutive law,
+// psi + K^-1 lambda = 0, to within its tolerance; a single linearization of the same step does not.
+TEST(Mbody, SlcpHoldsCompliantConstraintsAtStepEnd) {
+  constexpr size_t kNumRods = 4;
+  const Vector3d tilt_axis{0.6, 0.8, 0.0};
+  const double tilts[kNumRods] = {0.0, 0.3, -0.4, 0.2};
+  const Vector3d centers[kNumRods] = {{0.0, 0.0, 0.0}, {0.1, 0.0, 1.2}, {0.3, 0.1, 2.4}, {0.2, 0.4, 3.5}};
+  const Vector3d half{0.0, 0.0, 0.5};
+
+  RodViews<HostExecSpace> rods(kNumRods);
+  for (size_t k = 0; k < kNumRods; ++k) {
+    rods.center(k) = centers[k];
+    rods.orientation(k) = axis_angle_to_quaternion(tilt_axis, tilts[k]);
+    rods.radius(k) = 0.2;
+    rods.length(k) = 1.0;
+  }
+  zero_rod_state(rods);
+  rods.force(3) = Vector3d{0.3, -0.25, 0.1};
+  rods.torque(2) = Vector3d{0.04, -0.06, 0.05};
+
+  LinearSpringViews<HostExecSpace> lin_springs(1);
+  lin_springs.rod_i(0) = 0;
+  lin_springs.rod_j(0) = 1;
+  lin_springs.rest_length(0) = 1.1;
+  lin_springs.spring_constant(0) = 4.0;
+  AngularSpringViews<HostExecSpace> ang_springs(1);
+  ang_springs.rod_i(0) = 1;
+  ang_springs.rod_j(0) = 2;
+  ang_springs.rest_angle(0) = 0.5;
+  ang_springs.spring_constant(0) = 3.0;
+  TriplePointAngularSpringViews<HostExecSpace> triple_springs(1);
+  triple_springs.rod_i(0) = 1;
+  triple_springs.rod_j(0) = 3;
+  triple_springs.rod_k(0) = 2;
+  triple_springs.rest_angle(0) = minor_angle(centers[1] - centers[2], centers[3] - centers[2]) - 0.2;
+  triple_springs.spring_constant(0) = 2.0;
+  FixedPositionViews<HostExecSpace> position_anchors(1);
+  set_fixed_position(position_anchors, 0, /*rod=*/3, centers[3] + rods.orientation(3) * half + Vector3d{0.05, 0.0, 0.0},
+                     half, /*compliance=*/Vector3d{0.02, 0.03, 0.01});
+  FixedPoseViews<HostExecSpace> pose_anchors(1);
+  set_fixed_pose(pose_anchors, 0, /*rod=*/0, centers[0] - rods.orientation(0) * half,
+                 axis_angle_to_quaternion(Vector3d{0.0, 0.0, 1.0}, 0.1) * Quaterniond(rods.orientation(0)), -half,
+                 /*position_compliance=*/Vector3d{0.01, 0.02, 0.015},
+                 /*orientation_compliance=*/Vector3d{0.03, 0.02, 0.04});
+  const auto constraints =
+      make_constraint_set(pose_anchors, triple_springs, lin_springs, position_anchors, ang_springs);
+
+  MixedSLCPConfig cfg;
+  cfg.inner_lcp_config.dt = 0.5;
+  cfg.inner_lcp_config.viscosity = 1.0;
+  cfg.inner_lcp_config.max_cg_iters = 500;
+  cfg.inner_lcp_config.cg_tol = 1e-13;
+  cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+  cfg.max_iters = 50;
+  cfg.length_tol = 1e-8;
+  cfg.angle_tol = 1e-8;
+
+  // Step
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, copy_load(rods_d));
+  ASSERT_TRUE(result.converged) << result;
+  EXPECT_GE(result.num_iters, 2u);
+
+  // Every row at the end of the step
+  const impl::LengthAngleMax lin_residual =
+      constitutive_residual(rods_d, get<LinearSpringViews<TestExecSpace>>(constraints_d));
+  const impl::LengthAngleMax ang_residual =
+      constitutive_residual(rods_d, get<AngularSpringViews<TestExecSpace>>(constraints_d));
+  const impl::LengthAngleMax triple_residual =
+      constitutive_residual(rods_d, get<TriplePointAngularSpringViews<TestExecSpace>>(constraints_d));
+  const impl::LengthAngleMax position_residual =
+      constitutive_residual(rods_d, get<FixedPositionViews<TestExecSpace>>(constraints_d));
+  const impl::LengthAngleMax pose_residual =
+      constitutive_residual(rods_d, get<FixedPoseViews<TestExecSpace>>(constraints_d));
+  EXPECT_LE(lin_residual.length, cfg.length_tol);
+  EXPECT_LE(ang_residual.angle, cfg.angle_tol);
+  EXPECT_LE(triple_residual.angle, cfg.angle_tol);
+  EXPECT_LE(position_residual.length, cfg.length_tol);
+  EXPECT_LE(pose_residual.length, cfg.length_tol);
+  EXPECT_LE(pose_residual.angle, cfg.angle_tol);
+
+  // A single linearization of the same step leaves the linear spring off its law
+  const auto lcp_rods_d = copy_to<TestExecSpace>(rods);
+  const auto lcp_constraints_d = copy_to<TestExecSpace>(constraints);
+  ASSERT_TRUE(step_rods(lcp_rods_d, lcp_constraints_d, cfg.inner_lcp_config, copy_load(lcp_rods_d)).converged);
+  EXPECT_GT(constitutive_residual(lcp_rods_d, get<LinearSpringViews<TestExecSpace>>(lcp_constraints_d)).length,
+            100.0 * cfg.length_tol);
 }
 
 //@}
