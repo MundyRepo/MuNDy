@@ -32,7 +32,11 @@
 /// return the raw Kokkos::View.
 
 // C++ core
-#include <type_traits>
+#include <concepts>     // for std::constructible_from, std::convertible_to
+#include <cstddef>      // for size_t
+#include <stdexcept>    // for std::invalid_argument
+#include <type_traits>  // for std::is_same_v, std::remove_cvref_t
+#include <utility>      // for std::index_sequence, std::make_index_sequence
 
 // Kokkos
 #include <Kokkos_Core.hpp>
@@ -41,6 +45,8 @@
 #include <mundy_math/Quaternion.hpp>
 #include <mundy_math/Scalar.hpp>
 #include <mundy_math/Vector3.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/tuple.hpp>         // for mundy::{make_tuple, get, tuple_size_v}
 
 namespace mundy {
 
@@ -70,14 +76,29 @@ KOKKOS_INLINE_FUNCTION auto rod_omega(const GenVelocityView& gen_velocity, int i
 }
 //@}
 
+/// \brief The storage layout of a views container, specialized beside each one: fields(c), every view c stores.
+template <typename T>
+struct family_traits {};
+
+/// \brief A container of flat views: constructible from its entry count, with every stored view exposed by fields.
+template <typename T>
+concept ViewsContainer = std::constructible_from<T, size_t> && requires(const T& c) {
+  family_traits<T>::fields(c);
+  { c.size() } -> std::convertible_to<size_t>;
+};
+
 /// \brief A contiguous set of rods (spherocylinders).
 ///
 /// force/torque is each rod's generalized force about its center and velocity/omega its generalized velocity.
 template <typename ExecSpace>
 class RodViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using vector_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of generalized coordinates per rod: [force(3), torque(3)] and [velocity(3), omega(3)].
+  static constexpr size_t rows_per_entry = 6;
 
   RodViews() = default;
 
@@ -86,8 +107,8 @@ class RodViews {
         orientation_("orientation", 4 * num_rods),
         radius_("radius", num_rods),
         length_("length", num_rods),
-        force_torque_("force_torque", 6 * num_rods),
-        velocity_omega_("velocity_omega", 6 * num_rods) {
+        force_torque_("force_torque", rows_per_entry * num_rods),
+        velocity_omega_("velocity_omega", rows_per_entry * num_rods) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -120,6 +141,11 @@ class RodViews {
     return radius_.extent(0);
   }
 
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
+  }
+
  private:
   vector_view_t center_;
   vector_view_t orientation_;
@@ -129,13 +155,25 @@ class RodViews {
   vector_view_t velocity_omega_;
 };
 
+template <typename ExecSpace>
+struct family_traits<RodViews<ExecSpace>> {
+  static auto fields(const RodViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.center_view(), c.orientation_view(), c.radius_view(), c.length_view(),
+                               c.force_torque_view(), c.velocity_omega_view());
+  }
+};
+
 /// \brief Rod-center-to-rod-center Hookean springs. lambda is the spring force magnitude.
 template <typename ExecSpace>
 class LinearSpringViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 1;
 
   LinearSpringViews() = default;
 
@@ -144,7 +182,7 @@ class LinearSpringViews {
         rod_j_("rod_j", num_springs),
         rest_length_("rest_length", num_springs),
         spring_constant_("spring_constant", num_springs),
-        lambda_("lambda", num_springs) {
+        lambda_("lambda", rows_per_entry * num_springs) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -183,9 +221,9 @@ class LinearSpringViews {
     return rod_i_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -196,13 +234,25 @@ class LinearSpringViews {
   scalar_view_t lambda_;
 };
 
+template <typename ExecSpace>
+struct family_traits<LinearSpringViews<ExecSpace>> {
+  static auto fields(const LinearSpringViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.rest_length_view(), c.spring_constant_view(),
+                               c.lambda_view());
+  }
+};
+
 /// \brief Rod-tangent-to-rod-tangent angle bend springs. lambda is the spring torque magnitude.
 template <typename ExecSpace>
 class AngularSpringViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 1;
 
   AngularSpringViews() = default;
 
@@ -211,7 +261,7 @@ class AngularSpringViews {
         rod_j_("rod_j", num_springs),
         rest_angle_("rest_angle", num_springs),
         spring_constant_("spring_constant", num_springs),
-        lambda_("lambda", num_springs) {
+        lambda_("lambda", rows_per_entry * num_springs) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -240,9 +290,9 @@ class AngularSpringViews {
     return rod_i_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -251,6 +301,14 @@ class AngularSpringViews {
   scalar_view_t rest_angle_;
   scalar_view_t spring_constant_;
   scalar_view_t lambda_;
+};
+
+template <typename ExecSpace>
+struct family_traits<AngularSpringViews<ExecSpace>> {
+  static auto fields(const AngularSpringViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.rest_angle_view(), c.spring_constant_view(),
+                               c.lambda_view());
+  }
 };
 
 /// \brief Three-point angle bend springs. lambda is the spring torque, k*(angle-rest_angle).
@@ -262,9 +320,13 @@ class AngularSpringViews {
 template <typename ExecSpace>
 class TriplePointAngularSpringViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 1;
 
   TriplePointAngularSpringViews() = default;
 
@@ -274,7 +336,7 @@ class TriplePointAngularSpringViews {
         rod_k_("rod_k", num_springs),
         rest_angle_("rest_angle", num_springs),
         spring_constant_("spring_constant", num_springs),
-        lambda_("lambda", num_springs) {
+        lambda_("lambda", rows_per_entry * num_springs) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -305,9 +367,9 @@ class TriplePointAngularSpringViews {
     return rod_i_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -317,6 +379,14 @@ class TriplePointAngularSpringViews {
   scalar_view_t rest_angle_;
   scalar_view_t spring_constant_;
   scalar_view_t lambda_;
+};
+
+template <typename ExecSpace>
+struct family_traits<TriplePointAngularSpringViews<ExecSpace>> {
+  static auto fields(const TriplePointAngularSpringViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.rod_k_view(), c.rest_angle_view(),
+                               c.spring_constant_view(), c.lambda_view());
+  }
 };
 
 /// \brief Rod material points held at fixed world locations. lambda is the support reaction.
@@ -330,9 +400,13 @@ class TriplePointAngularSpringViews {
 template <typename ExecSpace>
 class FixedPositionViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 3;
 
   FixedPositionViews() = default;
 
@@ -340,8 +414,8 @@ class FixedPositionViews {
       : rod_("rod", num_anchors),
         target_point_("target_point", 3 * num_anchors),
         body_offset_("body_offset", 3 * num_anchors),
-        compliance_("compliance", 3 * num_anchors),
-        lambda_("lambda", 3 * num_anchors) {
+        compliance_("compliance", rows_per_entry * num_anchors),
+        lambda_("lambda", rows_per_entry * num_anchors) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -370,9 +444,9 @@ class FixedPositionViews {
     return rod_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return 3 * size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -381,6 +455,14 @@ class FixedPositionViews {
   scalar_view_t body_offset_;
   scalar_view_t compliance_;
   scalar_view_t lambda_;
+};
+
+template <typename ExecSpace>
+struct family_traits<FixedPositionViews<ExecSpace>> {
+  static auto fields(const FixedPositionViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_view(), c.target_point_view(), c.body_offset_view(), c.compliance_view(),
+                               c.lambda_view());
+  }
 };
 
 /// \brief Rod material points and orientations held fixed. lambda is the support reaction.
@@ -394,9 +476,13 @@ class FixedPositionViews {
 template <typename ExecSpace>
 class FixedPoseViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 6;
 
   FixedPoseViews() = default;
 
@@ -405,8 +491,8 @@ class FixedPoseViews {
         target_point_("target_point", 3 * num_anchors),
         target_orientation_("target_orientation", 4 * num_anchors),
         body_offset_("body_offset", 3 * num_anchors),
-        compliance_("compliance", 6 * num_anchors),
-        lambda_("lambda", 6 * num_anchors) {
+        compliance_("compliance", rows_per_entry * num_anchors),
+        lambda_("lambda", rows_per_entry * num_anchors) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -439,9 +525,9 @@ class FixedPoseViews {
     return rod_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return 6 * size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -453,6 +539,14 @@ class FixedPoseViews {
   scalar_view_t lambda_;
 };
 
+template <typename ExecSpace>
+struct family_traits<FixedPoseViews<ExecSpace>> {
+  static auto fields(const FixedPoseViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_view(), c.target_point_view(), c.target_orientation_view(), c.body_offset_view(),
+                               c.compliance_view(), c.lambda_view());
+  }
+};
+
 /// \brief Material points of two rods held coincident. lambda is the force on rod_i.
 ///
 /// The two-body peer of FixedPositionViews: the point at body_offset_i in rod_i's frame is held on the
@@ -462,9 +556,13 @@ class FixedPoseViews {
 template <typename ExecSpace>
 class PinViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 3;
 
   PinViews() = default;
 
@@ -473,7 +571,7 @@ class PinViews {
         rod_j_("rod_j", num_pins),
         body_offset_i_("body_offset_i", 3 * num_pins),
         body_offset_j_("body_offset_j", 3 * num_pins),
-        lambda_("lambda", 3 * num_pins) {
+        lambda_("lambda", rows_per_entry * num_pins) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -502,9 +600,9 @@ class PinViews {
     return rod_i_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return 3 * size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -513,6 +611,14 @@ class PinViews {
   scalar_view_t body_offset_i_;
   scalar_view_t body_offset_j_;
   scalar_view_t lambda_;
+};
+
+template <typename ExecSpace>
+struct family_traits<PinViews<ExecSpace>> {
+  static auto fields(const PinViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.body_offset_i_view(), c.body_offset_j_view(),
+                               c.lambda_view());
+  }
 };
 
 /// \brief Distances between material points of two rods held at a rest length. lambda is the axial force.
@@ -524,9 +630,13 @@ class PinViews {
 template <typename ExecSpace>
 class FixedLengthViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 1;
 
   FixedLengthViews() = default;
 
@@ -536,7 +646,7 @@ class FixedLengthViews {
         body_offset_i_("body_offset_i", 3 * num_lengths),
         body_offset_j_("body_offset_j", 3 * num_lengths),
         rest_length_("rest_length", num_lengths),
-        lambda_("lambda", num_lengths) {
+        lambda_("lambda", rows_per_entry * num_lengths) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -567,9 +677,9 @@ class FixedLengthViews {
     return rod_i_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
@@ -581,18 +691,30 @@ class FixedLengthViews {
   scalar_view_t lambda_;
 };
 
+template <typename ExecSpace>
+struct family_traits<FixedLengthViews<ExecSpace>> {
+  static auto fields(const FixedLengthViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.body_offset_i_view(), c.body_offset_j_view(),
+                               c.rest_length_view(), c.lambda_view());
+  }
+};
+
 /// \brief Rod-rod unilateral (spherocylinder-spherocylinder) contacts. lambda is the contact force magnitude.
 template <typename ExecSpace>
 class ContactViews {
  public:
+  using execution_space = ExecSpace;
   using memory_space = typename ExecSpace::memory_space;
   using int_view_t = Kokkos::View<int*, memory_space>;
   using scalar_view_t = Kokkos::View<double*, memory_space>;
 
+  /// \brief The number of scalar constraints, and so of multipliers, per entry.
+  static constexpr size_t rows_per_entry = 1;
+
   ContactViews() = default;
 
   explicit ContactViews(size_t num_contacts)
-      : rod_i_("rod_i", num_contacts), rod_j_("rod_j", num_contacts), lambda_("lambda", num_contacts) {
+      : rod_i_("rod_i", num_contacts), rod_j_("rod_j", num_contacts), lambda_("lambda", rows_per_entry * num_contacts) {
   }
 
   //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
@@ -617,15 +739,22 @@ class ContactViews {
     return rod_i_.extent(0);
   }
 
-  /// \brief The number of scalar constraints this family contributes to the multiplier vector.
-  size_t num_constraints() const {
-    return size();
+  /// \brief The number of rows all entries occupy, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
   }
 
  private:
   int_view_t rod_i_;
   int_view_t rod_j_;
   scalar_view_t lambda_;
+};
+
+template <typename ExecSpace>
+struct family_traits<ContactViews<ExecSpace>> {
+  static auto fields(const ContactViews<ExecSpace>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.lambda_view());
+  }
 };
 
 /// \brief The half-open range [begin, end) that one constraint family occupies in a flat array.
@@ -668,6 +797,9 @@ struct ConstraintIndexMap {
 /// other family is bilateral, and the bilateral families share one flat multiplier vector.
 template <typename ExecSpace>
 struct ConstraintSet {
+  using execution_space = ExecSpace;
+  using memory_space = typename ExecSpace::memory_space;
+
   LinearSpringViews<ExecSpace> linear_springs{0};
   AngularSpringViews<ExecSpace> angular_springs{0};
   PinViews<ExecSpace> pins{0};
@@ -687,19 +819,19 @@ ConstraintIndexMap make_constraint_index_map(const ConstraintSet<ExecSpace>& con
   ConstraintIndexMap index_map;
   size_t offset = 0;
 
-  index_map.linear_springs = IndexRange{offset, offset + constraints.linear_springs.num_constraints()};
+  index_map.linear_springs = IndexRange{offset, offset + constraints.linear_springs.num_rows()};
   offset = index_map.linear_springs.end;
-  index_map.angular_springs = IndexRange{offset, offset + constraints.angular_springs.num_constraints()};
+  index_map.angular_springs = IndexRange{offset, offset + constraints.angular_springs.num_rows()};
   offset = index_map.angular_springs.end;
-  index_map.pins = IndexRange{offset, offset + constraints.pins.num_constraints()};
+  index_map.pins = IndexRange{offset, offset + constraints.pins.num_rows()};
   offset = index_map.pins.end;
-  index_map.fixed_lengths = IndexRange{offset, offset + constraints.fixed_lengths.num_constraints()};
+  index_map.fixed_lengths = IndexRange{offset, offset + constraints.fixed_lengths.num_rows()};
   offset = index_map.fixed_lengths.end;
-  index_map.triple_springs = IndexRange{offset, offset + constraints.triple_springs.num_constraints()};
+  index_map.triple_springs = IndexRange{offset, offset + constraints.triple_springs.num_rows()};
   offset = index_map.triple_springs.end;
-  index_map.fixed_positions = IndexRange{offset, offset + constraints.fixed_positions.num_constraints()};
+  index_map.fixed_positions = IndexRange{offset, offset + constraints.fixed_positions.num_rows()};
   offset = index_map.fixed_positions.end;
-  index_map.fixed_poses = IndexRange{offset, offset + constraints.fixed_poses.num_constraints()};
+  index_map.fixed_poses = IndexRange{offset, offset + constraints.fixed_poses.num_rows()};
   offset = index_map.fixed_poses.end;
 
   index_map.total = offset;
@@ -708,99 +840,19 @@ ConstraintIndexMap make_constraint_index_map(const ConstraintSet<ExecSpace>& con
 
 //! \name Copying between memory spaces
 //@{
-// The Kokkos view idioms, lifted to the containers above. A mirror's Space is an execution space, and a mirror
-// aliases its source when the two share a memory space, as a Kokkos view mirror does.
+// The Kokkos view idioms, lifted to the containers above. A mirror's Space is an execution space. create_mirror always
+// allocates; create_mirror_view aliases its source when the two share a memory space, as a Kokkos view mirror does.
 
 /// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const RodViews<DstSpace>& dst, const RodViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.center_view(), src.center_view());
-  Kokkos::deep_copy(dst.orientation_view(), src.orientation_view());
-  Kokkos::deep_copy(dst.radius_view(), src.radius_view());
-  Kokkos::deep_copy(dst.length_view(), src.length_view());
-  Kokkos::deep_copy(dst.force_torque_view(), src.force_torque_view());
-  Kokkos::deep_copy(dst.velocity_omega_view(), src.velocity_omega_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const LinearSpringViews<DstSpace>& dst, const LinearSpringViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
-  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
-  Kokkos::deep_copy(dst.rest_length_view(), src.rest_length_view());
-  Kokkos::deep_copy(dst.spring_constant_view(), src.spring_constant_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const AngularSpringViews<DstSpace>& dst, const AngularSpringViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
-  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
-  Kokkos::deep_copy(dst.rest_angle_view(), src.rest_angle_view());
-  Kokkos::deep_copy(dst.spring_constant_view(), src.spring_constant_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const TriplePointAngularSpringViews<DstSpace>& dst, const TriplePointAngularSpringViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
-  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
-  Kokkos::deep_copy(dst.rod_k_view(), src.rod_k_view());
-  Kokkos::deep_copy(dst.rest_angle_view(), src.rest_angle_view());
-  Kokkos::deep_copy(dst.spring_constant_view(), src.spring_constant_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const FixedPositionViews<DstSpace>& dst, const FixedPositionViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_view(), src.rod_view());
-  Kokkos::deep_copy(dst.target_point_view(), src.target_point_view());
-  Kokkos::deep_copy(dst.body_offset_view(), src.body_offset_view());
-  Kokkos::deep_copy(dst.compliance_view(), src.compliance_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const FixedPoseViews<DstSpace>& dst, const FixedPoseViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_view(), src.rod_view());
-  Kokkos::deep_copy(dst.target_point_view(), src.target_point_view());
-  Kokkos::deep_copy(dst.target_orientation_view(), src.target_orientation_view());
-  Kokkos::deep_copy(dst.body_offset_view(), src.body_offset_view());
-  Kokkos::deep_copy(dst.compliance_view(), src.compliance_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const PinViews<DstSpace>& dst, const PinViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
-  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
-  Kokkos::deep_copy(dst.body_offset_i_view(), src.body_offset_i_view());
-  Kokkos::deep_copy(dst.body_offset_j_view(), src.body_offset_j_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const FixedLengthViews<DstSpace>& dst, const FixedLengthViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
-  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
-  Kokkos::deep_copy(dst.body_offset_i_view(), src.body_offset_i_view());
-  Kokkos::deep_copy(dst.body_offset_j_view(), src.body_offset_j_view());
-  Kokkos::deep_copy(dst.rest_length_view(), src.rest_length_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
-}
-
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <typename DstSpace, typename SrcSpace>
-void deep_copy(const ContactViews<DstSpace>& dst, const ContactViews<SrcSpace>& src) {
-  Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
-  Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
-  Kokkos::deep_copy(dst.lambda_view(), src.lambda_view());
+template <template <typename> class Views, typename DstSpace, typename SrcSpace>
+  requires ViewsContainer<Views<DstSpace>> && ViewsContainer<Views<SrcSpace>>
+void deep_copy(const Views<DstSpace>& dst, const Views<SrcSpace>& src) {
+  MUNDY_THROW_REQUIRE(dst.size() == src.size(), std::invalid_argument, "mbody::deep_copy: size mismatch.");
+  const auto dst_fields = family_traits<Views<DstSpace>>::fields(dst);
+  const auto src_fields = family_traits<Views<SrcSpace>>::fields(src);
+  [&]<size_t... I>(std::index_sequence<I...>) {
+    (Kokkos::deep_copy(::mundy::get<I>(dst_fields), ::mundy::get<I>(src_fields)), ...);
+  }(std::make_index_sequence<::mundy::tuple_size_v<std::remove_cvref_t<decltype(dst_fields)>>>{});
 }
 
 /// \brief Copy every family of src into dst; each pair of families must have the same size.
@@ -816,31 +868,6 @@ void deep_copy(const ConstraintSet<DstSpace>& dst, const ConstraintSet<SrcSpace>
   deep_copy(dst.contacts, src.contacts);
 }
 
-/// \brief Whether T is one of the *Views specializations.
-template <typename T>
-struct is_views_container : std::false_type {};
-template <typename E>
-struct is_views_container<RodViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<LinearSpringViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<AngularSpringViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<PinViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<FixedLengthViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<TriplePointAngularSpringViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<FixedPositionViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<FixedPoseViews<E>> : std::true_type {};
-template <typename E>
-struct is_views_container<ContactViews<E>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool is_views_container_v = is_views_container<T>::value;
-
 /// \brief Whether T is a ConstraintSet specialization.
 template <typename T>
 struct is_constraint_set : std::false_type {};
@@ -852,39 +879,39 @@ inline constexpr bool is_constraint_set_v = is_constraint_set<T>::value;
 
 /// \brief Matches exactly the containers that can be copied between memory spaces.
 template <typename T>
-concept MirrorableType = is_views_container_v<T> || is_constraint_set_v<T>;
+concept MirrorableType = ViewsContainer<T> || is_constraint_set_v<T>;
 
-/// \brief A container shaped like src in Space's memory: src itself when the memory spaces match, else a new
-/// (zero-initialized) allocation.
+/// \brief A new zero-initialized container shaped like src in Space's memory.
 template <typename Space, template <typename> class Views, typename SrcSpace>
-  requires is_views_container_v<Views<SrcSpace>>
-auto create_mirror_view(const Space& /*space*/, const Views<SrcSpace>& src) {
-  static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror_view: Space must be an execution space.");
-  if constexpr (std::is_same_v<typename Space::memory_space, typename SrcSpace::memory_space>) {
-    return src;
-  } else {
-    return Views<Space>(src.size());
-  }
+  requires ViewsContainer<Views<SrcSpace>>
+Views<Space> create_mirror(const Space& /*space*/, const Views<SrcSpace>& src) {
+  static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror: Space must be an execution space.");
+  return Views<Space>(src.size());
 }
 
-/// \brief A constraint set shaped like src in Space's memory: src itself when the memory spaces match, else a
-/// family-by-family mirror.
+/// \brief A new zero-initialized constraint set shaped like src in Space's memory.
 template <typename Space, typename SrcSpace>
-auto create_mirror_view(const Space& space, const ConstraintSet<SrcSpace>& src) {
+ConstraintSet<Space> create_mirror(const Space& space, const ConstraintSet<SrcSpace>& src) {
+  ConstraintSet<Space> mirror;
+  mirror.linear_springs = create_mirror(space, src.linear_springs);
+  mirror.angular_springs = create_mirror(space, src.angular_springs);
+  mirror.pins = create_mirror(space, src.pins);
+  mirror.fixed_lengths = create_mirror(space, src.fixed_lengths);
+  mirror.triple_springs = create_mirror(space, src.triple_springs);
+  mirror.fixed_positions = create_mirror(space, src.fixed_positions);
+  mirror.fixed_poses = create_mirror(space, src.fixed_poses);
+  mirror.contacts = create_mirror(space, src.contacts);
+  return mirror;
+}
+
+/// \brief src itself when Space shares its memory space, else create_mirror(space, src).
+template <typename Space, MirrorableType T>
+auto create_mirror_view(const Space& space, const T& src) {
   static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror_view: Space must be an execution space.");
-  if constexpr (std::is_same_v<typename Space::memory_space, typename SrcSpace::memory_space>) {
+  if constexpr (std::is_same_v<typename Space::memory_space, typename T::memory_space>) {
     return src;
   } else {
-    ConstraintSet<Space> mirror;
-    mirror.linear_springs = create_mirror_view(space, src.linear_springs);
-    mirror.angular_springs = create_mirror_view(space, src.angular_springs);
-    mirror.pins = create_mirror_view(space, src.pins);
-    mirror.fixed_lengths = create_mirror_view(space, src.fixed_lengths);
-    mirror.triple_springs = create_mirror_view(space, src.triple_springs);
-    mirror.fixed_positions = create_mirror_view(space, src.fixed_positions);
-    mirror.fixed_poses = create_mirror_view(space, src.fixed_poses);
-    mirror.contacts = create_mirror_view(space, src.contacts);
-    return mirror;
+    return create_mirror(space, src);
   }
 }
 

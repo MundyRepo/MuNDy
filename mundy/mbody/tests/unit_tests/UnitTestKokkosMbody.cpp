@@ -31,6 +31,7 @@
 #include <bit>        // for std::bit_cast
 #include <cmath>      // for std::abs, std::sqrt, std::pow, std::exp, std::log, std::atan2
 #include <cstdint>    // for uint64_t
+#include <cstring>    // for std::memcmp
 #include <random>     // for std::mt19937, std::uniform_real_distribution
 #include <stdexcept>  // for std::invalid_argument, std::runtime_error
 #include <string>     // for std::to_string
@@ -70,29 +71,13 @@ MixedLCPResult solve_on_device(const RodViews<HostExecSpace>& rods, const Constr
 /// \brief A device vector with one entry per constraint row of family, for a geometry kernel to fill.
 template <typename FamilyViews>
 Kokkos::View<double*, TestMemSpace> make_constraint_values(const FamilyViews& family) {
-  return Kokkos::View<double*, TestMemSpace>("constraint_values", family.num_constraints());
+  return Kokkos::View<double*, TestMemSpace>("constraint_values", family.num_rows());
 }
 
-/// \brief A copy of rods in Space's memory that never shares storage with them, even within one memory space.
-template <typename Space, typename SrcSpace>
-RodViews<Space> copy_rods(const RodViews<SrcSpace>& src) {
-  RodViews<Space> out(src.size());
-  deep_copy(out, src);
-  return out;
-}
-
-/// \brief A copy of a constraint set in Space's memory that never shares storage with it.
-template <typename Space, typename SrcSpace>
-ConstraintSet<Space> copy_constraints(const ConstraintSet<SrcSpace>& src) {
-  ConstraintSet<Space> out;
-  out.linear_springs = LinearSpringViews<Space>(src.linear_springs.size());
-  out.angular_springs = AngularSpringViews<Space>(src.angular_springs.size());
-  out.pins = PinViews<Space>(src.pins.size());
-  out.fixed_lengths = FixedLengthViews<Space>(src.fixed_lengths.size());
-  out.triple_springs = TriplePointAngularSpringViews<Space>(src.triple_springs.size());
-  out.fixed_positions = FixedPositionViews<Space>(src.fixed_positions.size());
-  out.fixed_poses = FixedPoseViews<Space>(src.fixed_poses.size());
-  out.contacts = ContactViews<Space>(src.contacts.size());
+/// \brief A copy of src in Space's memory that never shares storage with it, even within one memory space.
+template <typename Space, typename T>
+auto copy_to(const T& src) {
+  const auto out = create_mirror(Space{}, src);
   deep_copy(out, src);
   return out;
 }
@@ -105,7 +90,7 @@ size_t count_bit_differences(const ViewA& a_view, const ViewB& b_view) {
   MUNDY_THROW_REQUIRE(a.extent(0) == b.extent(0), std::invalid_argument, "count_bit_differences: length mismatch.");
   size_t differences = 0;
   for (size_t i = 0; i < a.extent(0); ++i) {
-    differences += (std::bit_cast<uint64_t>(a(i)) != std::bit_cast<uint64_t>(b(i))) ? 1 : 0;
+    differences += (std::memcmp(&a(i), &b(i), sizeof(a(i))) != 0) ? 1 : 0;
   }
   return differences;
 }
@@ -115,10 +100,14 @@ size_t count_bit_differences(const ViewA& a_view, const ViewB& b_view) {
 //! \name Compile-time contracts
 //@{
 
-static_assert(is_views_container_v<PinViews<HostExecSpace>> && is_views_container_v<FixedLengthViews<HostExecSpace>>,
-              "Pin and fixed-length families must be views containers");
-static_assert(MirrorableType<PinViews<HostExecSpace>> && MirrorableType<FixedLengthViews<HostExecSpace>>,
-              "Pin and fixed-length families must be mirrorable");
+static_assert(ViewsContainer<RodViews<HostExecSpace>> && ViewsContainer<LinearSpringViews<HostExecSpace>> &&
+                  ViewsContainer<AngularSpringViews<HostExecSpace>> && ViewsContainer<PinViews<HostExecSpace>> &&
+                  ViewsContainer<FixedLengthViews<HostExecSpace>> &&
+                  ViewsContainer<TriplePointAngularSpringViews<HostExecSpace>> &&
+                  ViewsContainer<FixedPositionViews<HostExecSpace>> && ViewsContainer<FixedPoseViews<HostExecSpace>> &&
+                  ViewsContainer<ContactViews<HostExecSpace>>,
+              "rods and every constraint family must be views containers");
+static_assert(!ViewsContainer<ConstraintSet<HostExecSpace>>, "a constraint set is copied family by family");
 
 //@}
 
@@ -553,6 +542,169 @@ BendChain make_bend_chain(size_t num_spheres, double spacing, double k_ang) {
     chain.springs.spring_constant(k) = k_ang;
   }
   return chain;
+}
+
+//@}
+
+//! \name Copying between memory spaces
+//@{
+
+/// \brief view(i) := offset + i + 1 for every entry, distinct and nonzero across views given distinct offsets.
+template <typename HostView>
+void fill_distinct(const HostView& view, int offset) {
+  for (size_t i = 0; i < view.extent(0); ++i) {
+    view(i) = static_cast<typename HostView::value_type>(offset + static_cast<int>(i) + 1);
+  }
+}
+
+/// \brief c copied to TestExecSpace and back, through fresh allocations on both sides.
+template <typename T>
+auto round_trip(const T& c) {
+  return copy_to<HostExecSpace>(copy_to<TestExecSpace>(c));
+}
+
+TEST(Mbody, CreateMirrorCopiesEveryField) {
+  RodViews<HostExecSpace> rods(2);
+  fill_distinct(rods.center_view(), 0);
+  fill_distinct(rods.orientation_view(), 100);
+  fill_distinct(rods.radius_view(), 200);
+  fill_distinct(rods.length_view(), 300);
+  fill_distinct(rods.force_torque_view(), 400);
+  fill_distinct(rods.velocity_omega_view(), 500);
+  const auto rods_back = round_trip(rods);
+  EXPECT_EQ(count_bit_differences(rods_back.center_view(), rods.center_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_back.orientation_view(), rods.orientation_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_back.radius_view(), rods.radius_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_back.length_view(), rods.length_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_back.force_torque_view(), rods.force_torque_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_back.velocity_omega_view(), rods.velocity_omega_view()), 0u);
+
+  LinearSpringViews<HostExecSpace> linear(2);
+  fill_distinct(linear.rod_i_view(), 0);
+  fill_distinct(linear.rod_j_view(), 100);
+  fill_distinct(linear.rest_length_view(), 200);
+  fill_distinct(linear.spring_constant_view(), 300);
+  fill_distinct(linear.lambda_view(), 400);
+  const auto linear_back = round_trip(linear);
+  EXPECT_EQ(count_bit_differences(linear_back.rod_i_view(), linear.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(linear_back.rod_j_view(), linear.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(linear_back.rest_length_view(), linear.rest_length_view()), 0u);
+  EXPECT_EQ(count_bit_differences(linear_back.spring_constant_view(), linear.spring_constant_view()), 0u);
+  EXPECT_EQ(count_bit_differences(linear_back.lambda_view(), linear.lambda_view()), 0u);
+
+  AngularSpringViews<HostExecSpace> angular(2);
+  fill_distinct(angular.rod_i_view(), 0);
+  fill_distinct(angular.rod_j_view(), 100);
+  fill_distinct(angular.rest_angle_view(), 200);
+  fill_distinct(angular.spring_constant_view(), 300);
+  fill_distinct(angular.lambda_view(), 400);
+  const auto angular_back = round_trip(angular);
+  EXPECT_EQ(count_bit_differences(angular_back.rod_i_view(), angular.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(angular_back.rod_j_view(), angular.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(angular_back.rest_angle_view(), angular.rest_angle_view()), 0u);
+  EXPECT_EQ(count_bit_differences(angular_back.spring_constant_view(), angular.spring_constant_view()), 0u);
+  EXPECT_EQ(count_bit_differences(angular_back.lambda_view(), angular.lambda_view()), 0u);
+
+  TriplePointAngularSpringViews<HostExecSpace> triple(2);
+  fill_distinct(triple.rod_i_view(), 0);
+  fill_distinct(triple.rod_j_view(), 100);
+  fill_distinct(triple.rod_k_view(), 200);
+  fill_distinct(triple.rest_angle_view(), 300);
+  fill_distinct(triple.spring_constant_view(), 400);
+  fill_distinct(triple.lambda_view(), 500);
+  const auto triple_back = round_trip(triple);
+  EXPECT_EQ(count_bit_differences(triple_back.rod_i_view(), triple.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(triple_back.rod_j_view(), triple.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(triple_back.rod_k_view(), triple.rod_k_view()), 0u);
+  EXPECT_EQ(count_bit_differences(triple_back.rest_angle_view(), triple.rest_angle_view()), 0u);
+  EXPECT_EQ(count_bit_differences(triple_back.spring_constant_view(), triple.spring_constant_view()), 0u);
+  EXPECT_EQ(count_bit_differences(triple_back.lambda_view(), triple.lambda_view()), 0u);
+
+  FixedPositionViews<HostExecSpace> positions(2);
+  fill_distinct(positions.rod_view(), 0);
+  fill_distinct(positions.target_point_view(), 100);
+  fill_distinct(positions.body_offset_view(), 200);
+  fill_distinct(positions.compliance_view(), 300);
+  fill_distinct(positions.lambda_view(), 400);
+  const auto positions_back = round_trip(positions);
+  EXPECT_EQ(count_bit_differences(positions_back.rod_view(), positions.rod_view()), 0u);
+  EXPECT_EQ(count_bit_differences(positions_back.target_point_view(), positions.target_point_view()), 0u);
+  EXPECT_EQ(count_bit_differences(positions_back.body_offset_view(), positions.body_offset_view()), 0u);
+  EXPECT_EQ(count_bit_differences(positions_back.compliance_view(), positions.compliance_view()), 0u);
+  EXPECT_EQ(count_bit_differences(positions_back.lambda_view(), positions.lambda_view()), 0u);
+
+  FixedPoseViews<HostExecSpace> poses(2);
+  fill_distinct(poses.rod_view(), 0);
+  fill_distinct(poses.target_point_view(), 100);
+  fill_distinct(poses.target_orientation_view(), 200);
+  fill_distinct(poses.body_offset_view(), 300);
+  fill_distinct(poses.compliance_view(), 400);
+  fill_distinct(poses.lambda_view(), 500);
+  const auto poses_back = round_trip(poses);
+  EXPECT_EQ(count_bit_differences(poses_back.rod_view(), poses.rod_view()), 0u);
+  EXPECT_EQ(count_bit_differences(poses_back.target_point_view(), poses.target_point_view()), 0u);
+  EXPECT_EQ(count_bit_differences(poses_back.target_orientation_view(), poses.target_orientation_view()), 0u);
+  EXPECT_EQ(count_bit_differences(poses_back.body_offset_view(), poses.body_offset_view()), 0u);
+  EXPECT_EQ(count_bit_differences(poses_back.compliance_view(), poses.compliance_view()), 0u);
+  EXPECT_EQ(count_bit_differences(poses_back.lambda_view(), poses.lambda_view()), 0u);
+
+  PinViews<HostExecSpace> pins(2);
+  fill_distinct(pins.rod_i_view(), 0);
+  fill_distinct(pins.rod_j_view(), 100);
+  fill_distinct(pins.body_offset_i_view(), 200);
+  fill_distinct(pins.body_offset_j_view(), 300);
+  fill_distinct(pins.lambda_view(), 400);
+  const auto pins_back = round_trip(pins);
+  EXPECT_EQ(count_bit_differences(pins_back.rod_i_view(), pins.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(pins_back.rod_j_view(), pins.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(pins_back.body_offset_i_view(), pins.body_offset_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(pins_back.body_offset_j_view(), pins.body_offset_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(pins_back.lambda_view(), pins.lambda_view()), 0u);
+
+  FixedLengthViews<HostExecSpace> lengths(2);
+  fill_distinct(lengths.rod_i_view(), 0);
+  fill_distinct(lengths.rod_j_view(), 100);
+  fill_distinct(lengths.body_offset_i_view(), 200);
+  fill_distinct(lengths.body_offset_j_view(), 300);
+  fill_distinct(lengths.rest_length_view(), 400);
+  fill_distinct(lengths.lambda_view(), 500);
+  const auto lengths_back = round_trip(lengths);
+  EXPECT_EQ(count_bit_differences(lengths_back.rod_i_view(), lengths.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(lengths_back.rod_j_view(), lengths.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(lengths_back.body_offset_i_view(), lengths.body_offset_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(lengths_back.body_offset_j_view(), lengths.body_offset_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(lengths_back.rest_length_view(), lengths.rest_length_view()), 0u);
+  EXPECT_EQ(count_bit_differences(lengths_back.lambda_view(), lengths.lambda_view()), 0u);
+
+  ContactViews<HostExecSpace> contacts(2);
+  fill_distinct(contacts.rod_i_view(), 0);
+  fill_distinct(contacts.rod_j_view(), 100);
+  fill_distinct(contacts.lambda_view(), 200);
+  const auto contacts_back = round_trip(contacts);
+  EXPECT_EQ(count_bit_differences(contacts_back.rod_i_view(), contacts.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(contacts_back.rod_j_view(), contacts.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(contacts_back.lambda_view(), contacts.lambda_view()), 0u);
+}
+
+// create_mirror allocates even within one memory space, where create_mirror_view aliases.
+TEST(Mbody, CreateMirrorNeverAliases) {
+  RodViews<HostExecSpace> rods(2);
+  fill_distinct(rods.center_view(), 0);
+  ConstraintSet<HostExecSpace> constraints;
+  constraints.pins = PinViews<HostExecSpace>(1);
+  fill_distinct(constraints.pins.lambda_view(), 0);
+
+  const auto rods_mirror = create_mirror(HostExecSpace{}, rods);
+  const auto constraints_mirror = create_mirror(HostExecSpace{}, constraints);
+  EXPECT_NE(rods_mirror.center_view().data(), rods.center_view().data());
+  EXPECT_NE(constraints_mirror.pins.lambda_view().data(), constraints.pins.lambda_view().data());
+  for (size_t i = 0; i < rods_mirror.center_view().extent(0); ++i) {
+    EXPECT_EQ(rods_mirror.center_view()(i), 0.0) << "entry " << i;
+  }
+
+  EXPECT_EQ(create_mirror_view(HostExecSpace{}, rods).center_view().data(), rods.center_view().data());
+  EXPECT_EQ(create_mirror_view(HostExecSpace{}, constraints).pins.lambda_view().data(),
+            constraints.pins.lambda_view().data());
 }
 
 //@}
@@ -2119,10 +2271,10 @@ SolveInput make_fallback_problem() {
 // execution fixes the order of every atomic sum, so the two solves round identically.
 TEST(Mbody, Fallback) {
   const SolveInput p = make_fallback_problem();
-  const auto rods_lcp = copy_rods<Kokkos::Serial>(p.rods);
-  const auto constraints_lcp = copy_constraints<Kokkos::Serial>(p.constraints);
-  const auto rods_slcp = copy_rods<Kokkos::Serial>(p.rods);
-  const auto constraints_slcp = copy_constraints<Kokkos::Serial>(p.constraints);
+  const auto rods_lcp = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_lcp = copy_to<Kokkos::Serial>(p.constraints);
+  const auto rods_slcp = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_slcp = copy_to<Kokkos::Serial>(p.constraints);
 
   // Solve
   const MixedLCPResult lcp = solve_mixed_lcp(rods_lcp, constraints_lcp, p.cfg);

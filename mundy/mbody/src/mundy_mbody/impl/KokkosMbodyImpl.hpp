@@ -904,11 +904,11 @@ PairGeometry<ExecSpace> compute_pin_geometry(const RodViews<ExecSpace>& rods, co
                                              const B0View& b0) {
   using memory_space = typename ExecSpace::memory_space;
   const size_t num_pins = pins.size();
-  MUNDY_THROW_ASSERT(b0.extent(0) == pins.num_constraints(), std::invalid_argument,
+  MUNDY_THROW_ASSERT(b0.extent(0) == pins.num_rows(), std::invalid_argument,
                      "compute_pin_geometry: b0 must have three entries per pin.");
 
-  Kokkos::View<int*, memory_space> owner_i("pin_owner_i", pins.num_constraints());
-  Kokkos::View<int*, memory_space> owner_j("pin_owner_j", pins.num_constraints());
+  Kokkos::View<int*, memory_space> owner_i("pin_owner_i", pins.num_rows());
+  Kokkos::View<int*, memory_space> owner_j("pin_owner_j", pins.num_rows());
   PairGeometry<ExecSpace> geo(owner_i, owner_j);
   if (num_pins == 0) {
     return geo;
@@ -1087,10 +1087,10 @@ SingleGeometry<ExecSpace> compute_fixed_position_geometry(const RodViews<ExecSpa
                                                           const B0View& b0) {
   using memory_space = typename ExecSpace::memory_space;
   const size_t num_anchors = anchors.size();
-  MUNDY_THROW_ASSERT(b0.extent(0) == anchors.num_constraints(), std::invalid_argument,
+  MUNDY_THROW_ASSERT(b0.extent(0) == anchors.num_rows(), std::invalid_argument,
                      "compute_fixed_position_geometry: b0 must have three entries per anchor.");
 
-  Kokkos::View<int*, memory_space> owner("fixed_position_owner", anchors.num_constraints());
+  Kokkos::View<int*, memory_space> owner("fixed_position_owner", anchors.num_rows());
   SingleGeometry<ExecSpace> geo(owner);
   if (num_anchors == 0) {
     return geo;
@@ -1179,10 +1179,10 @@ SingleGeometry<ExecSpace> compute_fixed_pose_geometry(const RodViews<ExecSpace>&
                                                       const FixedPoseViews<ExecSpace>& anchors, const B0View& b0) {
   using memory_space = typename ExecSpace::memory_space;
   const size_t num_anchors = anchors.size();
-  MUNDY_THROW_ASSERT(b0.extent(0) == anchors.num_constraints(), std::invalid_argument,
+  MUNDY_THROW_ASSERT(b0.extent(0) == anchors.num_rows(), std::invalid_argument,
                      "compute_fixed_pose_geometry: b0 must have six entries per anchor.");
 
-  Kokkos::View<int*, memory_space> owner("fixed_pose_owner", anchors.num_constraints());
+  Kokkos::View<int*, memory_space> owner("fixed_pose_owner", anchors.num_rows());
   SingleGeometry<ExecSpace> geo(owner);
   if (num_anchors == 0) {
     return geo;
@@ -1401,8 +1401,8 @@ Kokkos::View<double*, typename ExecSpace::memory_space> compliance_diagonal(
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
   return concat_vectors(reciprocal<ExecSpace>(constraints.linear_springs.spring_constant_view()),
                         reciprocal<ExecSpace>(constraints.angular_springs.spring_constant_view()),
-                        view_t("pin_kinv", constraints.pins.num_constraints()),
-                        view_t("fixed_length_kinv", constraints.fixed_lengths.num_constraints()),
+                        view_t("pin_kinv", constraints.pins.num_rows()),
+                        view_t("fixed_length_kinv", constraints.fixed_lengths.num_rows()),
                         reciprocal<ExecSpace>(constraints.triple_springs.spring_constant_view()),
                         constraints.fixed_positions.compliance_view(), constraints.fixed_poses.compliance_view());
 }
