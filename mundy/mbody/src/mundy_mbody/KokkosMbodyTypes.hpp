@@ -22,7 +22,7 @@
 #define MUNDY_MBODY_KOKKOSMBODYTYPES_HPP_
 
 /// \file
-/// \brief Plain data model for the rod/spring/contact MCQPP solver (mundy::mbody::solve).
+/// \brief Plain data model for the multibody step solvers (mbody::solve_mixed_lcp, solve_mixed_slcp).
 ///
 /// Each *Views type stores its fields as flat Kokkos::Views behind accessors. RodViews packs
 /// force+torque and velocity+omega into one 6-wide-per-rod buffer each (the generalized-coordinate
@@ -32,6 +32,7 @@
 /// return the raw Kokkos::View.
 
 // C++ core
+#include <ostream>  // for std::ostream
 #include <type_traits>
 
 // Kokkos
@@ -393,9 +394,8 @@ class FixedPositionViews {
 /// generalized [force(3), torque(3)] block, so compliance and lambda split the same way.
 ///
 /// The orientation rows carry the exact map from angular velocity to the orientation error's rate,
-/// so they are as exact as the position rows. They still converge onto a target rather than reaching
-/// it within one step of arbitrary size: a step rotates by omega*dt, which closes the error only to
-/// the accuracy of that single linearization.
+/// so they are as exact as the position rows. solve_mixed_lcp's single linearization closes the error
+/// to first order in the step; solve_mixed_slcp holds the pose at the end of the step.
 template <typename ExecSpace>
 class FixedPoseViews {
  public:
@@ -463,7 +463,8 @@ class FixedPoseViews {
 /// The two-body peer of FixedPositionViews: the point at body_offset_i in rod_i's frame is held on the
 /// point at body_offset_j in rod_j's frame. Each pin is three scalar constraints, one per world axis of
 /// p_i - p_j, so its reaction comes back as a vector, and rod_j receives its negation. A pin is rigid: it
-/// has no compliance. rod_i and rod_j must differ.
+/// has no compliance. rod_i and rod_j must differ. solve_mixed_slcp holds a pin at the end of the step;
+/// solve_mixed_lcp holds it to first order in the step.
 template <typename ExecSpace>
 class PinViews {
  public:
@@ -526,6 +527,7 @@ class PinViews {
 /// body_offset_j in the two rods' own frames rather than between rod centres. Each entry is one scalar
 /// constraint, |p_j - p_i| - rest_length, whose multiplier is negative in tension. rest_length must be
 /// positive, since the distance is not differentiable where it vanishes, and rod_i and rod_j must differ.
+/// solve_mixed_slcp holds the length at the end of the step; solve_mixed_lcp holds it to first order in the step.
 template <typename ExecSpace>
 class FixedLengthViews {
  public:
@@ -711,8 +713,11 @@ ConstraintIndexMap make_constraint_index_map(const ConstraintSet<ExecSpace>& con
   return index_map;
 }
 
-/// \brief Tunables for the outer (PGD) and inner (CG) solves.
-struct SolveConfig {
+//! \name Solve configurations and results
+//@{
+
+/// \brief Configuration for a mixed LCP step: the step, the outer (PGD) solve, and the inner (CG) solve.
+struct MixedLCPConfig {
   double dt = 1.0;
   double viscosity = 1.0;
   unsigned max_outer_iters = 1000;
@@ -720,6 +725,53 @@ struct SolveConfig {
   unsigned max_cg_iters = 200;
   double cg_tol = 1e-8;
 };
+
+/// \brief Result of a mixed LCP step: the contact solve's iteration count, final residual, and whether it converged.
+struct MixedLCPResult {
+  unsigned num_iters{0};
+  double residual{0.0};
+  bool converged{false};
+};
+
+/// \brief Write a MixedLCPResult to an ostream.
+inline std::ostream& operator<<(std::ostream& os, const MixedLCPResult& result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged;
+  return os;
+}
+
+/// \brief Configuration for a mixed SLCP step: its inner mixed LCPs and the sequence of them.
+///
+/// An iterate is accepted once, at the configuration it moves the rods to, every bilateral row's residual
+/// psi + K^-1 y and the displacement its constraint force directions would change by are within length_tol (rows and
+/// displacements measured in length) and angle_tol (in radians). Neither can be met below its floor: the inner
+/// cg_tol, and about 1e-8 rad for angles measured near 0 or pi.
+struct MixedSLCPConfig {
+  MixedLCPConfig inner_lcp_config;
+  unsigned max_iters = 20;
+  double length_tol = 1e-6;
+  double angle_tol = 1e-6;
+};
+
+/// \brief Result of a mixed SLCP step: the linearization count, the returned iterate's residual, and convergence.
+///
+/// residual is the returned iterate's largest acceptance residual over the tolerance it is tested against, so
+/// converged is residual <= 1, and accepted_lcp_result is that iterate's inner LCP result. Unconverged, the returned
+/// iterate is the first linearization; num_iters < max_iters then means the sequence stopped once it was predicted not
+/// to converge within max_iters.
+struct MixedSLCPResult {
+  unsigned num_iters{0};
+  double residual{0.0};
+  bool converged{false};
+  MixedLCPResult accepted_lcp_result{};
+};
+
+/// \brief Write a MixedSLCPResult to an ostream.
+inline std::ostream& operator<<(std::ostream& os, const MixedSLCPResult& result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged
+     << ", accepted_lcp_result: {" << result.accepted_lcp_result << "}";
+  return os;
+}
+//@}
 
 //! \name Copying between memory spaces
 //@{
@@ -759,8 +811,7 @@ void deep_copy(const AngularSpringViews<DstSpace>& dst, const AngularSpringViews
 
 /// \brief Copy every field of src into dst; the two must have the same size.
 template <typename DstSpace, typename SrcSpace>
-void deep_copy(const TriplePointAngularSpringViews<DstSpace>& dst,
-               const TriplePointAngularSpringViews<SrcSpace>& src) {
+void deep_copy(const TriplePointAngularSpringViews<DstSpace>& dst, const TriplePointAngularSpringViews<SrcSpace>& src) {
   Kokkos::deep_copy(dst.rod_i_view(), src.rod_i_view());
   Kokkos::deep_copy(dst.rod_j_view(), src.rod_j_view());
   Kokkos::deep_copy(dst.rod_k_view(), src.rod_k_view());

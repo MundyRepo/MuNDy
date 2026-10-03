@@ -22,7 +22,7 @@
 #define MUNDY_MBODY_IMPL_KOKKOSMBODYIMPL_HPP_
 
 /// \file
-/// \brief Operators and geometry kernels for the rod/spring/contact MCQPP solver (mundy::mbody::solve).
+/// \brief Operators and geometry kernels for the multibody step solvers (mbody::solve_mixed_lcp, solve_mixed_slcp).
 ///
 /// The D/D^T and B/B^T Jacobian operators, the local drag mobility operator, and the geometry kernels
 /// that fill them.
@@ -50,7 +50,7 @@ namespace mbody {
 
 namespace impl {
 
-/// \brief Per-body generalized Jacobian mapping a unit Lagrange multiplier to one rod's force/torque.
+/// \brief Per-body generalized Jacobian mapping a unit multiplier to one rod's center-of-mass force and torque.
 ///
 /// For a unit scalar multiplier the row contributes (force, torque) to owner. The arity-one peer of
 /// PairGeometry and TripleGeometry, carrying the same 6-wide generalized block per owner that
@@ -122,7 +122,7 @@ static_assert(!SingleGeometryType<Kokkos::View<double*, Kokkos::DefaultExecution
               "A view must not satisfy SingleGeometryType");
 static_assert(!SingleGeometryType<double>, "A scalar must not satisfy SingleGeometryType");
 
-/// \brief Maps a scalar Lagrange multiplier per row to generalized rod-space force/torque (B).
+/// \brief Maps one multiplier per row to center-of-mass force and torque (B).
 template <typename ExecSpace>
 class SingleForceOp {
  public:
@@ -176,7 +176,7 @@ class SingleForceOp {
   size_t num_rods_;
 };
 
-/// \brief Maps rod velocity/omega to each row's scalar constraint rate (B^T).
+/// \brief Maps center-of-mass translational and rotational velocity to each row's constraint rate (B^T).
 ///
 /// The exact transpose of SingleForceOp.
 template <typename ExecSpace>
@@ -238,7 +238,7 @@ static_assert(::mundy::LinearOperator<::mundy::KokkosBackend<Kokkos::DefaultExec
                                       Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>>,
               "SingleForceOpT must satisfy ::mundy::LinearOperator");
 
-/// \brief Per-pair generalized Jacobian mapping a unit Lagrange multiplier to rod force/torque.
+/// \brief Per-pair generalized Jacobian mapping a unit Lagrange multiplier to center-of-mass force and torque.
 ///
 /// For a unit scalar multiplier the pair contributes (force_i, torque_i) to owner_i and (force_j,
 /// torque_j) to owner_j. One representation covers:
@@ -337,7 +337,7 @@ static_assert(!PairGeometryType<double>, "A scalar must not satisfy PairGeometry
 static_assert(!PairGeometryType<SingleGeometry<Kokkos::DefaultExecutionSpace>>,
               "The arity-one and arity-two geometries must not be confusable");
 
-/// \brief Maps a scalar Lagrange multiplier per pair to generalized rod-space force/torque (D or B).
+/// \brief Maps one multiplier per pair to center-of-mass force and torque (D or B).
 template <typename ExecSpace>
 class PairForceOp {
  public:
@@ -393,9 +393,10 @@ class PairForceOp {
   size_t num_rods_;
 };
 
-/// \brief Maps rod velocity/omega to each pair's scalar constraint rate (D^T or B^T).
+/// \brief Maps center-of-mass translational and rotational velocity to each pair's rate (D^T or B^T).
 ///
-/// The exact transpose of PairForceOp.
+/// The exact transpose of PairForceOp. A contact's rate is that of its separation; a bilateral row's, that of its
+/// constraint value.
 template <typename ExecSpace>
 class PairForceOpT {
  public:
@@ -515,7 +516,7 @@ class TripleGeometry {
   vector_view_t jacobian_3_;
 };
 
-/// \brief Maps a scalar Lagrange multiplier per triple to rod-space force (torque zero, see TripleGeometry).
+/// \brief Maps one multiplier per triple to center-of-mass force (torque zero, see TripleGeometry).
 template <typename ExecSpace>
 class TripleForceOp {
  public:
@@ -571,7 +572,7 @@ class TripleForceOp {
   size_t num_rods_;
 };
 
-/// \brief Maps rod velocity to each triple's scalar constraint rate (transpose of TripleForceOp).
+/// \brief Maps center-of-mass translational velocity to each triple's constraint rate (transpose of TripleForceOp).
 ///
 /// Omega never enters: the constraint (a vertex angle between two position vectors) has no dependence
 /// on any rod's orientation.
@@ -1350,6 +1351,130 @@ Kokkos::View<double*, typename ExecSpace::memory_space> reciprocal(
       "reciprocal", Kokkos::RangePolicy<ExecSpace>(0, v.extent(0)),
       KOKKOS_LAMBDA(const int i) { out(i) = 1.0 / v(i); });
   return out;
+}
+//@}
+
+//! \name The bilateral block at one configuration
+//@{
+
+/// \brief Every bilateral family's Jacobian at one configuration, grouped by arity in multiplier order.
+template <typename ExecSpace>
+struct BilateralGeometry {
+  PairGeometry<ExecSpace> pairs;      ///< linear springs, angular springs, pins, fixed lengths
+  TripleGeometry<ExecSpace> triples;  ///< triple-point angular springs
+  SingleGeometry<ExecSpace> singles;  ///< fixed positions, fixed poses
+};
+
+/// \brief Every bilateral family's Jacobian and constraint value at rods' configuration.
+///
+/// psi has one entry per bilateral constraint, in the index map's order.
+template <typename ExecSpace, typename PsiView>
+  requires ConstraintValueView<PsiView>
+BilateralGeometry<ExecSpace> compute_bilateral_geometry(const RodViews<ExecSpace>& rods,
+                                                        const ConstraintSet<ExecSpace>& constraints,
+                                                        const ConstraintIndexMap& index_map, const PsiView& psi) {
+  MUNDY_THROW_ASSERT(psi.extent(0) == index_map.total, std::invalid_argument,
+                     "compute_bilateral_geometry: psi must have one entry per bilateral constraint.");
+  const PairGeometry<ExecSpace> lin_geo = compute_linear_spring_geometry(rods, constraints.linear_springs,
+                                                                         subrange(psi, index_map.linear_springs));
+  const PairGeometry<ExecSpace> ang_geo = compute_angular_spring_geometry(rods, constraints.angular_springs,
+                                                                          subrange(psi, index_map.angular_springs));
+  const PairGeometry<ExecSpace> pin_geo = compute_pin_geometry(rods, constraints.pins, subrange(psi, index_map.pins));
+  const PairGeometry<ExecSpace> length_geo =
+      compute_fixed_length_geometry(rods, constraints.fixed_lengths, subrange(psi, index_map.fixed_lengths));
+  const TripleGeometry<ExecSpace> triple_geo = compute_triple_point_angular_spring_geometry(
+      rods, constraints.triple_springs, subrange(psi, index_map.triple_springs));
+  const SingleGeometry<ExecSpace> fixed_position_geo =
+      compute_fixed_position_geometry(rods, constraints.fixed_positions, subrange(psi, index_map.fixed_positions));
+  const SingleGeometry<ExecSpace> fixed_pose_geo =
+      compute_fixed_pose_geometry(rods, constraints.fixed_poses, subrange(psi, index_map.fixed_poses));
+  return BilateralGeometry<ExecSpace>{concat_pair_geometry(lin_geo, ang_geo, pin_geo, length_geo), triple_geo,
+                                      concat_single_geometry(fixed_position_geo, fixed_pose_geo)};
+}
+
+/// \brief The bilateral compliance diagonal K^-1 in the index map's order.
+///
+/// It is 1/k for springs, zero for pins and fixed lengths, and the anchors' own compliances.
+template <typename ExecSpace>
+Kokkos::View<double*, typename ExecSpace::memory_space> compliance_diagonal(
+    const ConstraintSet<ExecSpace>& constraints) {
+  using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
+  return concat_vectors(reciprocal<ExecSpace>(constraints.linear_springs.spring_constant_view()),
+                        reciprocal<ExecSpace>(constraints.angular_springs.spring_constant_view()),
+                        view_t("pin_kinv", constraints.pins.num_constraints()),
+                        view_t("fixed_length_kinv", constraints.fixed_lengths.num_constraints()),
+                        reciprocal<ExecSpace>(constraints.triple_springs.spring_constant_view()),
+                        constraints.fixed_positions.compliance_view(), constraints.fixed_poses.compliance_view());
+}
+
+/// \brief The largest magnitudes of a quantity, split into its length and angle parts.
+struct LengthAngleMax {
+  double length = 0.0;
+  double angle = 0.0;
+};
+
+/// \brief Whether a bilateral row measures an angle: an angular or triple-point spring, or a fixed pose's orientation.
+KOKKOS_INLINE_FUNCTION bool is_angle_row(const ConstraintIndexMap& index_map, size_t row) {
+  const IndexRange& poses = index_map.fixed_poses;
+  return (index_map.angular_springs.begin <= row && row < index_map.angular_springs.end) ||
+         (index_map.triple_springs.begin <= row && row < index_map.triple_springs.end) ||
+         (poses.begin <= row && row < poses.end && (row - poses.begin) % 6 >= 3);
+}
+
+/// \brief The largest |psi + K^-1 y| over the bilateral rows measured in length and over those measured in angle.
+template <typename ExecSpace, typename PsiView, typename KinvView, typename YView>
+LengthAngleMax max_bilateral_residual(const PsiView& psi, const KinvView& kinv, const YView& y,
+                                      const ConstraintIndexMap& index_map) {
+  const size_t n = index_map.total;
+  if (n == 0) {
+    return LengthAngleMax{};
+  }
+  double length_max = 0.0;
+  double angle_max = 0.0;
+  Kokkos::parallel_reduce(
+      "max_bilateral_residual_length", Kokkos::RangePolicy<ExecSpace>(0, n),
+      KOKKOS_LAMBDA(const int row, double& m) {
+        if (!is_angle_row(index_map, row)) {
+          m = Kokkos::max(m, Kokkos::abs(psi(row) + kinv(row) * y(row)));
+        }
+      },
+      Kokkos::Max<double>(length_max));
+  Kokkos::parallel_reduce(
+      "max_bilateral_residual_angle", Kokkos::RangePolicy<ExecSpace>(0, n),
+      KOKKOS_LAMBDA(const int row, double& m) {
+        if (is_angle_row(index_map, row)) {
+          m = Kokkos::max(m, Kokkos::abs(psi(row) + kinv(row) * y(row)));
+        }
+      },
+      Kokkos::Max<double>(angle_max));
+  return LengthAngleMax{Kokkos::max(length_max, 0.0), Kokkos::max(angle_max, 0.0)};
+}
+
+/// \brief The largest per-rod translation and rotation in a generalized displacement [translation(3), rotation(3)].
+template <typename ExecSpace, typename DisplacementView>
+LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num_rods) {
+  if (num_rods == 0) {
+    return LengthAngleMax{};
+  }
+  double translation_max = 0.0;
+  double rotation_max = 0.0;
+  Kokkos::parallel_reduce(
+      "max_displacement_translation", Kokkos::RangePolicy<ExecSpace>(0, num_rods),
+      KOKKOS_LAMBDA(const int i, double& m) {
+        for (int c = 0; c < 3; ++c) {
+          m = Kokkos::max(m, Kokkos::abs(displacement(6 * i + c)));
+        }
+      },
+      Kokkos::Max<double>(translation_max));
+  Kokkos::parallel_reduce(
+      "max_displacement_rotation", Kokkos::RangePolicy<ExecSpace>(0, num_rods),
+      KOKKOS_LAMBDA(const int i, double& m) {
+        for (int c = 3; c < 6; ++c) {
+          m = Kokkos::max(m, Kokkos::abs(displacement(6 * i + c)));
+        }
+      },
+      Kokkos::Max<double>(rotation_max));
+  return LengthAngleMax{Kokkos::max(translation_max, 0.0), Kokkos::max(rotation_max, 0.0)};
 }
 //@}
 
