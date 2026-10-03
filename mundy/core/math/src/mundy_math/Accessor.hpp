@@ -79,6 +79,10 @@ KOKKOS_INLINE_FUNCTION constexpr decltype(auto) unwrap_accessor(Accessor&& acces
 template <typename Accessor>
 using stored_accessor_t = typename decltype(store(unwrap_accessor(std::declval<Accessor&&>())))::stored_type;
 
+/// \brief Whether storage holds an accessor of type Accessor as a pointer: a pointer, or an array decayed to one.
+template <typename Accessor>
+inline constexpr bool is_stored_as_pointer_v = std::is_pointer_v<storage_type_t<Accessor>>;
+
 }  // namespace impl
 
 // Separation of Concerns: Vectors, Matrices, and Quaternions shouldn't care about memory access patterns.

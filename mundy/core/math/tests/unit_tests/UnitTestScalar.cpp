@@ -337,6 +337,34 @@ TEST(AScalarTest, ViewSemantics) {
   // Writing through the view modifies the original
   view.value() = 99.0;
   EXPECT_DOUBLE_EQ(raw, 99.0);
+
+  // Copy from same: copies the accessor, so the copy binds to the same data
+  using ViewType = AScalar<double, double*>;
+  double lhs_data = 1.0;
+  ViewType lhs(&lhs_data);
+  ViewType lhs_copy(lhs);
+  lhs_copy.value() = 2.0;
+  EXPECT_EQ(lhs_data, 2.0) << "View copy from same didn't bind to the same data.";
+
+  // Copy assign from same: writes the data, and each view stays on its own data
+  double rhs_data = 3.0;
+  ViewType rhs(&rhs_data);
+  lhs = rhs;
+  EXPECT_EQ(lhs_data, 3.0) << "View copy assign from same didn't write.";
+  lhs.value() = 4.0;
+  EXPECT_EQ(lhs_data, 4.0) << "View copy assign from same rebound the view.";
+  EXPECT_EQ(rhs_data, 3.0) << "View copy assign from same rebound the view.";
+
+  // Move assign from same: writes the data
+  double moved_data = 5.0;
+  lhs = ViewType(&moved_data);
+  EXPECT_EQ(lhs_data, 5.0) << "View move assign from same didn't write.";
+
+  // Chained assign from same: writes every left-hand side
+  double source_data = 6.0;
+  lhs = rhs = ViewType(&source_data);
+  EXPECT_EQ(lhs_data, 6.0) << "Chained view assign from same didn't write.";
+  EXPECT_EQ(rhs_data, 6.0) << "Chained view assign from same didn't write.";
 }
 //@}
 

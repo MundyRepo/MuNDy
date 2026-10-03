@@ -832,6 +832,40 @@ TYPED_TEST(QuaternionSingleTypeTest, Views) {
   const std::vector<TypeParam> q5{2, 3, 4, 1};
   auto q6 = get_quaternion<TypeParam>(q5.data());
   is_close_debug(q6, Quaternion<TypeParam>{1, 2, 3, 4}, "Const view failed.");
+
+  // Copy from same: copies the accessor, so the copy binds to the same data
+  using ViewType = AQuaternion<TypeParam, TypeParam*>;
+  TypeParam lhs_data[4] = {2, 3, 4, 1};
+  ViewType lhs(&lhs_data[0]);
+  ViewType lhs_copy(lhs);
+  lhs_copy[0] = 5;
+  EXPECT_EQ(lhs_data[0], 5) << "View copy from same didn't bind to the same data.";
+
+  // Copy assign from same: writes the data, and each view stays on its own data
+  TypeParam rhs_data[4] = {6, 7, 8, 9};
+  ViewType rhs(&rhs_data[0]);
+  lhs = rhs;
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(lhs_data[i], rhs_data[i]) << "View copy assign from same didn't write entry " << i;
+  }
+  lhs[0] = 10;
+  EXPECT_EQ(lhs_data[0], 10) << "View copy assign from same rebound the view.";
+  EXPECT_EQ(rhs_data[0], 6) << "View copy assign from same rebound the view.";
+
+  // Move assign from same: writes the data
+  TypeParam moved_data[4] = {11, 12, 13, 14};
+  lhs = ViewType(&moved_data[0]);
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(lhs_data[i], moved_data[i]) << "View move assign from same didn't write entry " << i;
+  }
+
+  // Chained assign from same: writes every left-hand side
+  TypeParam source_data[4] = {15, 16, 17, 18};
+  lhs = rhs = ViewType(&source_data[0]);
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(lhs_data[i], source_data[i]) << "Chained view assign from same didn't write entry " << i;
+    EXPECT_EQ(rhs_data[i], source_data[i]) << "Chained view assign from same didn't write entry " << i;
+  }
 }
 //@}
 

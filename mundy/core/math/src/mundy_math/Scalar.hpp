@@ -148,7 +148,8 @@ class AScalar {
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION constexpr ~AScalar() = default;
 
-  // Same-type copy and move (shallow — copies/moves the accessor, not necessarily the underlying data)
+  // Same-type copy and move: construction copies the accessor, so a view binds to the same data; assignment copies the
+  // data, so a view writes through to it.
 
   /// \brief Copy constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION constexpr AScalar(const AScalar<T, Accessor>&) = default;
@@ -156,13 +157,13 @@ class AScalar {
   /// \brief Move constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION constexpr AScalar(AScalar<T, Accessor>&&) = default;
 
-  /// \brief Copy assignment (deep — copies the stored value)
+  /// \brief Copy assignment (deep)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(const AScalar<T, Accessor>& other) {
     impl::access_at(accessor_, 0) = impl::access_at(other.accessor_, 0);
     return *this;
   }
 
-  /// \brief Move assignment (deep — copies the stored value)
+  /// \brief Move assignment (deep)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(AScalar<T, Accessor>&& other) {
     impl::access_at(accessor_, 0) = impl::access_at(other.accessor_, 0);
     return *this;
@@ -171,6 +172,8 @@ class AScalar {
   // Cross-accessor copy / move constructors and assignments
 
   /// \brief Deep copy constructor from a different AScalar accessor or ownership
+  /// Deep copy construction from different is often ill-advised since the accessor must be default constructed and then
+  /// populated. For an accessor stored as a pointer (a T* or a T[N]), this is illegal.
   template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar(const OtherScalarType& other)
       MUNDY_REQUIRES(is_scalar_v<std::decay_t<OtherScalarType>> &&
@@ -178,6 +181,24 @@ class AScalar {
                      (std::is_convertible_v<typename OtherScalarType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        !impl::is_stored_as_pointer_v<Accessor>,
+        "Scalar: Deep copy or move constructing a Scalar view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination scalars.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AScalar<double, double*> s2 = get_scalar<double>(a);\n"
+        "\n"
+        "This code fails because get_scalar returns AScalar<double, SomeAccessor<double>> and the destination "
+        "is AScalar<double, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
   }
 
@@ -189,6 +210,24 @@ class AScalar {
                      (std::is_convertible_v<typename std::decay_t<OtherScalarType>::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        !impl::is_stored_as_pointer_v<Accessor>,
+        "Scalar: Deep copy or move constructing a Scalar view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination scalars.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AScalar<double, double*> s2 = get_scalar<double>(a);\n"
+        "\n"
+        "This code fails because get_scalar returns AScalar<double, SomeAccessor<double>> and the destination "
+        "is AScalar<double, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
   }
 

@@ -182,41 +182,90 @@ class AMatrix {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AMatrix() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with an AMatrix of the same type
+  // Same-type copy and move: construction copies the accessor, so a view binds to the same data; assignment copies the
+  // data, so a view writes through to it.
 
-  /// \brief Default copy constructor
+  /// \brief Copy constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AMatrix(const AMatrix<T, N, M, Accessor>&) = default;
 
-  /// \brief Default move constructor
+  /// \brief Move constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AMatrix(AMatrix<T, N, M, Accessor>&&) = default;
 
-  /// \brief Default copy assignment operator
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AMatrix<T, N, M, Accessor>& operator=(const AMatrix<T, N, M, Accessor>&) = default;
+  /// \brief Copy assignment (deep)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AMatrix<T, N, M, Accessor>& operator=(const AMatrix<T, N, M, Accessor>& other) {
+    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
+    return *this;
+  }
 
-  /// \brief Default move assignment operator
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AMatrix<T, N, M, Accessor>& operator=(AMatrix<T, N, M, Accessor>&&) = default;
+  /// \brief Move assignment (deep)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AMatrix<T, N, M, Accessor>& operator=(AMatrix<T, N, M, Accessor>&& other) {
+    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
+    return *this;
+  }
 
   // Custom copy/move constructors and assignment operators when interacting with an AMatrix of a different type
 
   /// \brief Deep copy constructor with different accessor or ownership
+  /// Deep copy construction from different is often ill-advised since the accessor must be default constructed and then
+  /// populated. For an accessor stored as a pointer (a T* or a T[N]), this is illegal.
   template <ValidMatrixType OtherMatrixType>
-      KOKKOS_INLINE_FUNCTION constexpr AMatrix(const OtherMatrixType& other)
-          MUNDY_REQUIRES(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
-      (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-      (std::is_convertible_v<typename OtherMatrixType::value_type, T>) : accessor_() {
+  KOKKOS_INLINE_FUNCTION constexpr AMatrix(const OtherMatrixType& other)
+      MUNDY_REQUIRES((!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
+                     (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+                     (std::is_convertible_v<typename OtherMatrixType::value_type, T>) &&
+                     HasDefaultConstructor<Accessor>)
+      : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        !impl::is_stored_as_pointer_v<Accessor>,
+        "Matrix: Deep copy or move constructing a Matrix view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination matrices.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AMatrix<double, 3, 3, double*> mat2 = get_matrix<double, 3, 3>(a);\n"
+        "\n"
+        "This code fails because get_matrix returns AMatrix<double, 3, 3, SomeAccessor<double>> and the destination "
+        "is AMatrix<double, 3, 3, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
 
   /// \brief Deep move constructor with different accessor or ownership
   template <ValidMatrixType OtherMatrixType>
-      KOKKOS_INLINE_FUNCTION constexpr AMatrix(OtherMatrixType&& other)
-          MUNDY_REQUIRES(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
-      (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-      (std::is_convertible_v<typename OtherMatrixType::value_type, T>) : accessor_() {
+  KOKKOS_INLINE_FUNCTION constexpr AMatrix(OtherMatrixType&& other)
+      MUNDY_REQUIRES((!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
+                     (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+                     (std::is_convertible_v<typename OtherMatrixType::value_type, T>) &&
+                     HasDefaultConstructor<Accessor>)
+      : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        !impl::is_stored_as_pointer_v<Accessor>,
+        "Matrix: Deep copy or move constructing a Matrix view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination matrices.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AMatrix<double, 3, 3, double*> mat2 = get_matrix<double, 3, 3>(a);\n"
+        "\n"
+        "This code fails because get_matrix returns AMatrix<double, 3, 3, SomeAccessor<double>> and the destination "
+        "is AMatrix<double, 3, 3, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
   }
 
@@ -1295,7 +1344,6 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH(elementwise_div)
 //@}
 
 // Just to double check
-static_assert(std::is_trivially_copyable_v<AMatrix<double, 3, 3>>);
 static_assert(std::is_trivially_destructible_v<AMatrix<double, 3, 3>>);
 static_assert(std::is_copy_constructible_v<AMatrix<double, 3, 3>>);
 static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);

@@ -1567,8 +1567,8 @@ TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   is_close_debug(view2[1], 2, "View construction from accessor failed.");
   is_close_debug(view2[2], 3, "View construction from accessor failed.");
 
-  // Copy from same
-  ViewType1 view1_copy(view1);  // default constructs the accessor and then copies into it.
+  // Copy from same: copies the accessor, so the copy binds to the same data
+  ViewType1 view1_copy(view1);
   ViewType2 view2_copy(view2);
   is_close_debug(view1_copy[0], 1, "View copy from same failed.");
   is_close_debug(view1_copy[1], 2, "View copy from same failed.");
@@ -1576,6 +1576,10 @@ TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   is_close_debug(view2_copy[0], 1, "View copy from same failed.");
   is_close_debug(view2_copy[1], 2, "View copy from same failed.");
   is_close_debug(view2_copy[2], 3, "View copy from same failed.");
+  view1_copy[0] = 4;
+  EXPECT_EQ(backing[2], 4) << "View copy from same didn't bind to the same data.";
+  view2_copy[0] = 1;
+  EXPECT_EQ(backing[2], 1) << "View copy from same didn't bind to the same data.";
 
   // Move from same | view1_copy and view2_copy are now dead, so we cannot use them after this point
   // view1 and view2 are still valid
@@ -1608,6 +1612,50 @@ TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   is_close_debug(owning2_move_from_view[0], 1, "View move from different failed.");
   is_close_debug(owning2_move_from_view[1], 2, "View move from different failed.");
   is_close_debug(owning2_move_from_view[2], 3, "View move from different failed.");
+
+  // Copy assign from same: writes the data, and each view stays on its own data
+  TypeParam lhs1_data[3] = {0, 0, 0};
+  TypeParam rhs1_data[3] = {4, 5, 6};
+  std::vector<TypeParam> lhs2_data{0, 0, 0};
+  std::vector<TypeParam> rhs2_data{4, 5, 6};
+  ViewType1 lhs1(&lhs1_data[0]);
+  ViewType1 rhs1(&rhs1_data[0]);
+  ViewType2 lhs2(CallableOnlyAccessor<TypeParam>(lhs2_data.data()));
+  ViewType2 rhs2(CallableOnlyAccessor<TypeParam>(rhs2_data.data()));
+  lhs1 = rhs1;
+  lhs2 = rhs2;
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(lhs1_data[i], rhs1_data[i]) << "View copy assign from same didn't write entry " << i;
+    EXPECT_EQ(lhs2_data[i], rhs2_data[i]) << "View copy assign from same didn't write entry " << i;
+  }
+  lhs1[0] = 7;
+  lhs2[0] = 7;
+  EXPECT_EQ(lhs1_data[0], 7) << "View copy assign from same rebound the view.";
+  EXPECT_EQ(rhs1_data[0], 4) << "View copy assign from same rebound the view.";
+  EXPECT_EQ(lhs2_data[0], 7) << "View copy assign from same rebound the view.";
+  EXPECT_EQ(rhs2_data[0], 4) << "View copy assign from same rebound the view.";
+
+  // Move assign from same: writes the data
+  TypeParam moved1_data[3] = {8, 9, 10};
+  std::vector<TypeParam> moved2_data{8, 9, 10};
+  lhs1 = ViewType1(&moved1_data[0]);
+  lhs2 = ViewType2(CallableOnlyAccessor<TypeParam>(moved2_data.data()));
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(lhs1_data[i], moved1_data[i]) << "View move assign from same didn't write entry " << i;
+    EXPECT_EQ(lhs2_data[i], moved2_data[i]) << "View move assign from same didn't write entry " << i;
+  }
+
+  // Chained assign from same: writes every left-hand side
+  TypeParam source1_data[3] = {11, 12, 13};
+  std::vector<TypeParam> source2_data{11, 12, 13};
+  lhs1 = rhs1 = ViewType1(&source1_data[0]);
+  lhs2 = rhs2 = ViewType2(CallableOnlyAccessor<TypeParam>(source2_data.data()));
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(lhs1_data[i], source1_data[i]) << "Chained view assign from same didn't write entry " << i;
+    EXPECT_EQ(rhs1_data[i], source1_data[i]) << "Chained view assign from same didn't write entry " << i;
+    EXPECT_EQ(lhs2_data[i], source2_data[i]) << "Chained view assign from same didn't write entry " << i;
+    EXPECT_EQ(rhs2_data[i], source2_data[i]) << "Chained view assign from same didn't write entry " << i;
+  }
 }
 
 // The factories produce intuitive return types

@@ -1130,6 +1130,40 @@ TYPED_TEST(Matrix3SingleTypeTest, Views) {
   const std::vector<TypeParam> m5{1, 2, 3, 4, 5, 6, -7, -8, -9};
   auto m6 = get_matrix3<TypeParam>(m5.data());
   is_close_debug(m6, Matrix3<TypeParam>{1, 2, 3, 4, 5, 6, -7, -8, -9}, "Const view failed.");
+
+  // Copy from same: copies the accessor, so the copy binds to the same data
+  using ViewType = AMatrix<TypeParam, 3, 3, TypeParam*>;
+  TypeParam lhs_data[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+  ViewType lhs(&lhs_data[0]);
+  ViewType lhs_copy(lhs);
+  lhs_copy(0, 0) = 10;
+  EXPECT_EQ(lhs_data[0], 10) << "View copy from same didn't bind to the same data.";
+
+  // Copy assign from same: writes the data, and each view stays on its own data
+  TypeParam rhs_data[9] = {11, 12, 13, 14, 15, 16, 17, 18, 19};
+  ViewType rhs(&rhs_data[0]);
+  lhs = rhs;
+  for (int i = 0; i < 9; ++i) {
+    EXPECT_EQ(lhs_data[i], rhs_data[i]) << "View copy assign from same didn't write entry " << i;
+  }
+  lhs(0, 0) = 20;
+  EXPECT_EQ(lhs_data[0], 20) << "View copy assign from same rebound the view.";
+  EXPECT_EQ(rhs_data[0], 11) << "View copy assign from same rebound the view.";
+
+  // Move assign from same: writes the data
+  TypeParam moved_data[9] = {21, 22, 23, 24, 25, 26, 27, 28, 29};
+  lhs = ViewType(&moved_data[0]);
+  for (int i = 0; i < 9; ++i) {
+    EXPECT_EQ(lhs_data[i], moved_data[i]) << "View move assign from same didn't write entry " << i;
+  }
+
+  // Chained assign from same: writes every left-hand side
+  TypeParam source_data[9] = {31, 32, 33, 34, 35, 36, 37, 38, 39};
+  lhs = rhs = ViewType(&source_data[0]);
+  for (int i = 0; i < 9; ++i) {
+    EXPECT_EQ(lhs_data[i], source_data[i]) << "Chained view assign from same didn't write entry " << i;
+    EXPECT_EQ(rhs_data[i], source_data[i]) << "Chained view assign from same didn't write entry " << i;
+  }
 }
 //@}
 

@@ -49,7 +49,7 @@ struct MixedLCPConfig {
   double cg_tol = 1e-8;
 };
 
-/// \brief Result of a mixed LCP step: the contact solve's iteration count, final residual, and whether it converged.
+/// \brief Result of a mixed LCP step: the unilateral solve's iteration count, final residual, and whether it converged.
 struct MixedLCPResult {
   unsigned num_iters{0};
   double residual{0.0};
