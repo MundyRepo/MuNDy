@@ -22,17 +22,16 @@
 #define MUNDY_MBODY_KOKKOSMBODYTYPES_HPP_
 
 /// \file
-/// \brief Plain data model for the multibody step solvers (mbody::solve_mixed_lcp, solve_mixed_slcp).
+/// \brief Plain data model for rods and the constraint families acting on them.
 ///
 /// Each *Views type stores its fields as flat Kokkos::Views behind accessors. RodViews packs
 /// force+torque and velocity+omega into one 6-wide-per-rod buffer each (the generalized-coordinate
-/// layout the operators consume); pose fields stay separate. Per-element accessors (center(i),
+/// layout); pose fields stay separate. Per-element accessors (center(i),
 /// lambda(p), ...) return a mundy view over the flat storage, not a copy, so
 /// `rods.center(i) += dt * rods.velocity(i)` writes straight through. Whole-array accessors (*_view())
 /// return the raw Kokkos::View.
 
 // C++ core
-#include <ostream>  // for std::ostream
 #include <type_traits>
 
 // Kokkos
@@ -73,9 +72,7 @@ KOKKOS_INLINE_FUNCTION auto rod_omega(const GenVelocityView& gen_velocity, int i
 
 /// \brief A contiguous set of rods (spherocylinders).
 ///
-/// force/torque hold external load on entry and accumulated (external + constraint) force/torque on
-/// exit. velocity/omega hold any imposed velocity on entry and the final (external + mobility +
-/// constraint) velocity/omega on exit.
+/// force/torque is each rod's generalized force about its center and velocity/omega its generalized velocity.
 template <typename ExecSpace>
 class RodViews {
  public:
@@ -132,7 +129,7 @@ class RodViews {
   vector_view_t velocity_omega_;
 };
 
-/// \brief Rod-center-to-rod-center Hookean springs. lambda is an output (spring force magnitude).
+/// \brief Rod-center-to-rod-center Hookean springs. lambda is the spring force magnitude.
 template <typename ExecSpace>
 class LinearSpringViews {
  public:
@@ -199,7 +196,7 @@ class LinearSpringViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Rod-tangent-to-rod-tangent angle bend springs. lambda is an output (spring torque magnitude).
+/// \brief Rod-tangent-to-rod-tangent angle bend springs. lambda is the spring torque magnitude.
 template <typename ExecSpace>
 class AngularSpringViews {
  public:
@@ -256,13 +253,12 @@ class AngularSpringViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Three-point angle bend springs. lambda is an output (spring torque, k*(angle-rest_angle)).
+/// \brief Three-point angle bend springs. lambda is the spring torque, k*(angle-rest_angle).
 ///
 /// rod_i/rod_j are the outer points, rod_k the vertex the angle is measured at (node1/node2/node3 of a
 /// BEAM_3 element; node3 is the vertex). Constrains the angle at rod_k between the position vectors to
 /// rod_i and rod_j -- a position-only, three-body constraint with no orientation dependence, unlike
-/// AngularSpringViews. Harmonic in the angle itself, not its cosine (see
-/// compute_triple_point_angular_spring_geometry). rod_i/rod_j/rod_k need not be distinct.
+/// AngularSpringViews. Harmonic in the angle itself, not its cosine. rod_i/rod_j/rod_k need not be distinct.
 template <typename ExecSpace>
 class TriplePointAngularSpringViews {
  public:
@@ -323,7 +319,7 @@ class TriplePointAngularSpringViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Rod material points held at fixed world locations. lambda is an output (the support reaction).
+/// \brief Rod material points held at fixed world locations. lambda is the support reaction.
 ///
 /// Anchors the material point at body_offset in the rod's own frame rather than the rod centre: rods
 /// have length, so clamping a filament means clamping its end. A zero offset recovers the centre.
@@ -387,15 +383,14 @@ class FixedPositionViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Rod material points and orientations held fixed. lambda is an output (the support reaction).
+/// \brief Rod material points and orientations held fixed. lambda is the support reaction.
 ///
 /// A clamped rod end: the anchored material point FixedPositionViews holds, plus the rod's
 /// orientation held at target_orientation. Six scalar constraints per anchor, laid out as one
 /// generalized [force(3), torque(3)] block, so compliance and lambda split the same way.
 ///
 /// The orientation rows carry the exact map from angular velocity to the orientation error's rate,
-/// so they are as exact as the position rows. solve_mixed_lcp's single linearization closes the error
-/// to first order in the step; solve_mixed_slcp holds the pose at the end of the step.
+/// so they are as exact as the position rows.
 template <typename ExecSpace>
 class FixedPoseViews {
  public:
@@ -458,13 +453,12 @@ class FixedPoseViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Material points of two rods held coincident. lambda is an output (the force on rod_i).
+/// \brief Material points of two rods held coincident. lambda is the force on rod_i.
 ///
 /// The two-body peer of FixedPositionViews: the point at body_offset_i in rod_i's frame is held on the
 /// point at body_offset_j in rod_j's frame. Each pin is three scalar constraints, one per world axis of
 /// p_i - p_j, so its reaction comes back as a vector, and rod_j receives its negation. A pin is rigid: it
-/// has no compliance. rod_i and rod_j must differ. solve_mixed_slcp holds a pin at the end of the step;
-/// solve_mixed_lcp holds it to first order in the step.
+/// has no compliance. rod_i and rod_j must differ.
 template <typename ExecSpace>
 class PinViews {
  public:
@@ -521,13 +515,12 @@ class PinViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Distances between material points of two rods held at a rest length. lambda is an output.
+/// \brief Distances between material points of two rods held at a rest length. lambda is the axial force.
 ///
 /// The rigid counterpart of a linear spring, measured between the points at body_offset_i and
 /// body_offset_j in the two rods' own frames rather than between rod centres. Each entry is one scalar
 /// constraint, |p_j - p_i| - rest_length, whose multiplier is negative in tension. rest_length must be
 /// positive, since the distance is not differentiable where it vanishes, and rod_i and rod_j must differ.
-/// solve_mixed_slcp holds the length at the end of the step; solve_mixed_lcp holds it to first order in the step.
 template <typename ExecSpace>
 class FixedLengthViews {
  public:
@@ -588,7 +581,7 @@ class FixedLengthViews {
   scalar_view_t lambda_;
 };
 
-/// \brief Rod-rod unilateral (spherocylinder-spherocylinder) contacts. lambda is an output (contact force magnitude).
+/// \brief Rod-rod unilateral (spherocylinder-spherocylinder) contacts. lambda is the contact force magnitude.
 template <typename ExecSpace>
 class ContactViews {
  public:
@@ -712,66 +705,6 @@ ConstraintIndexMap make_constraint_index_map(const ConstraintSet<ExecSpace>& con
   index_map.total = offset;
   return index_map;
 }
-
-//! \name Solve configurations and results
-//@{
-
-/// \brief Configuration for a mixed LCP step: the step, the outer (PGD) solve, and the inner (CG) solve.
-struct MixedLCPConfig {
-  double dt = 1.0;
-  double viscosity = 1.0;
-  unsigned max_outer_iters = 1000;
-  double outer_tol = 1e-6;
-  unsigned max_cg_iters = 200;
-  double cg_tol = 1e-8;
-};
-
-/// \brief Result of a mixed LCP step: the contact solve's iteration count, final residual, and whether it converged.
-struct MixedLCPResult {
-  unsigned num_iters{0};
-  double residual{0.0};
-  bool converged{false};
-};
-
-/// \brief Write a MixedLCPResult to an ostream.
-inline std::ostream& operator<<(std::ostream& os, const MixedLCPResult& result) {
-  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged;
-  return os;
-}
-
-/// \brief Configuration for a mixed SLCP step: its inner mixed LCPs and the sequence of them.
-///
-/// An iterate is accepted once, at the configuration it moves the rods to, every bilateral row's residual
-/// psi + K^-1 y and the displacement its constraint force directions would change by are within length_tol (rows and
-/// displacements measured in length) and angle_tol (in radians). Neither can be met below its floor: the inner
-/// cg_tol, and about 1e-8 rad for angles measured near 0 or pi.
-struct MixedSLCPConfig {
-  MixedLCPConfig inner_lcp_config;
-  unsigned max_iters = 20;
-  double length_tol = 1e-6;
-  double angle_tol = 1e-6;
-};
-
-/// \brief Result of a mixed SLCP step: the linearization count, the returned iterate's residual, and convergence.
-///
-/// residual is the returned iterate's largest acceptance residual over the tolerance it is tested against, so
-/// converged is residual <= 1, and accepted_lcp_result is that iterate's inner LCP result. Unconverged, the returned
-/// iterate is the first linearization; num_iters < max_iters then means the sequence stopped once it was predicted not
-/// to converge within max_iters.
-struct MixedSLCPResult {
-  unsigned num_iters{0};
-  double residual{0.0};
-  bool converged{false};
-  MixedLCPResult accepted_lcp_result{};
-};
-
-/// \brief Write a MixedSLCPResult to an ostream.
-inline std::ostream& operator<<(std::ostream& os, const MixedSLCPResult& result) {
-  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged
-     << ", accepted_lcp_result: {" << result.accepted_lcp_result << "}";
-  return os;
-}
-//@}
 
 //! \name Copying between memory spaces
 //@{

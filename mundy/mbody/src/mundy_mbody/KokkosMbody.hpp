@@ -24,6 +24,7 @@
 // C++ core
 #include <algorithm>  // for std::max
 #include <cmath>      // for std::log
+#include <ostream>    // for std::ostream
 
 // Mundy
 #include <mundy_math/convex_spaces.hpp>
@@ -37,6 +38,66 @@
 namespace mundy {
 
 namespace mbody {
+
+//! \name Solve configurations and results
+//@{
+
+/// \brief Configuration for a mixed LCP step: the step, the outer (PGD) solve, and the inner (CG) solve.
+struct MixedLCPConfig {
+  double dt = 1.0;
+  double viscosity = 1.0;
+  unsigned max_outer_iters = 1000;
+  double outer_tol = 1e-6;
+  unsigned max_cg_iters = 200;
+  double cg_tol = 1e-8;
+};
+
+/// \brief Result of a mixed LCP step: the contact solve's iteration count, final residual, and whether it converged.
+struct MixedLCPResult {
+  unsigned num_iters{0};
+  double residual{0.0};
+  bool converged{false};
+};
+
+/// \brief Write a MixedLCPResult to an ostream.
+inline std::ostream& operator<<(std::ostream& os, const MixedLCPResult& result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged;
+  return os;
+}
+
+/// \brief Configuration for a mixed SLCP step: its inner mixed LCPs and the sequence of them.
+///
+/// An iterate is accepted once, at the configuration it moves the rods to, every bilateral row's residual
+/// psi + K^-1 y and the displacement its constraint force directions would change by are within length_tol (rows and
+/// displacements measured in length) and angle_tol (in radians). Neither can be met below its floor: the inner
+/// cg_tol, and about 1e-8 rad for angles measured near 0 or pi.
+struct MixedSLCPConfig {
+  MixedLCPConfig inner_lcp_config;
+  unsigned max_iters = 20;
+  double length_tol = 1e-6;
+  double angle_tol = 1e-6;
+};
+
+/// \brief Result of a mixed SLCP step: the linearization count, the returned iterate's residual, and convergence.
+///
+/// residual is the returned iterate's largest acceptance residual over the tolerance it is tested against, so
+/// converged is residual <= 1, and accepted_lcp_result is that iterate's inner LCP result. Unconverged, the returned
+/// iterate is the first linearization; num_iters < max_iters then means the sequence stopped once it was predicted not
+/// to converge within max_iters.
+struct MixedSLCPResult {
+  unsigned num_iters{0};
+  double residual{0.0};
+  bool converged{false};
+  MixedLCPResult accepted_lcp_result{};
+};
+
+/// \brief Write a MixedSLCPResult to an ostream.
+inline std::ostream& operator<<(std::ostream& os, const MixedSLCPResult& result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged
+     << ", accepted_lcp_result: {" << result.accepted_lcp_result << "}";
+  return os;
+}
+//@}
 
 /// \brief Move every rod through one step of its velocity, to the configuration C^k (+) G^k dt U.
 ///
@@ -308,8 +369,10 @@ double slcp_merit(const StepData<ExecSpace>& step, const LinearizedStep<ExecSpac
 /// rigidly held one. M is the local-drag rod mobility, dt M in the problem above. S is SPD and only its apply-action
 /// is cheap, so it is realized by a matrix-free CG, not an explicit inverse.
 ///
-/// On exit rods' force/torque is F_ext + D x* + B y* and velocity/omega is U_free + M (D x* + B y*); advance_rods
-/// takes the step. Each constraint then holds to first order in dt.
+/// On entry rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext. On exit
+/// force/torque is F_ext + D x* + B y*, velocity/omega is U_free + M (D x* + B y*), every family's lambda holds its
+/// multipliers, and the rods have not moved. advance_rods can be used to perform the consistent time integration, after
+/// which each constraint holds to first order in dt.
 ///
 /// A boundary condition belongs in the constraint set rather than being imposed on rods afterwards.
 /// A body held by a constraint contributes its reaction to B y, which cancels out of the relaxation's
@@ -338,7 +401,7 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
 /// \brief One step of a multibody system whose bilateral constraints hold at its end: a sequence of mixed LCPs.
 ///
 /// The step's configuration is the push-forward C(W) = C^k (+) G^k (dt V_ext + M (F_ext + W)) of the constraint wrench
-/// W, which advance_rods applies. Contacts are linearized at C^k throughout, as in solve_mixed_lcp. The bilateral rows
+/// W. Contacts are linearized at C^k throughout, so they hold to the accuracy of that linearization. The bilateral rows
 /// are linearized afresh at each iterate's configuration C_n, starting from C_0 = C^k: iterate n solves the mixed LCP
 /// with B_n = B(C_n) and
 ///   b_n = psi(C_n) - dt B_n^T M W_{n-1}   (n >= 1),
@@ -352,9 +415,10 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
 /// iterate 0. The iteration contracts at a rate of about dt times the mobility times the constraints' curvature
 /// weighted by their multipliers, so it converges only where that is below one.
 ///
-/// On exit rods and constraints hold the returned iterate exactly as solve_mixed_lcp leaves them. advance_rods, on the
-/// same rods and execution space, moves the rods to the configuration at which a converged iterate was accepted.
-/// Velocity sources beyond F_ext belong in V_ext.
+/// On entry rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext. On exit
+/// force/torque is F_ext + W, velocity/omega is U_free + M W, every family's lambda holds its multipliers, all of the
+/// returned iterate, and the rods have not moved. advance_rods can be used to perform the consistent time integration,
+/// which for a converged iterate reaches the configuration at which it was accepted.
 template <typename ExecSpace>
 MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const ConstraintSet<ExecSpace>& constraints,
                                  const MixedSLCPConfig& cfg) {
