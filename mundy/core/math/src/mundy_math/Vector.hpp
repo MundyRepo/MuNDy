@@ -183,26 +183,25 @@ class AVector {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AVector() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with an AVector of the same type
+  // Same-type copy and move: construction copies the accessor, so a view binds to the same data; assignment copies the
+  // data, so a view writes through to it.
 
-  /// \brief Default copy constructor (deep copies the accessor, not necessarily the data)
-  /// Copy from same is safe for many views since the accessor is simply copied.
+  /// \brief Copy constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(const AVector<T, N, Accessor>&) = default;
 
-  /// \brief Default move constructor (deep moves the accessor, not necessarily the data)
-  /// Move from same is safe for many views since the accessor is simply moved.
+  /// \brief Move constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor>&&) = default;
 
-  /// \brief Default copy assignment operator (deep copies the data)
+  /// \brief Copy assignment (deep)
   KOKKOS_INLINE_FUNCTION
   constexpr AVector<T, N, Accessor>& operator=(const AVector<T, N, Accessor>& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
-  /// \brief Default move assignment operator (deep copies the data)
+  /// \brief Move assignment (deep)
   KOKKOS_INLINE_FUNCTION
   constexpr AVector<T, N, Accessor>& operator=(AVector<T, N, Accessor>&& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
@@ -213,7 +212,7 @@ class AVector {
 
   /// \brief Deep copy constructor with different accessor or ownership
   /// Deep copy construction from different is often ill-advised since the accessor must be default constructed and then
-  /// populated. For a T* accessor, this is illegal.
+  /// populated. For an accessor stored as a pointer (a T* or a T[N]), this is illegal.
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
@@ -223,7 +222,7 @@ class AVector {
     // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
     // illegal.
     static_assert(
-        std::is_pointer_v<Accessor> == false,
+        !impl::is_stored_as_pointer_v<Accessor>,
         "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
         "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
         "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
@@ -251,7 +250,7 @@ class AVector {
     // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
     // illegal.
     static_assert(
-        std::is_pointer_v<Accessor> == false,
+        !impl::is_stored_as_pointer_v<Accessor>,
         "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
         "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
         "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
@@ -1097,10 +1096,9 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 //@}
 
 // Just to double check
-// static_assert(std::is_trivially_copyable_v<AVector<double, 3>>);
-// static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
-// static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
-// static_assert(std::is_move_constructible_v<AVector<double, 3>>);
+static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
+static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
+static_assert(std::is_move_constructible_v<AVector<double, 3>>);
 
 //! \name Type specializations
 //@{

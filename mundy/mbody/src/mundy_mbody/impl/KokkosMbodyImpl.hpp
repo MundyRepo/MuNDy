@@ -1805,11 +1805,11 @@ struct Displacement {
   double duration;
 };
 
-/// \brief Solve the mixed LCP with the step's contact block and the bilateral block linearized at geo.
+/// \brief Solve the mixed LCP with the step's unilateral block and the bilateral block linearized at geo.
 ///
 /// to_free_end is the displacement Delta from geo's configuration to the step's constraint-free end configuration, so
 /// the bilateral linear term b = psi + B^T Delta is the linear model about geo's configuration of psi at that end. The
-/// contact solve starts from x_start.
+/// unilateral solve starts from x_start.
 template <typename ExecSpace, typename BilateralGeometry, typename... Families>
 LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace, Families...>& step,
                                               const BilateralGeometry& geo,
