@@ -289,17 +289,37 @@ double max_step_displacement(const RodViews<Space>& rods, double dt) {
   return dt * max_speed;
 }
 
+/// \brief The step size of a mixed LCP step.
+double step_size(const MixedLCPConfig& cfg) {
+  return cfg.dt;
+}
+
+/// \brief The step size of a mixed SLCP step.
+double step_size(const MixedSLCPConfig& cfg) {
+  return cfg.inner_lcp_config.dt;
+}
+
+/// \brief Whether a mixed LCP step's solve converged.
+bool lcp_converged(const MixedLCPResult& result) {
+  return result.converged;
+}
+
+/// \brief Whether the mixed LCP solve of a mixed SLCP step's returned linearization converged.
+bool lcp_converged(const MixedSLCPResult& result) {
+  return result.accepted_lcp_result.converged;
+}
+
 /// \brief Step until no rod moves farther than settled_step, or turns through a larger angle, in one step.
 ///
 /// Returns whether that happened within max_steps.
-template <typename Space, typename... Families>
-bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
-                        const MixedLCPConfig& cfg, const Kokkos::View<double*, typename Space::memory_space>& load,
-                        double settled_step, int max_steps) {
+template <typename Space, typename Config, typename... Families>
+bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints, const Config& cfg,
+                        const Kokkos::View<double*, typename Space::memory_space>& load, double settled_step,
+                        int max_steps) {
   for (int step = 0; step < max_steps; ++step) {
-    MUNDY_THROW_REQUIRE(step_rods(rods, constraints, cfg, load).converged, std::runtime_error,
-                        "step_until_settled: a step failed to converge.");
-    if (max_step_displacement(rods, cfg.dt) <= settled_step) {
+    MUNDY_THROW_REQUIRE(lcp_converged(step_rods(rods, constraints, cfg, load)), std::runtime_error,
+                        "step_until_settled: a step's mixed LCP solve failed to converge.");
+    if (max_step_displacement(rods, step_size(cfg)) <= settled_step) {
       return true;
     }
   }
@@ -1423,6 +1443,7 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   M.apply(rods_d.force_torque_view(), vel_omega_expected_d);
   const auto vel_omega_expected = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, vel_omega_expected_d);
 
+  const auto slcp_rods_d = copy_to<TestExecSpace>(rods);
   const MixedLCPResult result = solve_on_device(rods, constraints, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
@@ -1433,6 +1454,15 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
     EXPECT_NEAR(norm(rods.velocity(i) - vel_expected), 0.0, 1e-12);
     EXPECT_NEAR(norm(rods.omega(i) - omega_expected), 0.0, 1e-12);
   }
+
+  // Mixed SLCP: the same free motion, accepted at its first linearization
+  const MixedSLCPResult slcp = solve_mixed_slcp(slcp_rods_d, constraints, MixedSLCPConfig{cfg, 50, 1e-9, 1e-9});
+  EXPECT_TRUE(slcp.converged) << slcp;
+  EXPECT_EQ(slcp.num_iters, 1u);
+  EXPECT_EQ(slcp.accepted_lcp_result.num_iters, result.num_iters);
+  EXPECT_EQ(slcp.accepted_lcp_result.converged, result.converged);
+  const auto slcp_rods = copy_to<HostExecSpace>(slcp_rods_d);
+  EXPECT_EQ(count_bit_differences(slcp_rods.velocity_omega_view(), rods.velocity_omega_view()), 0u);
 }
 
 // The Schur complement's CG on a 0x0 system: zero iterations and zero residual.
@@ -1563,42 +1593,48 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
 }
 
 // A family a set does not hold and an empty family it does hold contribute nothing: the chain solves to the same values
-// with only its springs as with every family present and the others empty. Serial execution fixes the order of every
-// atomic sum; an empty block may still turn a -0.0 into +0.0, so values, not bit patterns, are compared.
+// with only its springs as with every family present and the others empty, for either sequence length. Serial execution
+// fixes the order of every atomic sum; an empty block may still turn a -0.0 into +0.0, so values, not bit patterns, are
+// compared.
 TEST(Mbody, AbsentFamiliesMatchEmptyFamilies) {
   const auto p = make_chain_problem(/*spring_constant=*/3.0);
-  const auto lin_springs = copy_to<Kokkos::Serial>(get<LinearSpringViews<HostExecSpace>>(p.constraints));
-  const auto ang_springs = copy_to<Kokkos::Serial>(get<AngularSpringViews<HostExecSpace>>(p.constraints));
-  const auto springs_only = make_constraint_set(lin_springs, ang_springs);
-  const auto every_family =
-      make_constraint_set(lin_springs, ang_springs, PinViews<Kokkos::Serial>(0), FixedLengthViews<Kokkos::Serial>(0),
-                          TriplePointAngularSpringViews<Kokkos::Serial>(0), FixedPositionViews<Kokkos::Serial>(0),
-                          FixedPoseViews<Kokkos::Serial>(0), ContactViews<Kokkos::Serial>(0));
 
-  // Mixed LCP
-  const auto rods_reduced = copy_to<Kokkos::Serial>(p.rods);
-  const auto rods_full = copy_to<Kokkos::Serial>(p.rods);
-  ASSERT_TRUE(solve_mixed_lcp(rods_reduced, springs_only, p.cfg).converged);
-  const auto lin_lambda_reduced = copy_to<Kokkos::Serial>(lin_springs).lambda_view();
-  const auto ang_lambda_reduced = copy_to<Kokkos::Serial>(ang_springs).lambda_view();
-  ASSERT_TRUE(solve_mixed_lcp(rods_full, every_family, p.cfg).converged);
-  EXPECT_EQ(count_value_differences(rods_reduced.force_torque_view(), rods_full.force_torque_view()), 0u);
-  EXPECT_EQ(count_value_differences(rods_reduced.velocity_omega_view(), rods_full.velocity_omega_view()), 0u);
-  EXPECT_EQ(count_value_differences(lin_lambda_reduced, lin_springs.lambda_view()), 0u);
-  EXPECT_EQ(count_value_differences(ang_lambda_reduced, ang_springs.lambda_view()), 0u);
+  for (const unsigned max_iters : {1u, 50u}) {
+    const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
+    const auto lin_springs = copy_to<Kokkos::Serial>(get<LinearSpringViews<HostExecSpace>>(p.constraints));
+    const auto ang_springs = copy_to<Kokkos::Serial>(get<AngularSpringViews<HostExecSpace>>(p.constraints));
+    const auto springs_only = make_constraint_set(lin_springs, ang_springs);
+    const auto every_family =
+        make_constraint_set(lin_springs, ang_springs, PinViews<Kokkos::Serial>(0), FixedLengthViews<Kokkos::Serial>(0),
+                            TriplePointAngularSpringViews<Kokkos::Serial>(0), FixedPositionViews<Kokkos::Serial>(0),
+                            FixedPoseViews<Kokkos::Serial>(0), ContactViews<Kokkos::Serial>(0));
+    const auto rods_reduced = copy_to<Kokkos::Serial>(p.rods);
+    const auto rods_full = copy_to<Kokkos::Serial>(p.rods);
 
-  // Mixed SLCP, which re-linearizes the springs
-  const MixedSLCPConfig slcp_cfg{p.cfg, 50, 1e-9, 1e-9};
-  const auto slcp_rods_reduced = copy_to<Kokkos::Serial>(p.rods);
-  const auto slcp_rods_full = copy_to<Kokkos::Serial>(p.rods);
-  const MixedSLCPResult reduced = solve_mixed_slcp(slcp_rods_reduced, springs_only, slcp_cfg);
-  ASSERT_TRUE(reduced.converged) << reduced;
-  ASSERT_GE(reduced.num_iters, 2u);
-  const MixedSLCPResult full = solve_mixed_slcp(slcp_rods_full, every_family, slcp_cfg);
-  EXPECT_EQ(full.num_iters, reduced.num_iters);
-  EXPECT_EQ(full.residual, reduced.residual);
-  EXPECT_EQ(count_value_differences(slcp_rods_reduced.force_torque_view(), slcp_rods_full.force_torque_view()), 0u);
-  EXPECT_EQ(count_value_differences(slcp_rods_reduced.velocity_omega_view(), slcp_rods_full.velocity_omega_view()), 0u);
+    // Solve
+    const MixedSLCPResult reduced = solve_mixed_slcp(rods_reduced, springs_only, cfg);
+    const auto lin_lambda_reduced = copy_to<Kokkos::Serial>(lin_springs).lambda_view();
+    const auto ang_lambda_reduced = copy_to<Kokkos::Serial>(ang_springs).lambda_view();
+    const MixedSLCPResult full = solve_mixed_slcp(rods_full, every_family, cfg);
+    ASSERT_TRUE(lcp_converged(reduced)) << reduced;
+    if (max_iters > 1) {
+      ASSERT_TRUE(reduced.converged) << reduced;
+      ASSERT_GE(reduced.num_iters, 2u) << "the sequence re-linearizes the springs";
+    }
+
+    // The same step
+    EXPECT_EQ(full.num_iters, reduced.num_iters) << "max_iters=" << max_iters;
+    EXPECT_EQ(full.residual, reduced.residual) << "max_iters=" << max_iters;
+    EXPECT_EQ(full.converged, reduced.converged) << "max_iters=" << max_iters;
+    EXPECT_EQ(full.accepted_lcp_result.num_iters, reduced.accepted_lcp_result.num_iters) << "max_iters=" << max_iters;
+    EXPECT_EQ(full.accepted_lcp_result.residual, reduced.accepted_lcp_result.residual) << "max_iters=" << max_iters;
+    EXPECT_EQ(count_value_differences(rods_reduced.force_torque_view(), rods_full.force_torque_view()), 0u)
+        << "max_iters=" << max_iters;
+    EXPECT_EQ(count_value_differences(rods_reduced.velocity_omega_view(), rods_full.velocity_omega_view()), 0u)
+        << "max_iters=" << max_iters;
+    EXPECT_EQ(count_value_differences(lin_lambda_reduced, lin_springs.lambda_view()), 0u) << "max_iters=" << max_iters;
+    EXPECT_EQ(count_value_differences(ang_lambda_reduced, ang_springs.lambda_view()), 0u) << "max_iters=" << max_iters;
+  }
 }
 
 // A simply supported beam: two anchors on different rods, coupled through the springs between them. B's columns act
@@ -1825,89 +1861,87 @@ TEST(Mbody, HolonomicDenseStep) {
 
 // Constraints holding a point or pose of a rod at a target.
 
-// A rigid anchor reaches its target in one step, and its multiplier is the reaction to the load, at every dt.
-TEST(Mbody, FixedPositionHoldsItsTargetAtAnyDt) {
-  const Vector3d target{0.4, -0.3, 1.1};
-  const Vector3d load{0.7, 0.25, -0.5};
-
-  for (const double dt : {0.005, 0.5, 2.0, 20.0}) {
-    RodViews<HostExecSpace> rods(1);
-    rods.center(0) = target + Vector3d{-0.35, 0.2, 0.15};  // starts off target
-    rods.orientation(0) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-    rods.radius(0) = 0.2;
-    rods.length(0) = 1.0;
-
-    FixedPositionViews<HostExecSpace> anchors(1);
-    set_fixed_position(anchors, 0, /*rod=*/0, target);
-    const auto constraints = make_constraint_set(anchors);
-
-    MixedLCPConfig cfg;
-    cfg.dt = dt;
-    cfg.viscosity = 1.0;
-    cfg.max_cg_iters = 200;
-    cfg.cg_tol = 1e-14;
-    cfg.max_outer_iters = 1;
-
-    zero_rod_state(rods);
-    rods.force(0) = load;
-    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-    const auto load_d = copy_load(rods_d);
-
-    ASSERT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "dt=" << dt;
-    deep_copy(rods, rods_d);
-    EXPECT_NEAR(norm(rods.center(0) - target), 0.0, 1e-10) << "dt=" << dt;
-
-    reset_rod_state(rods_d, load_d);
-    ASSERT_TRUE(solve_mixed_lcp(rods_d, constraints_d, cfg).converged) << "dt=" << dt;
-    deep_copy(rods, rods_d);
-    deep_copy(constraints, constraints_d);
-    EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-10) << "dt=" << dt;
-    EXPECT_NEAR(norm(anchors.lambda(0) + load), 0.0, 1e-10) << "dt=" << dt;
-  }
-}
-
-// A rigid pose anchor holds its point and orientation, with multipliers equal to the reaction to the load.
-TEST(Mbody, FixedPoseHoldsItsTarget) {
-  const Vector3d target_point{0.4, -0.3, 1.1};
-  const Quaterniond target_orientation = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.6);
+// A rigid anchor reaches its target in one step wherever its rows are linear in the step, and at rest its multipliers
+// are the reactions to the load, at every dt. A center position anchor's rows are linear in the step, and so are a pose
+// anchor's orientation rows, the rotation vector of the error: the step they solve for turns about that vector, along
+// which it changes linearly. The pose anchor's point rows turn with the rod, so only a step whose rows hold at its end
+// reaches that point, to within length_tol.
+TEST(Mbody, RigidAnchorsReachTheirTargets) {
+  const Vector3d position_target{0.4, -0.3, 1.1};
+  const Vector3d pose_target_point{-1.4, 0.7, -0.9};
+  const Quaterniond pose_target_orientation = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.6);
   const Vector3d body_offset{0.0, 0.0, 0.45};
   const Vector3d load{0.7, 0.25, -0.5};
 
-  for (const double dt : {0.05, 0.5, 2.0}) {
-    RodViews<HostExecSpace> rods(1);
-    rods.center(0) = target_point + Vector3d{-0.3, 0.25, 0.1};
-    rods.orientation(0) = Quaterniond{1.0, 0.0, 0.0, 0.0};  // starts both displaced and misoriented
-    rods.radius(0) = 0.2;
-    rods.length(0) = 0.9;
+  for (const double dt : {0.005, 0.5, 2.0, 20.0}) {
+    for (const unsigned max_iters : {1u, 50u}) {
+      RodViews<HostExecSpace> rods(2);
+      rods.center(0) = position_target + Vector3d{-0.35, 0.2, 0.15};  // both start off target
+      rods.center(1) = pose_target_point + Vector3d{-0.3, 0.25, 0.1};
+      for (int i = 0; i < 2; ++i) {
+        rods.orientation(i) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+        rods.radius(i) = 0.2;
+      }
+      rods.length(0) = 1.0;
+      rods.length(1) = 0.9;
 
-    FixedPoseViews<HostExecSpace> anchors(1);
-    set_fixed_pose(anchors, 0, /*rod=*/0, target_point, target_orientation, body_offset);
-    const auto constraints = make_constraint_set(anchors);
+      FixedPositionViews<HostExecSpace> position_anchors(1);
+      set_fixed_position(position_anchors, 0, /*rod=*/0, position_target);
+      FixedPoseViews<HostExecSpace> pose_anchors(1);
+      set_fixed_pose(pose_anchors, 0, /*rod=*/1, pose_target_point, pose_target_orientation, body_offset);
+      const auto constraints = make_constraint_set(position_anchors, pose_anchors);
 
-    MixedLCPConfig cfg;
-    cfg.dt = dt;
-    cfg.viscosity = 1.0;
-    cfg.max_cg_iters = 500;
-    cfg.cg_tol = 1e-14;
-    cfg.max_outer_iters = 1;
+      MixedSLCPConfig cfg;
+      cfg.inner_lcp_config.dt = dt;
+      cfg.inner_lcp_config.viscosity = 1.0;
+      cfg.inner_lcp_config.max_cg_iters = 500;
+      cfg.inner_lcp_config.cg_tol = 1e-14;
+      cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+      cfg.max_iters = max_iters;
+      cfg.length_tol = 1e-11;
+      cfg.angle_tol = 1e-11;
 
-    zero_rod_state(rods);
-    rods.force(0) = load;
-    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-    const auto load_d = copy_load(rods_d);
-    ASSERT_TRUE(step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000))
-        << "not settled at dt=" << dt;
-    deep_copy(rods, rods_d);
-    deep_copy(constraints, constraints_d);
+      zero_rod_state(rods);
+      rods.force(0) = load;
+      rods.force(1) = load;
+      const auto rods_d = copy_to<TestExecSpace>(rods);
+      const auto constraints_d = copy_to<TestExecSpace>(constraints);
+      const auto load_d = copy_load(rods_d);
 
-    const Vector3d r_world = rods.orientation(0) * body_offset;
-    EXPECT_NEAR(norm(rods.center(0) + r_world - target_point), 0.0, 1e-9) << "dt=" << dt;
-    EXPECT_NEAR(norm(quaternion_to_rotation_vector(rods.orientation(0) * inverse(target_orientation))), 0.0, 1e-9)
-        << "dt=" << dt;
-    EXPECT_NEAR(norm(anchors.position_lambda(0) + load), 0.0, 1e-9) << "dt=" << dt;
-    EXPECT_NEAR(norm(anchors.orientation_lambda(0) - cross(r_world, load)), 0.0, 1e-9) << "dt=" << dt;
+      // One step
+      const MixedSLCPResult first = step_rods(rods_d, constraints_d, cfg, load_d);
+      ASSERT_TRUE(lcp_converged(first)) << first << " at dt=" << dt;
+      deep_copy(rods, rods_d);
+      const Vector3d step_rotation_error =
+          quaternion_to_rotation_vector(rods.orientation(1) * inverse(pose_target_orientation));
+      EXPECT_NEAR(norm(rods.center(0) - position_target), 0.0, 1e-10) << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(step_rotation_error), 0.0, 1e-10) << "dt=" << dt << " max_iters=" << max_iters;
+      if (max_iters > 1) {
+        ASSERT_TRUE(first.converged) << first << " at dt=" << dt;
+        EXPECT_NEAR(norm(rods.center(1) + rods.orientation(1) * body_offset - pose_target_point), 0.0, cfg.length_tol)
+            << "dt=" << dt;
+      }
+
+      // At rest
+      ASSERT_TRUE(step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000))
+          << "not settled at dt=" << dt << " max_iters=" << max_iters;
+      reset_rod_state(rods_d, load_d);
+      ASSERT_TRUE(solve_mixed_slcp(rods_d, constraints_d, cfg).converged) << "dt=" << dt << " max_iters=" << max_iters;
+      deep_copy(rods, rods_d);
+      deep_copy(constraints, constraints_d);
+      const Vector3d r_world = rods.orientation(1) * body_offset;
+      const Vector3d rest_rotation_error =
+          quaternion_to_rotation_vector(rods.orientation(1) * inverse(pose_target_orientation));
+      EXPECT_NEAR(norm(rods.velocity(0)), 0.0, 1e-10) << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(rods.velocity(1)), 0.0, 1e-10) << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(position_anchors.lambda(0) + load), 0.0, 1e-10) << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(rods.center(1) + r_world - pose_target_point), 0.0, 1e-9)
+          << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(rest_rotation_error), 0.0, 1e-9) << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(pose_anchors.position_lambda(0) + load), 0.0, 1e-9) << "dt=" << dt << " max_iters=" << max_iters;
+      EXPECT_NEAR(norm(pose_anchors.orientation_lambda(0) - cross(r_world, load)), 0.0, 1e-9)
+          << "dt=" << dt << " max_iters=" << max_iters;
+    }
   }
 }
 
@@ -2059,6 +2093,17 @@ double expected_inv_drag_perp(double radius, double length, double viscosity) {
   return (log_p + 0.839 + 0.185 * inv_p + 0.233 * inv_p2) / lprime / (4.0 * pi * viscosity);
 }
 
+/// \brief The rotational inverse drag coefficient of a rod.
+double expected_inv_drag_rot(double radius, double length, double viscosity) {
+  const double lprime = length + 2.0 * radius;
+  const double p = lprime / (2.0 * radius);
+  const double log_p = std::log(p);
+  const double inv_p = 1.0 / p;
+  const double inv_p2 = inv_p * inv_p;
+  constexpr double pi = Kokkos::numbers::pi_v<double>;
+  return 3.0 * (log_p - 0.662 + 0.917 * inv_p - 0.05 * inv_p2) / (lprime * lprime * lprime) / (pi * viscosity);
+}
+
 /// \brief Sum over the linear springs of center distance minus rest length.
 template <typename Space>
 double summed_stretch(const RodViews<Space>& rods, const LinearSpringViews<Space>& lin_springs) {
@@ -2072,9 +2117,15 @@ double summed_stretch(const RodViews<Space>& rods, const LinearSpringViews<Space
   return stretch;
 }
 
-/// \brief Two rods joined by one linear spring, stepped num_steps times; the stretch before and after each step.
-std::vector<double> run_relaxation(double spring_constant, double dt, int num_steps, double radius = 0.2,
-                                   double length = 1.0, double viscosity = 1.0) {
+/// \brief A relaxation's summed stretch before and after each step, and each step's result.
+struct Relaxation {
+  std::vector<double> stretch;
+  std::vector<MixedSLCPResult> results;
+};
+
+/// \brief Two rods joined by one linear spring, stepped num_steps times with at most max_iters linearizations each.
+Relaxation run_relaxation(double spring_constant, double dt, int num_steps, unsigned max_iters, double radius = 0.2,
+                          double length = 1.0, double viscosity = 1.0) {
   RodViews<HostExecSpace> rods =
       make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 1.6},
                           Quaterniond{1.0, 0.0, 0.0, 0.0}, radius, length);
@@ -2087,12 +2138,15 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
 
   const auto constraints = make_constraint_set(lin_springs);
 
-  MixedLCPConfig cfg;
-  cfg.dt = dt;
-  cfg.viscosity = viscosity;
-  cfg.max_cg_iters = 500;
-  cfg.cg_tol = 1e-12;
-  cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+  MixedSLCPConfig cfg;
+  cfg.inner_lcp_config.dt = dt;
+  cfg.inner_lcp_config.viscosity = viscosity;
+  cfg.inner_lcp_config.max_cg_iters = 500;
+  cfg.inner_lcp_config.cg_tol = 1e-12;
+  cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+  cfg.max_iters = max_iters;
+  cfg.length_tol = 1e-9;
+  cfg.angle_tol = 1e-9;
 
   zero_rod_state(rods);
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
@@ -2100,12 +2154,13 @@ std::vector<double> run_relaxation(double spring_constant, double dt, int num_st
   const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
   const auto load_d = copy_load(rods_d);
 
-  std::vector<double> stretch{summed_stretch(rods_d, lin_springs_d)};
+  Relaxation relaxation{{summed_stretch(rods_d, lin_springs_d)}, {}};
   for (int step = 0; step < num_steps; ++step) {
-    EXPECT_TRUE(step_rods(rods_d, constraints_d, cfg, load_d).converged) << "step " << step;
-    stretch.push_back(summed_stretch(rods_d, lin_springs_d));
+    relaxation.results.push_back(step_rods(rods_d, constraints_d, cfg, load_d));
+    EXPECT_TRUE(lcp_converged(relaxation.results.back())) << relaxation.results.back() << " at step " << step;
+    relaxation.stretch.push_back(summed_stretch(rods_d, lin_springs_d));
   }
-  return stretch;
+  return relaxation;
 }
 
 // The stretch follows the backward-Euler closed form exactly, and the continuous decay s0 exp(-t/tau) closely at this
@@ -2117,7 +2172,8 @@ TEST(Mbody, SpringRelaxationMatchesBackwardEulerAndExponentialDecay) {
 
   const double dt = 0.2 * tau;
   const int num_steps = 10;
-  const std::vector<double> stretch = run_relaxation(spring_constant, dt, num_steps, radius, length, viscosity);
+  const std::vector<double> stretch =
+      run_relaxation(spring_constant, dt, num_steps, /*max_iters=*/1, radius, length, viscosity).stretch;
 
   const double s0 = stretch[0];
   for (int n = 0; n <= num_steps; ++n) {
@@ -2129,28 +2185,42 @@ TEST(Mbody, SpringRelaxationMatchesBackwardEulerAndExponentialDecay) {
   }
 }
 
-// From dt = 0.1 tau to 50 tau the stretch follows the closed form and decays monotonically, never overshooting zero.
+// From dt = 0.1 tau to 50 tau the stretch follows the closed form and decays monotonically, never overshooting zero,
+// for either sequence length. The rods stay on the z axis, so the spring keeps its direction through every step and its
+// first linearization holds at the end of the step: every sequence accepts it.
 TEST(Mbody, SpringRelaxationStableAcrossWideDtSweep) {
   const double radius = 0.2, length = 1.0, viscosity = 1.0, spring_constant = 2.0;
   const double A = 2.0 * expected_inv_drag_para(radius, length, viscosity);
   const double tau = 1.0 / (A * spring_constant);
 
   for (const double dt_over_tau : {0.1, 1.0, 5.0, 20.0, 50.0}) {
-    const double dt = dt_over_tau * tau;
-    const int num_steps = 6;
-    const std::vector<double> stretch = run_relaxation(spring_constant, dt, num_steps, radius, length, viscosity);
+    for (const unsigned max_iters : {1u, 50u}) {
+      const double dt = dt_over_tau * tau;
+      const int num_steps = 6;
+      const Relaxation relaxation =
+          run_relaxation(spring_constant, dt, num_steps, max_iters, radius, length, viscosity);
+      const std::vector<double>& stretch = relaxation.stretch;
 
-    const double s0 = stretch[0];
-    for (int n = 0; n <= num_steps; ++n) {
-      const double backward_euler = s0 / std::pow(1.0 + dt / tau, n);
-      EXPECT_NEAR(stretch[n], backward_euler, 1e-8 + 1e-6 * std::abs(backward_euler))
-          << "dt/tau=" << dt_over_tau << " step " << n;
-    }
-    for (int n = 1; n <= num_steps; ++n) {
-      EXPECT_LE(std::abs(stretch[n]), std::abs(stretch[n - 1]) + 1e-12)
-          << "dt/tau=" << dt_over_tau << ": stretch grew at step " << n << " (unstable)";
-      EXPECT_GE(stretch[n], 0.0) << "dt/tau=" << dt_over_tau << ": stretch went negative at step " << n
-                                 << " (should decay monotonically toward zero, never overshoot)";
+      const double s0 = stretch[0];
+      for (int n = 0; n <= num_steps; ++n) {
+        const double backward_euler = s0 / std::pow(1.0 + dt / tau, n);
+        EXPECT_NEAR(stretch[n], backward_euler, 1e-8 + 1e-6 * std::abs(backward_euler))
+            << "dt/tau=" << dt_over_tau << " max_iters=" << max_iters << " step " << n;
+      }
+      for (int n = 1; n <= num_steps; ++n) {
+        EXPECT_LE(std::abs(stretch[n]), std::abs(stretch[n - 1]) + 1e-12)
+            << "dt/tau=" << dt_over_tau << " max_iters=" << max_iters << ": stretch grew at step " << n
+            << " (unstable)";
+        EXPECT_GE(stretch[n], 0.0) << "dt/tau=" << dt_over_tau << " max_iters=" << max_iters
+                                   << ": stretch went negative at step " << n
+                                   << " (should decay monotonically toward zero, never overshoot)";
+      }
+      for (size_t n = 0; n < relaxation.results.size(); ++n) {
+        EXPECT_TRUE(relaxation.results[n].converged)
+            << relaxation.results[n] << " at dt/tau=" << dt_over_tau << " max_iters=" << max_iters << " step " << n;
+        EXPECT_EQ(relaxation.results[n].num_iters, 1u)
+            << "dt/tau=" << dt_over_tau << " max_iters=" << max_iters << " step " << n;
+      }
     }
   }
 }
@@ -2198,34 +2268,43 @@ double spring_network_stiffness(const SolveInput<Families...>& p) {
 
 // Explicit Euler on the linearized springs is stable only for dt < dt_crit = 2 / lambda_max(K B^T M B). On both sides
 // of dt_crit every backward-Euler step lowers the elastic energy, since it maps K^1/2 b to
-// (I + dt K^1/2 B^T M B K^1/2)^-1 K^1/2 b.
+// (I + dt K^1/2 B^T M B K^1/2)^-1 K^1/2 b. A converged sequence is backward Euler on the springs' nonlinear gradient
+// flow, whose step is guaranteed to lower the energy only where it minimizes E(x) + |x - x_k|^2 / (2 dt) in the metric
+// of M^-1, so the decrease is checked here rather than assumed; an unconverged sequence returns the first
+// linearization.
 TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
   const double dt_crit = 2.0 / spring_network_stiffness(make_chain_problem(/*spring_constant=*/3.0));
 
   for (const double cfl : {0.5, 0.9, 1.1, 2.0, 10.0, 100.0}) {
-    auto p = make_chain_problem(/*spring_constant=*/3.0);
-    p.cfg.dt = cfl * dt_crit;
-    p.cfg.cg_tol = 1e-13;
+    for (const unsigned max_iters : {1u, 50u}) {
+      auto p = make_chain_problem(/*spring_constant=*/3.0);
+      p.cfg.dt = cfl * dt_crit;
+      p.cfg.cg_tol = 1e-13;
+      const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
 
-    zero_rod_state(p.rods);  // no external load: the springs relax toward rest
-    const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
-    const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
-    const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
-    const auto& ang_springs_d = get<AngularSpringViews<TestExecSpace>>(constraints_d);
-    const auto load_d = copy_load(rods_d);
+      zero_rod_state(p.rods);  // no external load: the springs relax toward rest
+      const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+      const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, p.constraints);
+      const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
+      const auto& ang_springs_d = get<AngularSpringViews<TestExecSpace>>(constraints_d);
+      const auto load_d = copy_load(rods_d);
 
-    std::vector<double> energy{elastic_energy(rods_d, lin_springs_d, ang_springs_d)};
-    for (int step = 0; step < 40; ++step) {
-      ASSERT_TRUE(step_rods(rods_d, constraints_d, p.cfg, load_d).converged) << "cfl=" << cfl << " step " << step;
-      energy.push_back(elastic_energy(rods_d, lin_springs_d, ang_springs_d));
+      std::vector<double> energy{elastic_energy(rods_d, lin_springs_d, ang_springs_d)};
+      for (int step = 0; step < 40; ++step) {
+        const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, load_d);
+        ASSERT_TRUE(lcp_converged(result))
+            << result << " at cfl=" << cfl << " max_iters=" << max_iters << " step " << step;
+        energy.push_back(elastic_energy(rods_d, lin_springs_d, ang_springs_d));
+      }
+
+      // Round-off floor relative to the initial energy, which the largest steps decay toward.
+      const double floor = 1e-10 * energy.front();
+      for (size_t n = 0; n + 1 < energy.size(); ++n) {
+        EXPECT_LE(energy[n + 1], energy[n] + floor)
+            << "cfl=" << cfl << " max_iters=" << max_iters << ": energy rose at step " << n + 1;
+      }
+      EXPECT_LT(energy.back(), energy.front()) << "cfl=" << cfl << " max_iters=" << max_iters;
     }
-
-    // Round-off floor relative to the initial energy, which the largest steps decay toward.
-    const double floor = 1e-10 * energy.front();
-    for (size_t n = 0; n + 1 < energy.size(); ++n) {
-      EXPECT_LE(energy[n + 1], energy[n] + floor) << "cfl=" << cfl << ": energy rose at step " << n + 1;
-    }
-    EXPECT_LT(energy.back(), energy.front()) << "cfl=" << cfl;
   }
 }
 
@@ -2342,20 +2421,42 @@ TEST(Mbody, SlcpFallsBackToFirstLinearization) {
             0u);
 }
 
-// A bob held at length L from an anchored sphere under a constant force F turns in the plane normal to its axis, where
-// its mobility is m I. At the end of the step it sits at r_k + dt m F projected radially onto |r| = L, so with theta
-// measured from -y, tan theta_{k+1} = sin theta_k / (cos theta_k + dt/tau), tau = L / (m f).
-//
-// An accepted iterate's force direction changes the step by at most sqrt(2) length_tol in the plane, which turns the
-// bob by at most sqrt(2) length_tol / |r_k + dt m F|, to first order in the iterate's angular error.
-TEST(Mbody, SlcpPendulumMatchesRadialProjection) {
-  const double radius = 0.2, L = 1.0, f = 0.5, theta0 = 1.2;
-  const double m = expected_inv_drag_perp(radius, 0.0, 1.0);
-  const double tau = L / (m * f);
+/// \brief A pendulum's angle from -y before and after each step, its constraint error after each, and their results.
+struct PendulumRun {
+  std::vector<double> theta;
+  std::vector<double> constraint_error;
+  std::vector<MixedSLCPResult> results;
+};
+
+constexpr double kPendulumTheta0 = 1.2;
+constexpr double kPendulumArm = 1.0;  // pivot to loaded point
+constexpr double kPendulumCgTol = 1e-14;
+
+/// \brief A pendulum step of size dt by a sequence of at most max_iters linearizations.
+MixedSLCPConfig make_pendulum_config(double dt, unsigned max_iters, double length_tol) {
+  MixedSLCPConfig cfg;
+  cfg.inner_lcp_config.dt = dt;
+  cfg.inner_lcp_config.viscosity = 1.0;
+  cfg.inner_lcp_config.max_cg_iters = 200;
+  cfg.inner_lcp_config.cg_tol = kPendulumCgTol;
+  cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
+  cfg.max_iters = max_iters;
+  cfg.length_tol = length_tol;
+  cfg.angle_tol = length_tol;
+  return cfg;
+}
+
+/// \brief A sphere held by a fixed length from an anchored sphere, stepped num_steps times at dt = h tau.
+///
+/// The bob, at L = kPendulumArm under a constant force f, turns in the plane normal to its axis, where its mobility is
+/// m I, so tau = L / (m f). Its constraint error is |r| - L.
+PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double length_tol) {
+  const double radius = 0.2, f = 0.5, L = kPendulumArm;
+  const double tau = L / (expected_inv_drag_perp(radius, 0.0, 1.0) * f);
 
   RodViews<HostExecSpace> rods(2);
   rods.center(0) = Vector3d{0.0, 0.0, 0.0};
-  rods.center(1) = Vector3d{L * std::sin(theta0), -L * std::cos(theta0), 0.0};
+  rods.center(1) = Vector3d{L * std::sin(kPendulumTheta0), -L * std::cos(kPendulumTheta0), 0.0};
   for (int i = 0; i < 2; ++i) {
     rods.orientation(i) = Quaterniond{1.0, 0.0, 0.0, 0.0};
     rods.radius(i) = radius;
@@ -2370,34 +2471,200 @@ TEST(Mbody, SlcpPendulumMatchesRadialProjection) {
   lengths.rod_i(0) = 0;
   lengths.rod_j(0) = 1;
   lengths.rest_length(0) = L;
-  const auto constraints = make_constraint_set(anchors, lengths);
 
-  MixedSLCPConfig cfg;
-  cfg.inner_lcp_config.dt = 0.1 * tau;
-  cfg.inner_lcp_config.viscosity = 1.0;
-  cfg.inner_lcp_config.max_cg_iters = 200;
-  cfg.inner_lcp_config.cg_tol = 1e-14;
-  cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
-  cfg.max_iters = 50;
-  cfg.length_tol = 1e-11;
-  cfg.angle_tol = 1e-11;
-
-  // Step
-  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
-  const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
+  const MixedSLCPConfig cfg = make_pendulum_config(h * tau, max_iters, length_tol);
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(make_constraint_set(anchors, lengths));
   const auto load_d = copy_load(rods_d);
-  const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, load_d);
-  deep_copy(rods, rods_d);
-  ASSERT_TRUE(result.converged) << result;
-  EXPECT_GE(result.num_iters, 2u) << "the first linearization leaves |r| - L at second order in the step";
 
-  // Radial projection
-  const double h = cfg.inner_lcp_config.dt / tau;
-  const double p_norm = L * std::sqrt(1.0 + 2.0 * h * std::cos(theta0) + h * h);
-  const Vector3d r = rods.center(1) - rods.center(0);
-  EXPECT_NEAR(norm(r), L, cfg.length_tol);
-  EXPECT_NEAR(std::atan2(r[0], -r[1]), std::atan2(std::sin(theta0), std::cos(theta0) + h),
-              std::sqrt(2.0) * cfg.length_tol / p_norm);
+  PendulumRun run{{kPendulumTheta0}, {}, {}};
+  for (int step = 0; step < num_steps; ++step) {
+    run.results.push_back(step_rods(rods_d, constraints_d, cfg, load_d));
+    deep_copy(rods, rods_d);
+    const Vector3d r = rods.center(1) - rods.center(0);
+    run.theta.push_back(std::atan2(r[0], -r[1]));
+    run.constraint_error.push_back(norm(r) - L);
+  }
+  return run;
+}
+
+/// \brief A rod pinned at one end to an anchored sphere, stepped num_steps times at dt = h tau.
+///
+/// The rod, of half length a = kPendulumArm under a constant force f at its center, turns about its pinned end in the
+/// plane of its axis and the force, so tau = (m_perp + m_rot a^2) / (a m_perp m_rot f); theta is the angle of its
+/// axis. Its constraint error is the distance between the pinned points.
+PendulumRun run_rod_pendulum(double h, int num_steps, unsigned max_iters, double length_tol) {
+  const double radius = 0.1, f = 1.0, a = kPendulumArm;
+  const double m_perp = expected_inv_drag_perp(radius, 2.0 * a, 1.0);
+  const double m_rot = expected_inv_drag_rot(radius, 2.0 * a, 1.0);
+  const double tau = (m_perp + m_rot * a * a) / (a * m_perp * m_rot * f);
+  const Vector3d axis_body{0.0, 0.0, 1.0};
+
+  RodViews<HostExecSpace> rods(2);
+  rods.center(0) = Vector3d{0.0, 0.0, 0.0};
+  rods.orientation(0) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+  rods.radius(0) = radius;
+  rods.length(0) = 0.0;
+  rods.center(1) = Vector3d{a * std::sin(kPendulumTheta0), -a * std::cos(kPendulumTheta0), 0.0};
+  rods.orientation(1) = axis_angle_to_quaternion(Vector3d{std::cos(kPendulumTheta0), std::sin(kPendulumTheta0), 0.0},
+                                                 Kokkos::numbers::pi_v<double> / 2.0);  // axis from pivot to center
+  rods.radius(1) = radius;
+  rods.length(1) = 2.0 * a;
+  zero_rod_state(rods);
+  rods.force(1) = Vector3d{0.0, -f, 0.0};
+
+  FixedPositionViews<HostExecSpace> anchors(1);
+  set_fixed_position(anchors, 0, /*rod=*/0, Vector3d{0.0, 0.0, 0.0});
+  PinViews<HostExecSpace> pins(1);
+  pins.rod_i(0) = 0;
+  pins.rod_j(0) = 1;
+  pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.0};
+  pins.body_offset_j(0) = -a * axis_body;
+
+  const MixedSLCPConfig cfg = make_pendulum_config(h * tau, max_iters, length_tol);
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(make_constraint_set(anchors, pins));
+  const auto load_d = copy_load(rods_d);
+
+  PendulumRun run{{kPendulumTheta0}, {}, {}};
+  for (int step = 0; step < num_steps; ++step) {
+    run.results.push_back(step_rods(rods_d, constraints_d, cfg, load_d));
+    deep_copy(rods, rods_d);
+    const Vector3d t = rods.orientation(1) * axis_body;
+    run.theta.push_back(std::atan2(t[0], -t[1]));
+    run.constraint_error.push_back(norm(rods.center(1) - a * t - rods.center(0)));
+  }
+  return run;
+}
+
+/// \brief The two realizations of a pendulum.
+enum class Pendulum { BOB, PINNED_ROD };
+
+/// \brief A realization's name, for failure messages.
+const char* pendulum_name(Pendulum pendulum) {
+  return pendulum == Pendulum::BOB ? "bob" : "pinned rod";
+}
+
+/// \brief A pendulum of either realization, stepped num_steps times at dt = h tau.
+PendulumRun run_pendulum(Pendulum pendulum, double h, int num_steps, unsigned max_iters, double length_tol) {
+  return pendulum == Pendulum::BOB ? run_bob_pendulum(h, num_steps, max_iters, length_tol)
+                                   : run_rod_pendulum(h, num_steps, max_iters, length_tol);
+}
+
+// For the bob, with h = dt / tau, both step maps are exact. A single linearization moves it along the tangent at the
+// start of the step, and a converged sequence ends where the constraint holds with its force directed along it there:
+//   single:   theta' = theta - atan(h sin theta),          |r'| = L sqrt(1 + h^2 sin^2 theta)
+//   sequence: tan theta' = sin theta / (cos theta + h),    |r'| = L
+// The single step's Schur residual, at most cg_tol in length, bounds each linearized row at the end of the step, so the
+// bob and the anchored sphere each sit within cg_tol of it. An accepted sequence's force direction changes the step by
+// at most sqrt(2) length_tol in the plane, which turns the bob by at most sqrt(2) length_tol / |r + dt m F|.
+//
+// At h = 5, |r + dt m F| >= (h - 1) L, so the sequence would contract at a rate |L - |r + dt m F|| / L >= 3: it stops
+// early, and the step is the single linearization.
+TEST(Mbody, PendulumBobStepsFollowExactMaps) {
+  const double h = 0.1, L = kPendulumArm, length_tol = 1e-11;
+  const int num_steps = 10;
+
+  // Single linearization
+  const PendulumRun single = run_bob_pendulum(h, num_steps, /*max_iters=*/1, length_tol);
+  for (int k = 0; k < num_steps; ++k) {
+    const double theta = single.theta[k];
+    EXPECT_TRUE(lcp_converged(single.results[k])) << single.results[k] << " at step " << k;
+    EXPECT_NEAR(single.theta[k + 1], theta - std::atan(h * std::sin(theta)), 2.0 * kPendulumCgTol / L) << "step " << k;
+    EXPECT_NEAR(single.constraint_error[k], L * std::sqrt(1.0 + h * h * std::sin(theta) * std::sin(theta)) - L,
+                2.0 * kPendulumCgTol)
+        << "step " << k;
+  }
+
+  // Sequence
+  const PendulumRun sequence = run_bob_pendulum(h, num_steps, /*max_iters=*/50, length_tol);
+  for (int k = 0; k < num_steps; ++k) {
+    const double theta = sequence.theta[k];
+    const double p_norm = L * std::sqrt(1.0 + 2.0 * h * std::cos(theta) + h * h);
+    ASSERT_TRUE(sequence.results[k].converged) << sequence.results[k] << " at step " << k;
+    EXPECT_GE(sequence.results[k].num_iters, 2u) << "step " << k;
+    EXPECT_LE(std::abs(sequence.constraint_error[k]), length_tol) << "step " << k;
+    EXPECT_NEAR(sequence.theta[k + 1], std::atan2(std::sin(theta), std::cos(theta) + h),
+                std::sqrt(2.0) * length_tol / p_norm)
+        << "step " << k;
+  }
+
+  // Beyond the convergence regime
+  const double h_beyond = 5.0;
+  const PendulumRun beyond = run_bob_pendulum(h_beyond, 12, /*max_iters=*/50, length_tol);
+  for (size_t k = 0; k < beyond.results.size(); ++k) {
+    const double theta = beyond.theta[k];
+    EXPECT_TRUE(lcp_converged(beyond.results[k])) << beyond.results[k] << " at step " << k;
+    EXPECT_NEAR(beyond.theta[k + 1], theta - std::atan(h_beyond * std::sin(theta)), 2.0 * kPendulumCgTol / L)
+        << "step " << k;
+  }
+}
+
+// A pendulum under a constant force follows d theta/dt = -sin(theta) / tau, so theta(T) = 2 atan(tan(theta0 / 2) e^-T)
+// with T in units of tau, in two realizations: a bob on a fixed length and a rod pinned at one end, which also turns
+// (see run_bob_pendulum and run_rod_pendulum). A single linearization moves the loaded point along the tangent at the
+// start of the step, forward Euler on theta to second order in the step; a converged sequence ends where the constraint
+// holds with its force directed along it there, backward Euler to second order.
+//
+// The first-order error coefficients c = (theta_N - theta(T)) / h of the two schemes tend to -E and +E, with
+// E = sin(theta(T)) ln(sin theta0 / sin theta(T)) / 2, for either realization. Richardson extrapolation 2 c(2N) - c(N)
+// removes the O(h) term of c, so in the asymptotic range what remains is below |c(N) - c(2N)|; a per-step angle error
+// delta adds at most 9 N^2 delta / T.
+TEST(Mbody, PendulumRefinesToEulerErrorCoefficients) {
+  const double T = 1.5;
+  const double theta_T = 2.0 * std::atan(std::tan(kPendulumTheta0 / 2.0) * std::exp(-T));
+  const double E = 0.5 * std::sin(theta_T) * std::log(std::sin(kPendulumTheta0) / std::sin(theta_T));
+  const double length_tol = 1e-12;
+  const int num_steps[3] = {200, 400, 800};
+
+  for (const Pendulum pendulum : {Pendulum::BOB, Pendulum::PINNED_ROD}) {
+    for (const unsigned max_iters : {1u, 50u}) {
+      const bool sequence = max_iters > 1;
+
+      // Every step at every level
+      double coefficient[3];
+      for (int level = 0; level < 3; ++level) {
+        const double h = T / num_steps[level];
+        const PendulumRun run = run_pendulum(pendulum, h, num_steps[level], max_iters, length_tol);
+        coefficient[level] = (run.theta.back() - theta_T) / h;
+        for (size_t k = 0; k < run.results.size(); ++k) {
+          ASSERT_TRUE(lcp_converged(run.results[k])) << run.results[k] << " for the " << pendulum_name(pendulum)
+                                                     << " at N=" << num_steps[level] << " step " << k;
+          if (sequence) {
+            ASSERT_TRUE(run.results[k].converged) << run.results[k] << " for the " << pendulum_name(pendulum)
+                                                  << " at N=" << num_steps[level] << " step " << k;
+            EXPECT_LE(std::abs(run.constraint_error[k]), length_tol)
+                << "for the " << pendulum_name(pendulum) << " at N=" << num_steps[level] << " step " << k;
+          }
+        }
+      }
+
+      // Refinement
+      const double delta = sequence ? std::sqrt(2.0) * length_tol / kPendulumArm : 2.0 * kPendulumCgTol / kPendulumArm;
+      for (int level = 0; level + 1 < 3; ++level) {
+        const double n = num_steps[level];
+        const double richardson = 2.0 * coefficient[level + 1] - coefficient[level];
+        EXPECT_NEAR(richardson, sequence ? E : -E,
+                    std::abs(coefficient[level] - coefficient[level + 1]) + 9.0 * n * n * delta / T)
+            << "N=" << num_steps[level] << " for the " << pendulum_name(pendulum) << " at max_iters=" << max_iters;
+      }
+    }
+  }
+}
+
+// Beyond the convergence regime, at h = 5, each realization's sequence stops before max_iters once its contraction
+// predicts it cannot converge, and returns its first linearization unconverged.
+TEST(Mbody, PendulumSequencesStopEarlyBeyondConvergence) {
+  const double h = 5.0, length_tol = 1e-12;
+  const unsigned max_iters = 50;
+  for (const Pendulum pendulum : {Pendulum::BOB, Pendulum::PINNED_ROD}) {
+    const PendulumRun run = run_pendulum(pendulum, h, 12, max_iters, length_tol);
+    for (size_t k = 0; k < run.results.size(); ++k) {
+      EXPECT_TRUE(lcp_converged(run.results[k])) << run.results[k] << " for the " << pendulum_name(pendulum);
+      EXPECT_FALSE(run.results[k].converged) << "for the " << pendulum_name(pendulum) << " at step " << k;
+      EXPECT_LT(run.results[k].num_iters, max_iters) << "for the " << pendulum_name(pendulum) << " at step " << k;
+    }
+  }
 }
 
 /// \brief The largest |psi + K^-1 lambda| over family's rows at rods' configuration, over its length rows and angle
@@ -2428,120 +2695,90 @@ impl::LengthAngleMax constitutive_residual(const RodViews<Space>& rods, const Fa
   return impl::LengthAngleMax{Kokkos::max(length_max, 0.0), Kokkos::max(angle_max, 0.0)};
 }
 
-// Three rods clamped at the bottom end of the first by a rigid pose anchor and pinned end to end, under a tip force and
-// torque. Rotating the rods moves the pinned points at second order in the step, which a single linearization leaves
-// as a pin violation; at the end of an accepted SLCP step every pin and pose row is within its tolerance.
-TEST(Mbody, SlcpHoldsRigidConstraintsAtStepEnd) {
-  constexpr size_t kNumRods = 3;
+// Every bilateral family, rigid and compliant, in two groups of rods joined by nothing, under forces and torques, with
+// the families passed out of packing order. Rods 0-2 are clamped at the bottom end of the first by a rigid pose anchor
+// and pinned end to end, and sphere 3 hangs from the top of rod 2 by a fixed length. Rods 4-7 carry a spring of each
+// kind and compliant position and pose anchors, all preloaded. Turning the rods moves the attached points at second
+// order in the step, so a single linearization leaves the pins open and the linear spring off its law; at the end of an
+// accepted SLCP step every row follows its constitutive law, psi + K^-1 lambda = 0, to within its tolerance.
+TEST(Mbody, SlcpHoldsBilateralRowsAtStepEnd) {
+  constexpr size_t kNumRods = 8;
   const Vector3d tilt_axis{0.6, 0.8, 0.0};
-  const double tilts[kNumRods] = {0.0, 0.3, -0.4};
   const Vector3d half{0.0, 0.0, 0.5};
-
   RodViews<HostExecSpace> rods(kNumRods);
-  Vector3d bottom{0.0, 0.0, 0.0};
   for (size_t k = 0; k < kNumRods; ++k) {
-    const Quaterniond orientation = axis_angle_to_quaternion(tilt_axis, tilts[k]);
-    rods.orientation(k) = orientation;
-    rods.center(k) = bottom + orientation * half;
     rods.radius(k) = 0.2;
     rods.length(k) = 1.0;
+  }
+
+  // Rigid group: rods 0-2 pinned end to end above the clamp, sphere 3 hung from the top of rod 2
+  const double rigid_tilts[3] = {0.0, 0.3, -0.4};
+  Vector3d bottom{0.0, 0.0, 0.0};
+  for (size_t k = 0; k < 3; ++k) {
+    const Quaterniond orientation = axis_angle_to_quaternion(tilt_axis, rigid_tilts[k]);
+    rods.orientation(k) = orientation;
+    rods.center(k) = bottom + orientation * half;
     bottom = Vector3d(rods.center(k)) + orientation * half;
   }
-  zero_rod_state(rods);
-  rods.force(kNumRods - 1) = Vector3d{0.4, -0.2, 0.1};
-  rods.torque(kNumRods - 1) = Vector3d{0.05, 0.1, -0.08};
+  rods.center(3) = bottom + Vector3d{0.3, 0.0, 0.4};
+  rods.orientation(3) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+  rods.length(3) = 0.0;
 
-  PinViews<HostExecSpace> pins(kNumRods - 1);
-  for (size_t k = 0; k + 1 < kNumRods; ++k) {
+  // Compliant group: rods 4-7, away from the rigid group
+  const double compliant_tilts[4] = {0.0, 0.3, -0.4, 0.2};
+  const Vector3d centers[4] = {{4.0, 0.0, 0.0}, {4.1, 0.0, 1.2}, {4.3, 0.1, 2.4}, {4.2, 0.4, 3.5}};
+  for (size_t k = 0; k < 4; ++k) {
+    rods.center(4 + k) = centers[k];
+    rods.orientation(4 + k) = axis_angle_to_quaternion(tilt_axis, compliant_tilts[k]);
+  }
+
+  zero_rod_state(rods);
+  rods.force(2) = Vector3d{0.4, -0.2, 0.1};
+  rods.torque(2) = Vector3d{0.05, 0.1, -0.08};
+  rods.force(3) = Vector3d{0.1, 0.2, -0.3};
+  rods.force(7) = Vector3d{0.3, -0.25, 0.1};
+  rods.torque(6) = Vector3d{0.04, -0.06, 0.05};
+
+  PinViews<HostExecSpace> pins(2);
+  for (size_t k = 0; k < 2; ++k) {
     pins.rod_i(k) = static_cast<int>(k);
     pins.rod_j(k) = static_cast<int>(k + 1);
     pins.body_offset_i(k) = half;
     pins.body_offset_j(k) = -half;
   }
-  FixedPoseViews<HostExecSpace> clamp(1);
-  set_fixed_pose(clamp, 0, /*rod=*/0, Vector3d{0.0, 0.0, 0.0}, Quaterniond(rods.orientation(0)), -half);
-  const auto constraints = make_constraint_set(pins, clamp);
-
-  MixedSLCPConfig cfg;
-  cfg.inner_lcp_config.dt = 0.5;
-  cfg.inner_lcp_config.viscosity = 1.0;
-  cfg.inner_lcp_config.max_cg_iters = 500;
-  cfg.inner_lcp_config.cg_tol = 1e-13;
-  cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
-  cfg.max_iters = 50;
-  cfg.length_tol = 1e-8;
-  cfg.angle_tol = 1e-8;
-
-  // Step
-  const auto rods_d = copy_to<TestExecSpace>(rods);
-  const auto constraints_d = copy_to<TestExecSpace>(constraints);
-  const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, copy_load(rods_d));
-  ASSERT_TRUE(result.converged) << result;
-  EXPECT_GE(result.num_iters, 2u);
-
-  // Every row at the end of the step
-  const impl::LengthAngleMax pin_residual = constitutive_residual(rods_d, get<PinViews<TestExecSpace>>(constraints_d));
-  const impl::LengthAngleMax clamp_residual =
-      constitutive_residual(rods_d, get<FixedPoseViews<TestExecSpace>>(constraints_d));
-  EXPECT_LE(pin_residual.length, cfg.length_tol);
-  EXPECT_LE(clamp_residual.length, cfg.length_tol);
-  EXPECT_LE(clamp_residual.angle, cfg.angle_tol);
-
-  // A single linearization of the same step leaves the pins open
-  const auto lcp_rods_d = copy_to<TestExecSpace>(rods);
-  const auto lcp_constraints_d = copy_to<TestExecSpace>(constraints);
-  ASSERT_TRUE(step_rods(lcp_rods_d, lcp_constraints_d, cfg.inner_lcp_config, copy_load(lcp_rods_d)).converged);
-  EXPECT_GT(constitutive_residual(lcp_rods_d, get<PinViews<TestExecSpace>>(lcp_constraints_d)).length,
-            100.0 * cfg.length_tol);
-}
-
-// A spring of each kind and compliant position and pose anchors, all preloaded, under a force and a torque, with the
-// families passed out of packing order. At the end of an accepted SLCP step each row follows its constitutive law,
-// psi + K^-1 lambda = 0, to within its tolerance; a single linearization of the same step does not.
-TEST(Mbody, SlcpHoldsCompliantConstraintsAtStepEnd) {
-  constexpr size_t kNumRods = 4;
-  const Vector3d tilt_axis{0.6, 0.8, 0.0};
-  const double tilts[kNumRods] = {0.0, 0.3, -0.4, 0.2};
-  const Vector3d centers[kNumRods] = {{0.0, 0.0, 0.0}, {0.1, 0.0, 1.2}, {0.3, 0.1, 2.4}, {0.2, 0.4, 3.5}};
-  const Vector3d half{0.0, 0.0, 0.5};
-
-  RodViews<HostExecSpace> rods(kNumRods);
-  for (size_t k = 0; k < kNumRods; ++k) {
-    rods.center(k) = centers[k];
-    rods.orientation(k) = axis_angle_to_quaternion(tilt_axis, tilts[k]);
-    rods.radius(k) = 0.2;
-    rods.length(k) = 1.0;
-  }
-  zero_rod_state(rods);
-  rods.force(3) = Vector3d{0.3, -0.25, 0.1};
-  rods.torque(2) = Vector3d{0.04, -0.06, 0.05};
-
+  FixedLengthViews<HostExecSpace> lengths(1);
+  lengths.rod_i(0) = 2;
+  lengths.rod_j(0) = 3;
+  lengths.body_offset_i(0) = half;
+  lengths.body_offset_j(0) = Vector3d{0.0, 0.0, 0.0};
+  lengths.rest_length(0) = 0.5;
   LinearSpringViews<HostExecSpace> lin_springs(1);
-  lin_springs.rod_i(0) = 0;
-  lin_springs.rod_j(0) = 1;
+  lin_springs.rod_i(0) = 4;
+  lin_springs.rod_j(0) = 5;
   lin_springs.rest_length(0) = 1.1;
   lin_springs.spring_constant(0) = 4.0;
   AngularSpringViews<HostExecSpace> ang_springs(1);
-  ang_springs.rod_i(0) = 1;
-  ang_springs.rod_j(0) = 2;
+  ang_springs.rod_i(0) = 5;
+  ang_springs.rod_j(0) = 6;
   ang_springs.rest_angle(0) = 0.5;
   ang_springs.spring_constant(0) = 3.0;
   TriplePointAngularSpringViews<HostExecSpace> triple_springs(1);
-  triple_springs.rod_i(0) = 1;
-  triple_springs.rod_j(0) = 3;
-  triple_springs.rod_k(0) = 2;
+  triple_springs.rod_i(0) = 5;
+  triple_springs.rod_j(0) = 7;
+  triple_springs.rod_k(0) = 6;
   triple_springs.rest_angle(0) = minor_angle(centers[1] - centers[2], centers[3] - centers[2]) - 0.2;
   triple_springs.spring_constant(0) = 2.0;
   FixedPositionViews<HostExecSpace> position_anchors(1);
-  set_fixed_position(position_anchors, 0, /*rod=*/3, centers[3] + rods.orientation(3) * half + Vector3d{0.05, 0.0, 0.0},
+  set_fixed_position(position_anchors, 0, /*rod=*/7, centers[3] + rods.orientation(7) * half + Vector3d{0.05, 0.0, 0.0},
                      half, /*compliance=*/Vector3d{0.02, 0.03, 0.01});
-  FixedPoseViews<HostExecSpace> pose_anchors(1);
-  set_fixed_pose(pose_anchors, 0, /*rod=*/0, centers[0] - rods.orientation(0) * half,
-                 axis_angle_to_quaternion(Vector3d{0.0, 0.0, 1.0}, 0.1) * Quaterniond(rods.orientation(0)), -half,
+  FixedPoseViews<HostExecSpace> pose_anchors(2);
+  set_fixed_pose(pose_anchors, 0, /*rod=*/0, Vector3d{0.0, 0.0, 0.0}, Quaterniond(rods.orientation(0)), -half);
+  set_fixed_pose(pose_anchors, 1, /*rod=*/4, centers[0] - rods.orientation(4) * half,
+                 axis_angle_to_quaternion(Vector3d{0.0, 0.0, 1.0}, 0.1) * Quaterniond(rods.orientation(4)), -half,
                  /*position_compliance=*/Vector3d{0.01, 0.02, 0.015},
                  /*orientation_compliance=*/Vector3d{0.03, 0.02, 0.04});
   const auto constraints =
-      make_constraint_set(pose_anchors, triple_springs, lin_springs, position_anchors, ang_springs);
+      make_constraint_set(pose_anchors, triple_springs, pins, lin_springs, position_anchors, lengths, ang_springs);
 
   MixedSLCPConfig cfg;
   cfg.inner_lcp_config.dt = 0.5;
@@ -2549,41 +2786,49 @@ TEST(Mbody, SlcpHoldsCompliantConstraintsAtStepEnd) {
   cfg.inner_lcp_config.max_cg_iters = 500;
   cfg.inner_lcp_config.cg_tol = 1e-13;
   cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
-  cfg.max_iters = 50;
   cfg.length_tol = 1e-8;
   cfg.angle_tol = 1e-8;
 
-  // Step
-  const auto rods_d = copy_to<TestExecSpace>(rods);
-  const auto constraints_d = copy_to<TestExecSpace>(constraints);
-  const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, copy_load(rods_d));
-  ASSERT_TRUE(result.converged) << result;
-  EXPECT_GE(result.num_iters, 2u);
+  for (const unsigned max_iters : {1u, 50u}) {
+    cfg.max_iters = max_iters;
 
-  // Every row at the end of the step
-  const impl::LengthAngleMax lin_residual =
-      constitutive_residual(rods_d, get<LinearSpringViews<TestExecSpace>>(constraints_d));
-  const impl::LengthAngleMax ang_residual =
-      constitutive_residual(rods_d, get<AngularSpringViews<TestExecSpace>>(constraints_d));
-  const impl::LengthAngleMax triple_residual =
-      constitutive_residual(rods_d, get<TriplePointAngularSpringViews<TestExecSpace>>(constraints_d));
-  const impl::LengthAngleMax position_residual =
-      constitutive_residual(rods_d, get<FixedPositionViews<TestExecSpace>>(constraints_d));
-  const impl::LengthAngleMax pose_residual =
-      constitutive_residual(rods_d, get<FixedPoseViews<TestExecSpace>>(constraints_d));
-  EXPECT_LE(lin_residual.length, cfg.length_tol);
-  EXPECT_LE(ang_residual.angle, cfg.angle_tol);
-  EXPECT_LE(triple_residual.angle, cfg.angle_tol);
-  EXPECT_LE(position_residual.length, cfg.length_tol);
-  EXPECT_LE(pose_residual.length, cfg.length_tol);
-  EXPECT_LE(pose_residual.angle, cfg.angle_tol);
+    // Step
+    const auto rods_d = copy_to<TestExecSpace>(rods);
+    const auto constraints_d = copy_to<TestExecSpace>(constraints);
+    const MixedSLCPResult result = step_rods(rods_d, constraints_d, cfg, copy_load(rods_d));
+    ASSERT_TRUE(lcp_converged(result)) << result << " at max_iters=" << max_iters;
 
-  // A single linearization of the same step leaves the linear spring off its law
-  const auto lcp_rods_d = copy_to<TestExecSpace>(rods);
-  const auto lcp_constraints_d = copy_to<TestExecSpace>(constraints);
-  ASSERT_TRUE(step_rods(lcp_rods_d, lcp_constraints_d, cfg.inner_lcp_config, copy_load(lcp_rods_d)).converged);
-  EXPECT_GT(constitutive_residual(lcp_rods_d, get<LinearSpringViews<TestExecSpace>>(lcp_constraints_d)).length,
-            100.0 * cfg.length_tol);
+    // Every row at the end of the step
+    const impl::LengthAngleMax pin_residual =
+        constitutive_residual(rods_d, get<PinViews<TestExecSpace>>(constraints_d));
+    const impl::LengthAngleMax length_residual =
+        constitutive_residual(rods_d, get<FixedLengthViews<TestExecSpace>>(constraints_d));
+    const impl::LengthAngleMax lin_residual =
+        constitutive_residual(rods_d, get<LinearSpringViews<TestExecSpace>>(constraints_d));
+    const impl::LengthAngleMax ang_residual =
+        constitutive_residual(rods_d, get<AngularSpringViews<TestExecSpace>>(constraints_d));
+    const impl::LengthAngleMax triple_residual =
+        constitutive_residual(rods_d, get<TriplePointAngularSpringViews<TestExecSpace>>(constraints_d));
+    const impl::LengthAngleMax position_residual =
+        constitutive_residual(rods_d, get<FixedPositionViews<TestExecSpace>>(constraints_d));
+    const impl::LengthAngleMax pose_residual =
+        constitutive_residual(rods_d, get<FixedPoseViews<TestExecSpace>>(constraints_d));
+    if (max_iters > 1) {
+      ASSERT_TRUE(result.converged) << result;
+      EXPECT_GE(result.num_iters, 2u);
+      EXPECT_LE(pin_residual.length, cfg.length_tol);
+      EXPECT_LE(length_residual.length, cfg.length_tol);
+      EXPECT_LE(lin_residual.length, cfg.length_tol);
+      EXPECT_LE(ang_residual.angle, cfg.angle_tol);
+      EXPECT_LE(triple_residual.angle, cfg.angle_tol);
+      EXPECT_LE(position_residual.length, cfg.length_tol);
+      EXPECT_LE(pose_residual.length, cfg.length_tol);
+      EXPECT_LE(pose_residual.angle, cfg.angle_tol);
+    } else {
+      EXPECT_GT(pin_residual.length, 100.0 * cfg.length_tol);
+      EXPECT_GT(lin_residual.length, 100.0 * cfg.length_tol);
+    }
+  }
 }
 
 //@}
@@ -2662,7 +2907,7 @@ TEST(Mbody, ChainAxialStiffnessConvergesWithSegmentCount) {
 /// A bend angle has no gradient at straight, so J is taken on a shallow arc of amplitude pre_bend, which the answer
 /// does not depend on. With the arc in the y-z plane the bend axis is x, so the y-displacements decouple exactly.
 ///
-/// CantileverSettlesToStaticBend checks that solve_mixed_lcp() settles to this equilibrium.
+/// CantileverSettlesToStaticBend checks that stepping settles to this equilibrium.
 std::vector<double> solve_static_bend(size_t num_spheres, double spacing, double k_ang, size_t first_free,
                                       const std::vector<double>& f_ext, double pre_bend = 1e-6) {
   BendChain chain = make_bend_chain(num_spheres, spacing, k_ang);
@@ -2765,13 +3010,15 @@ TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
   EXPECT_NEAR(finest_scaled_error, 2.0, 1e-4);
 }
 
-/// \brief A cantilever chain in rods 0 to num_segments + 1 of num_rods rods.
+/// \brief A cantilever chain in rods 0 to num_segments + 1 of num_rods rods, joined by links of family Link.
 ///
-/// Linear springs join neighbours and a bend spring sits at each interior rod; callers hold rods 0 and 1 as the wall
-/// and set any rods past the chain. The free rods start on a shallow arc so every bend angle has a gradient on the
-/// first step, and the settled state does not depend on it.
-SolveInput<LinearSpringViews<HostExecSpace>, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(
-    size_t num_segments, double L, double EI, size_t num_rods) {
+/// Links join neighbours from rod 1 on and a bend spring sits at each interior rod; callers hold rods 0 and 1 as the
+/// wall, which a link between them could only duplicate, and set any rods past the chain. Linear-spring links are
+/// stiff, k = 1e5 / spacing^2; fixed-length links are rigid. The free rods start on a shallow arc so every bend angle
+/// has a gradient on the first step, and the settled state does not depend on it.
+template <typename Link>
+SolveInput<Link, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(size_t num_segments, double L, double EI,
+                                                                               size_t num_rods) {
   const double spacing = L / static_cast<double>(num_segments);
   const size_t num_chain = num_segments + 2;
   MUNDY_THROW_REQUIRE(num_rods >= num_chain, std::invalid_argument, "make_cantilever: num_rods must hold the chain.");
@@ -2788,12 +3035,14 @@ SolveInput<LinearSpringViews<HostExecSpace>, TriplePointAngularSpringViews<HostE
   }
   zero_rod_state(rods);
 
-  LinearSpringViews<HostExecSpace> lin_springs(num_chain - 1);
-  for (size_t k = 0; k + 1 < num_chain; ++k) {
-    lin_springs.rod_i(k) = static_cast<int>(k);
-    lin_springs.rod_j(k) = static_cast<int>(k + 1);
-    lin_springs.rest_length(k) = spacing;
-    lin_springs.spring_constant(k) = 1.0e5 / (spacing * spacing);  // effectively inextensible
+  Link links(num_chain - 2);
+  for (size_t k = 1; k + 1 < num_chain; ++k) {
+    links.rod_i(k - 1) = static_cast<int>(k);
+    links.rod_j(k - 1) = static_cast<int>(k + 1);
+    links.rest_length(k - 1) = spacing;
+    if constexpr (std::is_same_v<Link, LinearSpringViews<HostExecSpace>>) {
+      links.spring_constant(k - 1) = 1.0e5 / (spacing * spacing);
+    }
   }
 
   MixedLCPConfig cfg;
@@ -2802,7 +3051,7 @@ SolveInput<LinearSpringViews<HostExecSpace>, TriplePointAngularSpringViews<HostE
   // Tight enough that solver error sits far below the settled chain's geometric nonlinearity.
   cfg.cg_tol = 1e-14;
   cfg.outer_tol = 1e-12;
-  return {rods, make_constraint_set(lin_springs, chain.springs), cfg};
+  return {rods, make_constraint_set(links, chain.springs), cfg};
 }
 
 /// \brief The settled state of a cantilever under a tip load.
@@ -2811,25 +3060,30 @@ struct SettledCantilever {
   std::vector<double> displacement;  // transverse, of the free rods 2 to num_segments + 1
 };
 
-/// \brief A cantilever settled under a transverse tip load.
-SettledCantilever run_settled_cantilever(size_t num_segments, double L, double EI, double tip_force, double dt) {
+/// \brief A cantilever with links of family Link settled under a transverse tip load.
+///
+/// Each step is a sequence of at most max_iters linearizations.
+template <typename Link>
+SettledCantilever run_settled_cantilever(size_t num_segments, double L, double EI, double tip_force, double dt,
+                                         unsigned max_iters) {
   const size_t num_chain = num_segments + 2;
   const int tip = static_cast<int>(num_chain - 1);
-  auto p = make_cantilever(num_segments, L, EI, num_chain);
+  auto p = make_cantilever<Link>(num_segments, L, EI, num_chain);
   p.rods.force(tip) = Vector3d{0.0, tip_force, 0.0};
 
   FixedPositionViews<HostExecSpace> wall(2);
   set_fixed_position(wall, 0, /*rod=*/0, Vector3d(p.rods.center(0)));
   set_fixed_position(wall, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
-  const auto constraints = make_constraint_set(get<LinearSpringViews<HostExecSpace>>(p.constraints),
+  const auto constraints = make_constraint_set(get<Link>(p.constraints),
                                                get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), wall);
   p.cfg.dt = dt;
+  const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
   SettledCantilever result;
-  result.settled = step_until_settled(rods_d, constraints_d, p.cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
+  result.settled = step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
   deep_copy(p.rods, rods_d);
 
   for (size_t k = 2; k < num_chain; ++k) {
@@ -2838,22 +3092,33 @@ SettledCantilever run_settled_cantilever(size_t num_segments, double L, double E
   return result;
 }
 
-// Without contacts, the settled chain is the static equilibrium solve_static_bend computes. Every free sphere's
-// deflection matches it up to solve_mixed_lcp()'s nonlinear geometry, which at this load moves the deflection by about
-// 3e-5 of the tip's, shrinking as P^2.
+// Without contacts, the settled chain is the static equilibrium solve_static_bend computes, with stiff-spring or rigid
+// links and for either sequence length: a settled step does not move the rods, so every linearization is at the same
+// configuration. Every free sphere's deflection matches it up to the chain's nonlinear geometry, which at this load
+// moves the deflection by about 3e-5 of the tip's, shrinking as P^2.
 TEST(Mbody, CantileverSettlesToStaticBend) {
   const double L = 8.0, EI = 5.0, tip_force = 1e-3;
+  const char* const link_names[2] = {"stiff springs", "fixed lengths"};
   for (const size_t num_segments : {4, 8, 16}) {
     const double spacing = L / static_cast<double>(num_segments);
     std::vector<double> f_ext(num_segments, 0.0);
     f_ext.back() = tip_force;
     const std::vector<double> expected = solve_static_bend(num_segments + 2, spacing, EI / spacing, 2, f_ext);
-    const SettledCantilever r = run_settled_cantilever(num_segments, L, EI, tip_force, /*dt=*/100.0);
 
-    ASSERT_TRUE(r.settled) << "num_segments=" << num_segments;
-    for (size_t k = 0; k < expected.size(); ++k) {
-      EXPECT_NEAR(r.displacement[k], expected[k], 1e-4 * expected.back())
-          << "free sphere " << k << " at num_segments=" << num_segments;
+    for (const unsigned max_iters : {1u, 50u}) {
+      const SettledCantilever by_link[2] = {run_settled_cantilever<LinearSpringViews<HostExecSpace>>(
+                                                num_segments, L, EI, tip_force, /*dt=*/100.0, max_iters),
+                                            run_settled_cantilever<FixedLengthViews<HostExecSpace>>(
+                                                num_segments, L, EI, tip_force, /*dt=*/100.0, max_iters)};
+      for (int link = 0; link < 2; ++link) {
+        const SettledCantilever& r = by_link[link];
+        ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
+        for (size_t k = 0; k < expected.size(); ++k) {
+          EXPECT_NEAR(r.displacement[k], expected[k], 1e-4 * expected.back())
+              << "free sphere " << k << " with " << link_names[link] << " at num_segments=" << num_segments
+              << " max_iters=" << max_iters;
+        }
+      }
     }
   }
 }
@@ -2865,13 +3130,17 @@ struct ProppedCantilever {
   double tip_gap;
 };
 
-/// \brief A cantilever whose tip rests on an anchored sphere, settled under a midspan load.
-ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double EI, double load, double dt) {
+/// \brief A cantilever with links of family Link whose tip rests on an anchored sphere, settled under a midspan load.
+///
+/// Each step is a sequence of at most max_iters linearizations.
+template <typename Link>
+ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double EI, double load, double dt,
+                                         unsigned max_iters) {
   const size_t num_chain = num_segments + 2;
   const int midspan = static_cast<int>(num_segments / 2 + 1);
   const int tip = static_cast<int>(num_chain - 1);
   const int obstacle = static_cast<int>(num_chain);
-  auto p = make_cantilever(num_segments, L, EI, num_chain + 1);
+  auto p = make_cantilever<Link>(num_segments, L, EI, num_chain + 1);
 
   const double radius = p.rods.radius(0);
   p.rods.center(obstacle) = Vector3d{0.0, -2.0 * radius, p.rods.center(tip)[2]};  // touches the straight tip
@@ -2887,16 +3156,16 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
   ContactViews<HostExecSpace> contacts(1);
   contacts.rod_i(0) = tip;
   contacts.rod_j(0) = obstacle;
-  const auto constraints =
-      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(p.constraints),
-                          get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), anchors, contacts);
+  const auto constraints = make_constraint_set(
+      get<Link>(p.constraints), get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), anchors, contacts);
   p.cfg.dt = dt;
+  const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
   const bool settled =
-      step_until_settled(rods_d, constraints_d, p.cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
+      step_until_settled(rods_d, constraints_d, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
   deep_copy(p.rods, rods_d);
   deep_copy(constraints, constraints_d);
 
@@ -2909,28 +3178,41 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
 //
 //   R_N = P (N+2)(5N+2) / (8 (N+1)(2N+1)),
 //
-// first order in the spacing toward Euler-Bernoulli's 5P/16. solve_mixed_lcp() keeps the chain's geometry nonlinear,
-// which at this load moves the reaction by at most about 1e-6 of itself, shrinking as P^2.
+// first order in the spacing toward Euler-Bernoulli's 5P/16, with stiff-spring or rigid links and for either sequence
+// length. The steps keep the chain's geometry nonlinear, which at this load moves the reaction by at most about 1e-6 of
+// itself, shrinking as P^2.
 TEST(Mbody, ProppedCantileverMatchesHenckyBarChain) {
   const double L = 8.0, EI = 5.0, load = 0.01;
   const double continuum = 5.0 * load / 16.0;
+  const char* const link_names[2] = {"stiff springs", "fixed lengths"};
 
-  double finest_scaled_error = 0.0;
-  double finest_scaled_error_expected = 0.0;
-  for (const size_t num_segments : {4, 8, 16, 32}) {
-    const double n = static_cast<double>(num_segments);
-    const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
-    const ProppedCantilever r = run_propped_cantilever(num_segments, L, EI, load, /*dt=*/100.0);
+  for (const unsigned max_iters : {1u, 50u}) {
+    for (int link = 0; link < 2; ++link) {
+      double finest_scaled_error = 0.0;
+      double finest_scaled_error_expected = 0.0;
+      for (const size_t num_segments : {4, 8, 16, 32}) {
+        const double n = static_cast<double>(num_segments);
+        const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
+        const ProppedCantilever r =
+            link == 0 ? run_propped_cantilever<LinearSpringViews<HostExecSpace>>(num_segments, L, EI, load,
+                                                                                 /*dt=*/100.0, max_iters)
+                      : run_propped_cantilever<FixedLengthViews<HostExecSpace>>(num_segments, L, EI, load,
+                                                                                /*dt=*/100.0, max_iters);
 
-    ASSERT_TRUE(r.settled) << "num_segments=" << num_segments;
-    EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky) << "num_segments=" << num_segments;
-    EXPECT_NEAR(r.tip_gap, 0.0, 1e-12) << "num_segments=" << num_segments;
-    finest_scaled_error = n * (r.contact_force - continuum) / continuum;
-    finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+        ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
+        EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky)
+            << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
+        EXPECT_NEAR(r.tip_gap, 0.0, 1e-12)
+            << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
+        finest_scaled_error = n * (r.contact_force - continuum) / continuum;
+        finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+      }
+
+      // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
+      EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4)
+          << link_names[link] << " at max_iters=" << max_iters;
+    }
   }
-
-  // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
-  EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4);
 }
 
 // The pre-bend must not reach the answer: amplitudes a decade apart agree on both boundary value problems.
