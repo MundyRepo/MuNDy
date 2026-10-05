@@ -59,6 +59,8 @@ namespace mundy {
 ///   x^* = argmin_{x in Omega} 0.5 x^T A x + q^T x
 /// where A is a symmetric positive semi-definite matrix, q is a vector, and Omega is a convex space.
 ///
+/// Symmetry makes A x + q the objective's gradient, and positive semi-definiteness makes the objective convex.
+///
 /// \tparam Backend The backend to use for operations (e.g., KokkosBackend, MundyMathBackend)
 template <typename Backend, typename LinearOp, typename QVector, ValidConvexSpace ConvexSpace,
           typename Workspace = impl::workspace_for_t<std::remove_cvref_t<LinearOp>>>
@@ -155,6 +157,9 @@ class MCQPP {
   using a_workspace_t = WorkspaceA;
   using l_workspace_t = WorkspaceL;
   using value_type = impl::vector_value_type<q_vector_t>;
+  using g_vector_t = decltype(Backend::make_vector_like(std::declval<const q_vector_t&>()));
+  using ax_vector_t = decltype(Backend::make_range_vector(std::declval<const std::remove_cvref_t<LinearOpA>&>()));
+  using lax_vector_t = decltype(Backend::make_range_vector(std::declval<const std::remove_cvref_t<LinearOpL>&>()));
 
   KOKKOS_INLINE_FUNCTION
   MCQPP(Backend, LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b, const space_t& space)
@@ -164,7 +169,10 @@ class MCQPP {
         f_b_(std::forward<FVector>(f_b)),
         space_(space),
         a_workspace_(impl::make_workspace(A_.get())),
-        l_workspace_(impl::make_workspace(L_.get())) {
+        l_workspace_(impl::make_workspace(L_.get())),
+        g_(Backend::make_vector_like(q_.get())),
+        ax_(Backend::make_range_vector(A_.get())),
+        lax_(Backend::make_range_vector(L_.get())) {
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -176,7 +184,26 @@ class MCQPP {
         f_b_(std::forward<FVector>(f_b)),
         space_(space),
         a_workspace_(std::move(a_workspace)),
-        l_workspace_(std::move(l_workspace)) {
+        l_workspace_(std::move(l_workspace)),
+        g_(Backend::make_vector_like(q_.get())),
+        ax_(Backend::make_range_vector(A_.get())),
+        lax_(Backend::make_range_vector(L_.get())) {
+  }
+
+  /// \brief A problem whose reduced CQPP is formed in the given storage: g and the reduced operator's A x and L A x.
+  KOKKOS_INLINE_FUNCTION
+  MCQPP(Backend, LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b, const space_t& space,
+        a_workspace_t a_workspace, l_workspace_t l_workspace, g_vector_t g, ax_vector_t ax, lax_vector_t lax)
+      : A_(std::forward<LinearOpA>(A)),
+        q_(std::forward<QVector>(q)),
+        L_(std::forward<LinearOpL>(L)),
+        f_b_(std::forward<FVector>(f_b)),
+        space_(space),
+        a_workspace_(std::move(a_workspace)),
+        l_workspace_(std::move(l_workspace)),
+        g_(std::move(g)),
+        ax_(std::move(ax)),
+        lax_(std::move(lax)) {
   }
 
   // Accessors — all const to preserve the problem definition
@@ -191,6 +218,10 @@ class MCQPP {
   /// types).
   KOKKOS_INLINE_FUNCTION a_workspace_t& a_workspace() const { return a_workspace_; }
   KOKKOS_INLINE_FUNCTION l_workspace_t& l_workspace() const { return l_workspace_; }
+  /// \brief Storage for the reduced CQPP's g and its operator's intermediates A x and L A x.
+  KOKKOS_INLINE_FUNCTION g_vector_t& g() const { return g_; }
+  KOKKOS_INLINE_FUNCTION ax_vector_t& ax() const { return ax_; }
+  KOKKOS_INLINE_FUNCTION lax_vector_t& lax() const { return lax_; }
   // clang-format on
 
  private:
@@ -201,6 +232,9 @@ class MCQPP {
   space_t space_;
   mutable a_workspace_t a_workspace_;
   mutable l_workspace_t l_workspace_;
+  mutable g_vector_t g_;
+  mutable ax_vector_t ax_;
+  mutable lax_vector_t lax_;
 };
 
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
@@ -225,6 +259,10 @@ class CongruentMCQPP {
   using d_workspace_t = WorkspaceD;
   using l_workspace_t = WorkspaceL;
   using value_type = impl::vector_value_type<q_vector_t>;
+  using g_vector_t = decltype(Backend::make_vector_like(std::declval<const q_vector_t&>()));
+  using dx_vector_t = decltype(Backend::make_range_vector(std::declval<const std::remove_cvref_t<LinearOpD>&>()));
+  using mdx_vector_t = decltype(Backend::make_range_vector(std::declval<const std::remove_cvref_t<LinearOpM>&>()));
+  using lmdx_vector_t = decltype(Backend::make_range_vector(std::declval<const std::remove_cvref_t<LinearOpL>&>()));
 
   KOKKOS_INLINE_FUNCTION
   CongruentMCQPP(Backend, LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpL&& L, FVector&& f_b,
@@ -239,7 +277,11 @@ class CongruentMCQPP {
         dt_workspace_(impl::make_workspace(DT_.get())),
         m_workspace_(impl::make_workspace(M_.get())),
         d_workspace_(impl::make_workspace(D_.get())),
-        l_workspace_(impl::make_workspace(L_.get())) {
+        l_workspace_(impl::make_workspace(L_.get())),
+        g_(Backend::make_vector_like(q_.get())),
+        dx_(Backend::make_range_vector(D_.get())),
+        mdx_(Backend::make_range_vector(M_.get())),
+        lmdx_(Backend::make_range_vector(L_.get())) {
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -256,7 +298,35 @@ class CongruentMCQPP {
         dt_workspace_(std::move(dt_workspace)),
         m_workspace_(std::move(m_workspace)),
         d_workspace_(std::move(d_workspace)),
-        l_workspace_(std::move(l_workspace)) {
+        l_workspace_(std::move(l_workspace)),
+        g_(Backend::make_vector_like(q_.get())),
+        dx_(Backend::make_range_vector(D_.get())),
+        mdx_(Backend::make_range_vector(M_.get())),
+        lmdx_(Backend::make_range_vector(L_.get())) {
+  }
+
+  /// \brief A problem whose reduced CQPP is formed in the given storage: g and the reduced operator's D x, M D x and
+  /// L M D x.
+  KOKKOS_INLINE_FUNCTION
+  CongruentMCQPP(Backend, LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpL&& L, FVector&& f_b,
+                 const space_t& space, dt_workspace_t dt_workspace, m_workspace_t m_workspace,
+                 d_workspace_t d_workspace, l_workspace_t l_workspace, g_vector_t g, dx_vector_t dx, mdx_vector_t mdx,
+                 lmdx_vector_t lmdx)
+      : DT_(std::forward<LinearOpDT>(DT)),
+        M_(std::forward<LinearOpM>(M)),
+        D_(std::forward<LinearOpD>(D)),
+        q_(std::forward<QVector>(q)),
+        L_(std::forward<LinearOpL>(L)),
+        f_b_(std::forward<FVector>(f_b)),
+        space_(space),
+        dt_workspace_(std::move(dt_workspace)),
+        m_workspace_(std::move(m_workspace)),
+        d_workspace_(std::move(d_workspace)),
+        l_workspace_(std::move(l_workspace)),
+        g_(std::move(g)),
+        dx_(std::move(dx)),
+        mdx_(std::move(mdx)),
+        lmdx_(std::move(lmdx)) {
   }
 
   // Accessors — all const to preserve the problem definition
@@ -275,6 +345,11 @@ class CongruentMCQPP {
   KOKKOS_INLINE_FUNCTION m_workspace_t& m_workspace() const { return m_workspace_; }
   KOKKOS_INLINE_FUNCTION d_workspace_t& d_workspace() const { return d_workspace_; }
   KOKKOS_INLINE_FUNCTION l_workspace_t& l_workspace() const { return l_workspace_; }
+  /// \brief Storage for the reduced CQPP's g and its operator's intermediates D x, M D x and L M D x.
+  KOKKOS_INLINE_FUNCTION g_vector_t& g() const { return g_; }
+  KOKKOS_INLINE_FUNCTION dx_vector_t& dx() const { return dx_; }
+  KOKKOS_INLINE_FUNCTION mdx_vector_t& mdx() const { return mdx_; }
+  KOKKOS_INLINE_FUNCTION lmdx_vector_t& lmdx() const { return lmdx_; }
   // clang-format on
 
  private:
@@ -289,6 +364,10 @@ class CongruentMCQPP {
   mutable m_workspace_t m_workspace_;
   mutable d_workspace_t d_workspace_;
   mutable l_workspace_t l_workspace_;
+  mutable g_vector_t g_;
+  mutable dx_vector_t dx_;
+  mutable mdx_vector_t mdx_;
+  mutable lmdx_vector_t lmdx_;
 };
 
 template <class Backend, class LinearOpA, class QVector, class LinearOpL, class FVector, class ConvexSpace,
@@ -301,20 +380,20 @@ KOKKOS_FUNCTION auto to_cqpp(
   auto backend = P.backend();
   using backend_t = decltype(backend);
 
-  // H owns an independent copy of A and L, so it stays valid after P is destroyed.
+  // The reduced problem holds copies of A and L and is formed in P's storage.
   auto A_copy = P.A();
   auto L_copy = P.L();
   auto H = MixedReducedOp(backend_t{}, std::move(A_copy), std::move(L_copy));
 
-  auto g = backend_t::make_vector_like(P.q());
   auto a_workspace = P.a_workspace();
   auto l_workspace = P.l_workspace();
 
-  backend_t::apply(P.A(), P.f_b(), g, a_workspace);                                     // g = A f_b
-  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), g);  // g = q - A f_b
+  backend_t::apply(P.A(), P.f_b(), P.g(), a_workspace);                                       // g = A f_b
+  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), P.g());  // g = q - A f_b
 
-  auto ax = backend_t::make_range_vector(P.A());
-  auto lax = backend_t::make_range_vector(P.L());
+  auto g = P.g();
+  auto ax = P.ax();
+  auto lax = P.lax();
   auto workspace = H.make_workspace(std::move(ax), std::move(lax), std::move(a_workspace), std::move(l_workspace));
   return CQPP(backend_t{}, std::move(H), std::move(g), P.space(), workspace);
 }
@@ -329,7 +408,7 @@ KOKKOS_FUNCTION auto to_cqpp(
   auto backend = P.backend();
   using backend_t = decltype(backend);
 
-  // H owns an independent copy of DT, M, D, and L, so it stays valid after P is destroyed.
+  // The reduced problem holds copies of DT, M, D, and L and is formed in P's storage.
   auto DT_copy = P.DT();
   auto M_copy = P.M();
   auto D_copy = P.D();
@@ -337,20 +416,20 @@ KOKKOS_FUNCTION auto to_cqpp(
   auto H =
       CongruentMixedReducedOp(backend_t{}, std::move(DT_copy), std::move(M_copy), std::move(D_copy), std::move(L_copy));
 
-  auto g = backend_t::make_vector_like(P.q());
-  auto m_f_b = backend_t::make_range_vector(P.M());
   auto dt_workspace = P.dt_workspace();
   auto m_workspace = P.m_workspace();
   auto d_workspace = P.d_workspace();
   auto l_workspace = P.l_workspace();
 
-  backend_t::apply(P.M(), P.f_b(), m_f_b, m_workspace);
-  backend_t::apply(P.DT(), m_f_b, g, dt_workspace);                                     // g = D^T M f_b
-  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), g);  // g = q - D^T M f_b
+  // M f_b is held in mdx, which the reduced operator overwrites only once it is applied.
+  backend_t::apply(P.M(), P.f_b(), P.mdx(), m_workspace);
+  backend_t::apply(P.DT(), P.mdx(), P.g(), dt_workspace);                                     // g = D^T M f_b
+  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), P.g());  // g = q - D^T M f_b
 
-  auto dx = backend_t::make_range_vector(P.D());
-  auto mdx = backend_t::make_range_vector(P.M());
-  auto lmdx = backend_t::make_range_vector(P.L());
+  auto g = P.g();
+  auto dx = P.dx();
+  auto mdx = P.mdx();
+  auto lmdx = P.lmdx();
   auto workspace = H.make_workspace(std::move(dx), std::move(mdx), std::move(lmdx), std::move(dt_workspace),
                                     std::move(m_workspace), std::move(d_workspace), std::move(l_workspace));
   return CQPP(backend_t{}, std::move(H), std::move(g), P.space(), workspace);
@@ -390,6 +469,13 @@ template <typename Backend, typename LinearOpA, typename QVector, typename Linea
 MCQPP(Backend, LinearOpA&&, QVector&&, LinearOpL&&, FVector&&, const ConvexSpace&, const AWorkspace&, const LWorkspace&)
     -> MCQPP<Backend, LinearOpA, QVector, LinearOpL, FVector, ConvexSpace, AWorkspace, LWorkspace>;
 
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
+          ValidConvexSpace ConvexSpace, typename AWorkspace, typename LWorkspace, typename GVector, typename AxVector,
+          typename LAxVector>
+MCQPP(Backend, LinearOpA&&, QVector&&, LinearOpL&&, FVector&&, const ConvexSpace&, const AWorkspace&, const LWorkspace&,
+      const GVector&, const AxVector&, const LAxVector&)
+    -> MCQPP<Backend, LinearOpA, QVector, LinearOpL, FVector, ConvexSpace, AWorkspace, LWorkspace>;
+
 /// \brief Deduction guide for CongruentMCQPP
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
           typename LinearOpL, typename FVector, ValidConvexSpace ConvexSpace>
@@ -401,6 +487,16 @@ template <typename Backend, typename LinearOpDT, typename LinearOpM, typename Li
           typename DWorkspace, typename LWorkspace>
 CongruentMCQPP(Backend, LinearOpDT&&, LinearOpM&&, LinearOpD&&, QVector&&, LinearOpL&&, FVector&&, const ConvexSpace&,
                const DTWorkspace&, const MWorkspace&, const DWorkspace&, const LWorkspace&)
+    -> CongruentMCQPP<Backend, LinearOpDT, LinearOpM, LinearOpD, QVector, LinearOpL, FVector, ConvexSpace, DTWorkspace,
+                      MWorkspace, DWorkspace, LWorkspace>;
+
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpL, typename FVector, ValidConvexSpace ConvexSpace, typename DTWorkspace, typename MWorkspace,
+          typename DWorkspace, typename LWorkspace, typename GVector, typename DxVector, typename MDxVector,
+          typename LMDxVector>
+CongruentMCQPP(Backend, LinearOpDT&&, LinearOpM&&, LinearOpD&&, QVector&&, LinearOpL&&, FVector&&, const ConvexSpace&,
+               const DTWorkspace&, const MWorkspace&, const DWorkspace&, const LWorkspace&, const GVector&,
+               const DxVector&, const MDxVector&, const LMDxVector&)
     -> CongruentMCQPP<Backend, LinearOpDT, LinearOpM, LinearOpD, QVector, LinearOpL, FVector, ConvexSpace, DTWorkspace,
                       MWorkspace, DWorkspace, LWorkspace>;
 //@}
@@ -465,26 +561,81 @@ KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, Line
                         std::forward<ConvexSpace>(space));
 }
 
+/// \brief Storage for a mixed CQPP formed from (DT, M, D, q, B, S, BT, b): S b, f_b = B S b, the workspaces of S and
+/// B, and the problem's own workspaces and reduction storage.
+template <class SbVector, class FbVector, class SWorkspace, class BWorkspace, class DTWorkspace, class MWorkspace,
+          class DWorkspace, class LWorkspace, class GVector, class DxVector, class MDxVector, class LMDxVector>
+struct MixedCQPPWorkspace {
+  SbVector s_b;
+  FbVector f_b;
+  SWorkspace s_workspace;
+  BWorkspace b_workspace;
+  DTWorkspace dt_workspace;
+  MWorkspace m_workspace;
+  DWorkspace d_workspace;
+  LWorkspace l_workspace;
+  GVector g;
+  DxVector dx;
+  MDxVector mdx;
+  LMDxVector lmdx;
+};
+
+/// \brief Storage for the mixed CQPPs formed from these operators and a q shaped like q, reusable for any b.
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpB, typename LinearOpS, typename LinearOpBT>
+KOKKOS_FUNCTION auto make_mixed_cqpp_workspace(const LinearOpDT& DT, const LinearOpM& M, const LinearOpD& D,
+                                               const QVector& q, const LinearOpB& B, const LinearOpS& S,
+                                               const LinearOpBT& BT) {
+  const auto L = make_quadratic_form<Backend>(B, S, BT);
+  return MixedCQPPWorkspace{Backend::make_range_vector(S),
+                            Backend::make_range_vector(B),
+                            impl::make_workspace(S),
+                            impl::make_workspace(B),
+                            impl::make_workspace(DT),
+                            impl::make_workspace(M),
+                            impl::make_workspace(D),
+                            impl::make_workspace(L),
+                            Backend::make_vector_like(q),
+                            Backend::make_range_vector(D),
+                            Backend::make_range_vector(M),
+                            Backend::make_range_vector(L)};
+}
+
+/// \brief The mixed CQPP of (DT, M, D, q, B, S, BT, b), formed in workspace from \ref make_mixed_cqpp_workspace.
+///
+/// The problem shares workspace's storage, so one workspace serves one problem at a time.
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename BVector, ValidConvexSpace ConvexSpace,
+          typename Workspace>
+KOKKOS_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B,
+                                     LinearOpS&& S, LinearOpBT&& BT, BVector&& b, ConvexSpace&& space,
+                                     Workspace&& workspace) {
+  using backend_t = Backend;
+
+  // f_b = B S b. B and S are only forwarded (not read again) after this, into make_quadratic_form, which is the one
+  // place that decides how they end up stored.
+  backend_t::apply(S, b, workspace.s_b, workspace.s_workspace);
+  backend_t::apply(B, workspace.s_b, workspace.f_b, workspace.b_workspace);
+
+  auto L = make_quadratic_form<backend_t>(std::forward<LinearOpB>(B), std::forward<LinearOpS>(S),
+                                          std::forward<LinearOpBT>(BT));
+  auto f_b = workspace.f_b;
+  return CongruentMCQPP(backend_t{}, std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M),
+                        std::forward<LinearOpD>(D), std::forward<QVector>(q), std::move(L), std::move(f_b),
+                        std::forward<ConvexSpace>(space), workspace.dt_workspace, workspace.m_workspace,
+                        workspace.d_workspace, workspace.l_workspace, workspace.g, workspace.dx, workspace.mdx,
+                        workspace.lmdx);
+}
+
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
           typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename BVector, ValidConvexSpace ConvexSpace>
 KOKKOS_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B,
                                      LinearOpS&& S, LinearOpBT&& BT, BVector&& b, ConvexSpace&& space) {
-  using backend_t = Backend;
-
-  // Backend::apply/make_range_vector operate on the raw operators directly -- no need to wrap B/S/b in storage
-  // just to read from them here. B and S are only forwarded (not read again) after this, into make_quadratic_form,
-  // which is the one place that decides how they end up stored.
-  auto tmp = backend_t::make_range_vector(S);
-  auto f_b = backend_t::make_range_vector(B);
-  backend_t::apply(S, b, tmp);
-  backend_t::apply(B, tmp, f_b);
-
-  auto L = make_quadratic_form<backend_t>(std::forward<LinearOpB>(B), std::forward<LinearOpS>(S),
-                                          std::forward<LinearOpBT>(BT));
-
-  return CongruentMCQPP(backend_t{}, std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M),
-                        std::forward<LinearOpD>(D), std::forward<QVector>(q), std::move(L), std::move(f_b),
-                        std::forward<ConvexSpace>(space));
+  return make_mixed_cqpp<Backend>(std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M), std::forward<LinearOpD>(D),
+                                  std::forward<QVector>(q), std::forward<LinearOpB>(B), std::forward<LinearOpS>(S),
+                                  std::forward<LinearOpBT>(BT), std::forward<BVector>(b),
+                                  std::forward<ConvexSpace>(space),
+                                  make_mixed_cqpp_workspace<Backend>(DT, M, D, q, B, S, BT));
 }
 
 /// \brief Solve a constrained quadratic programming problem (CQPP): `x* = argmin_{x in Omega} 0.5 x^T A x + q^T x`.

@@ -32,6 +32,7 @@
 #include <cmath>      // for std::abs, std::sqrt, std::pow, std::exp, std::log, std::atan2
 #include <cstdint>    // for uint64_t
 #include <cstring>    // for std::memcmp
+#include <map>        // for std::map
 #include <random>     // for std::mt19937, std::uniform_real_distribution
 #include <stdexcept>  // for std::invalid_argument, std::runtime_error
 #include <string>     // for std::to_string
@@ -2414,6 +2415,102 @@ TEST(Mbody, SlcpFallsBackToFirstLinearization) {
   EXPECT_EQ(count_bit_differences(get<FixedPoseViews<Kokkos::Serial>>(constraints_slcp).lambda_view(),
                                   get<FixedPoseViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
             0u);
+}
+
+/// \brief The label and size of every Kokkos allocation f makes, with its multiplicity.
+template <typename F>
+std::map<std::pair<std::string, uint64_t>, size_t> record_allocations(F&& f) {
+  static std::map<std::pair<std::string, uint64_t>, size_t>* recording = nullptr;
+  std::map<std::pair<std::string, uint64_t>, size_t> allocations;
+  recording = &allocations;
+  Kokkos::Tools::Experimental::set_init_callback(
+      [](const int, const uint64_t, const uint32_t, Kokkos_Profiling_KokkosPDeviceInfo*) {});
+  Kokkos::Tools::Experimental::set_allocate_data_callback([](const Kokkos_Profiling_SpaceHandle, const char* label,
+                                                             const void*,
+                                                             const uint64_t size) { ++(*recording)[{label, size}]; });
+  f();
+  Kokkos::Tools::Experimental::set_allocate_data_callback(nullptr);
+  Kokkos::Tools::Experimental::set_init_callback(nullptr);
+  recording = nullptr;
+  return allocations;
+}
+
+/// \brief solve_mixed_slcp() on TestExecSpace copies of rods and constraints, and the allocations it makes.
+template <typename... Families>
+std::pair<MixedSLCPResult, std::map<std::pair<std::string, uint64_t>, size_t>> slcp_allocations(
+    const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints, const MixedSLCPConfig& cfg) {
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  MixedSLCPResult result;
+  const auto allocations = record_allocations([&] { result = solve_mixed_slcp(rods_d, constraints_d, cfg); });
+  return {result, allocations};
+}
+
+/// \brief solve_mixed_lcp() on TestExecSpace copies of rods and constraints, and the allocations it makes.
+template <typename... Families>
+std::pair<MixedLCPResult, std::map<std::pair<std::string, uint64_t>, size_t>> lcp_allocations(
+    const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints, const MixedLCPConfig& cfg) {
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  MixedLCPResult result;
+  const auto allocations = record_allocations([&] { result = solve_mixed_lcp(rods_d, constraints_d, cfg); });
+  return {result, allocations};
+}
+
+// A solve allocates only before its first iteration: solves that differ in how many SLCP iterates or PGD iterations
+// they take make the same allocations. An unrecorded solve first sizes Kokkos' own scratch.
+TEST(Mbody, IterationsDoNotAllocate) {
+  // Both blocks, and the bilateral block alone, by sequences of different lengths
+  const auto p = make_fallback_problem();
+  const auto& c = p.constraints;
+  const auto bilateral_only =
+      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
+                          get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
+                          get<FixedPositionViews<HostExecSpace>>(c));
+  slcp_allocations(p.rods, c, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  const auto [both_short, both_short_allocations] = slcp_allocations(p.rods, c, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+  const auto [both_long, both_long_allocations] = slcp_allocations(p.rods, c, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  ASSERT_TRUE(both_short.converged && both_long.converged) << both_short << "\n" << both_long;
+  ASSERT_LT(both_short.num_iters, both_long.num_iters);
+  EXPECT_EQ(both_short_allocations, both_long_allocations);
+
+  slcp_allocations(p.rods, bilateral_only, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  const auto [bilateral_short, bilateral_short_allocations] =
+      slcp_allocations(p.rods, bilateral_only, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+  const auto [bilateral_long, bilateral_long_allocations] =
+      slcp_allocations(p.rods, bilateral_only, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  ASSERT_TRUE(bilateral_short.converged && bilateral_long.converged) << bilateral_short << "\n" << bilateral_long;
+  ASSERT_LT(bilateral_short.num_iters, bilateral_long.num_iters);
+  EXPECT_EQ(bilateral_short_allocations, bilateral_long_allocations);
+
+  // The unilateral block alone, by PGD to different tolerances: a row of spheres pressed together end to end
+  constexpr size_t kNumSpheres = 6;
+  RodViews<HostExecSpace> spheres(kNumSpheres);
+  for (size_t k = 0; k < kNumSpheres; ++k) {
+    spheres.center(k) = Vector3d{(0.38 + 0.004 * static_cast<double>(k)) * static_cast<double>(k), 0.0, 0.0};
+    spheres.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+    spheres.radius(k) = 0.2;
+    spheres.length(k) = 0.0;
+  }
+  zero_rod_state(spheres);
+  spheres.force(0) = Vector3d{1.0, 0.0, 0.0};
+  spheres.force(kNumSpheres - 1) = Vector3d{-1.0, 0.0, 0.0};
+  ContactViews<HostExecSpace> contacts(kNumSpheres - 1);
+  for (size_t k = 0; k + 1 < kNumSpheres; ++k) {
+    contacts.rod_i(k) = static_cast<int>(k);
+    contacts.rod_j(k) = static_cast<int>(k + 1);
+  }
+  const auto unilateral_only = make_constraint_set(contacts);
+  MixedLCPConfig loose = p.cfg;
+  loose.outer_tol = 1e-4;
+  MixedLCPConfig tight = p.cfg;
+  tight.outer_tol = 1e-12;
+  lcp_allocations(spheres, unilateral_only, tight);
+  const auto [unilateral_loose, unilateral_loose_allocations] = lcp_allocations(spheres, unilateral_only, loose);
+  const auto [unilateral_tight, unilateral_tight_allocations] = lcp_allocations(spheres, unilateral_only, tight);
+  ASSERT_TRUE(unilateral_loose.converged && unilateral_tight.converged) << unilateral_loose << "\n" << unilateral_tight;
+  ASSERT_LT(unilateral_loose.num_iters, unilateral_tight.num_iters);
+  EXPECT_EQ(unilateral_loose_allocations, unilateral_tight_allocations);
 }
 
 /// \brief A pendulum's angle from -y before and after each step, its constraint error after each, and their results.

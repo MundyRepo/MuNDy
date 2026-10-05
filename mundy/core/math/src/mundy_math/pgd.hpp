@@ -39,12 +39,12 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Tolerance.hpp>        // for mundy::get_zero_tolerance<T>, get_relaxed_zero_tolerance<T>
-#include <mundy_math/cmath.hpp>            // for mundy::abs
+#include <mundy_math/Tolerance.hpp>        // for mundy::get_relaxed_zero_tolerance<T>
 #include <mundy_math/residuals.hpp>        // for the default projected-gradient residual policy
 #include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, workspace_commit}
 #include <mundy_utils/requires.hpp>
-#include <mundy_utils/storage.hpp>  // for mundy::storage
+#include <mundy_utils/storage.hpp>       // for mundy::storage
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -94,24 +94,25 @@ concept ProjectedProblem = requires(const Problem& p) {
 //@{
 
 /// \brief Barzilai-Borwein step-size policy for projected-gradient descent.
+///
+/// With s = x - x_old and y = grad - grad_old = A s, the step is s^T s / s^T A s, the inverse of A's Rayleigh quotient
+/// along s. A positive semi-definite A makes s^T A s non-negative; where it is zero (s = 0, or A has no curvature along
+/// s), the current step is kept.
 struct BBStepStrategy {
   template <typename Backend, typename XOldVector, typename GradOldVector, typename XVector, typename GradVector,
             typename ReductionScalar = impl::vector_value_type<XVector>>
   KOKKOS_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
                                              const XOldVector& x_old,
                                              const GradOldVector& grad_old,  //
-                                             const XVector& x, const GradVector& grad) const {
+                                             const XVector& x, const GradVector& grad,
+                                             ReductionScalar current_step) const {
     using value_type = ReductionScalar;
 
-    value_type num = Backend::template diff_dot<value_type>(x, x_old);  // (x - x_old) dot (x - x_old)
-    value_type denom =
-        Backend::template diff_dot<value_type>(x, x_old, grad, grad_old);  // (x - x_old) dot (grad - grad_old)
-
-    // Avoid division by zero
-    constexpr value_type eps = get_zero_tolerance<value_type>() * static_cast<value_type>(10);
-    denom += eps * (abs(denom) < eps);
-
-    return num / denom;
+    const value_type ss = Backend::template diff_dot<value_type>(x, x_old);                  // s^T s
+    const value_type sy = Backend::template diff_dot<value_type>(x, x_old, grad, grad_old);  // s^T y = s^T A s
+    MUNDY_THROW_ASSERT(sy >= static_cast<value_type>(0), std::invalid_argument,
+                       "BBStepStrategy: s^T A s < 0, so A is not positive semi-definite.");
+    return sy > static_cast<value_type>(0) ? ss / sy : current_step;
   }
 };  // BBStepStrategy
 
@@ -253,7 +254,7 @@ class PGDStrategy {
     }
 
     // update step size and roll x_tmp/grad_tmp forward
-    state.step_size() = step_(backend, state.x_tmp(), state.grad_tmp(), state.x(), state.grad());
+    state.step_size() = step_(backend, state.x_tmp(), state.grad_tmp(), state.x(), state.grad(), state.step_size());
     backend_t::deep_copy(state.x_tmp(), state.x());
     backend_t::deep_copy(state.grad_tmp(), state.grad());
     ++state.iter();

@@ -22,6 +22,7 @@
 #define MUNDY_MBODY_KOKKOSMBODY_HPP_
 
 // C++ core
+#include <array>        // for std::array
 #include <cmath>        // for std::log
 #include <ostream>      // for std::ostream
 #include <type_traits>  // for std::is_same_v
@@ -147,17 +148,16 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
   const PGDConfig<double> pgd_cfg{cfg.max_outer_iters, cfg.outer_tol};
   const CGConfig<double> cg_cfg{cfg.max_cg_iters, cfg.cg_tol};
   const impl::StepData<ExecSpace, Families...> step = impl::make_step_data(rods, constraints, cfg.dt, cfg.viscosity);
-  view_t psi("psi", step.index_map.num_bilateral);
-  const auto geo = impl::make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(step.index_map);
-  impl::compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, step.index_map, geo, psi);
   if (step.index_map.num_unilateral == 0 && step.index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedLCPResult{0, 0.0, 0.0 <= cfg.outer_tol};
   }
 
-  const impl::LinearizedStep<ExecSpace> linearized =
-      impl::solve_linearization(step, geo, psi, impl::Displacement<ExecSpace>{step.u_free, cfg.dt},
-                                view_t("x_start", step.index_map.num_unilateral), pgd_cfg, cg_cfg);
+  impl::LinearizationWorkspace workspace(step, pgd_cfg, cg_cfg);
+  impl::linearize(step, workspace, rods, constraints);
+  impl::LinearizedStep<ExecSpace> linearized = impl::make_linearized_step(step);
+  impl::solve_linearization(step, workspace, impl::Displacement<ExecSpace>{step.u_free, cfg.dt},
+                            view_t("x_start", step.index_map.num_unilateral), linearized);
   impl::write_step(rods, constraints, step.index_map, linearized);
   return MixedLCPResult{linearized.result.num_iters, linearized.result.residual, linearized.result.converged};
 }
@@ -199,43 +199,50 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
   const impl::StepData<ExecSpace, Families...> step =
       impl::make_step_data(rods, constraints, lcp_cfg.dt, lcp_cfg.viscosity);
   const impl::ConstraintIndexMap<Families...>& index_map = step.index_map;
-  view_t psi("psi", index_map.num_bilateral);
-  const auto geo = impl::make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(index_map);
-  impl::compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, index_map, geo, psi);
   if (index_map.num_unilateral == 0 && index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedSLCPResult{1, 0.0, true, MixedLCPResult{0, 0.0, 0.0 <= lcp_cfg.outer_tol}};
   }
 
-  const impl::LinearizedStep<ExecSpace> first =
-      impl::solve_linearization(step, geo, psi, impl::Displacement<ExecSpace>{step.u_free, lcp_cfg.dt},
-                                view_t("x_start", index_map.num_unilateral), pgd_cfg, cg_cfg);
+  impl::LinearizationWorkspace workspace(step, pgd_cfg, cg_cfg);
+  impl::linearize(step, workspace, rods, constraints);
+  const view_t x_start("x_start", index_map.num_unilateral);
+  impl::LinearizedStep<ExecSpace> first = impl::make_linearized_step(step);
+  impl::solve_linearization(step, workspace, impl::Displacement<ExecSpace>{step.u_free, lcp_cfg.dt}, x_start, first);
   const Kokkos::View<RowUnit*, typename ExecSpace::memory_space> row_units = impl::make_row_units<ExecSpace>(index_map);
+  view_t wrench_change("wrench_change", rods.num_rows());
+  view_t displacement_change("displacement_change", rods.num_rows());
 
   // Trial configurations C_{n+1} = C^k (+) G^k dt U_n, in storage of their own: the mobility reads rods' poses.
   RodViews<ExecSpace> trial(step.num_rods);
   Kokkos::deep_copy(trial.radius_view(), rods.radius_view());
   Kokkos::deep_copy(trial.length_view(), rods.length_view());
 
-  impl::LinearizedStep<ExecSpace> iterate = first;
+  // Iterates after the first alternate between two steps of their own, so the first is kept for the fallback.
+  std::array<impl::LinearizedStep<ExecSpace>, 2> later;
+  if (cfg.max_iters >= 2) {
+    later = {impl::make_linearized_step(step), impl::make_linearized_step(step)};
+  }
+  const impl::LinearizedStep<ExecSpace>* iterate = &first;
   double first_merit = 0.0;
   double previous_merit = 0.0;
   for (unsigned num_iters = 1;; ++num_iters) {
     Kokkos::deep_copy(trial.center_view(), rods.center_view());
     Kokkos::deep_copy(trial.orientation_view(), rods.orientation_view());
-    Kokkos::deep_copy(trial.velocity_omega_view(), iterate.velocity);
+    Kokkos::deep_copy(trial.velocity_omega_view(), iterate->velocity);
     advance_rods(trial, lcp_cfg.dt);
-    impl::compute_block_geometry<ConstraintType::BILATERAL>(trial, constraints, index_map, geo, psi);
+    impl::linearize(step, workspace, trial, constraints);
 
-    const double merit = impl::slcp_merit(step, iterate, geo, psi, row_units, cfg.length_tol, cfg.angle_tol);
+    const double merit = impl::slcp_merit(step, workspace, *iterate, row_units, wrench_change, displacement_change,
+                                          cfg.length_tol, cfg.angle_tol);
     if (num_iters == 1) {
       first_merit = merit;
     }
     if (merit <= 1.0) {
-      impl::write_step(rods, constraints, index_map, iterate);
+      impl::write_step(rods, constraints, index_map, *iterate);
       return MixedSLCPResult{
           num_iters, merit, true,
-          MixedLCPResult{iterate.result.num_iters, iterate.result.residual, iterate.result.converged}};
+          MixedLCPResult{iterate->result.num_iters, iterate->result.residual, iterate->result.converged}};
     }
 
     // Stop once the contraction observed so far cannot bring the merit to 1 within max_iters.
@@ -249,8 +256,11 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
     }
     previous_merit = merit;
 
-    iterate = impl::solve_linearization(step, geo, psi, impl::Displacement<ExecSpace>{iterate.m_wrench, -lcp_cfg.dt},
-                                        iterate.x, pgd_cfg, cg_cfg);
+    // Never iterate's storage, which is first or later[(num_iters - 1) % 2].
+    impl::LinearizedStep<ExecSpace>& next = later[num_iters % 2];
+    impl::solve_linearization(step, workspace, impl::Displacement<ExecSpace>{iterate->m_wrench, -lcp_cfg.dt},
+                              iterate->x, next);
+    iterate = &next;
   }
 }
 
