@@ -41,6 +41,9 @@ namespace mbody {
 //@{
 
 /// \brief Configuration for a mixed LCP step: the step, the outer (PGD) solve, and the inner (CG) solve.
+///
+/// outer_tol is a length. At the end of the step (to first order in dt), no two bodies overlap by more than outer_tol,
+/// and no two bodies that push on each other are more than outer_tol apart.
 struct MixedLCPConfig {
   double dt = 1.0;
   double viscosity = 1.0;
@@ -51,6 +54,9 @@ struct MixedLCPConfig {
 };
 
 /// \brief Result of a mixed LCP step: the unilateral solve's iteration count, final residual, and whether it converged.
+///
+/// residual is the largest end-of-step overlap between two bodies, or gap between two that push on each other: the
+/// length outer_tol bounds.
 struct MixedLCPResult {
   unsigned num_iters{0};
   double residual{0.0};

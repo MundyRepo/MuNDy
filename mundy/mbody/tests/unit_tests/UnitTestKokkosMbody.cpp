@@ -599,6 +599,39 @@ BendChain make_bend_chain(size_t num_spheres, double spacing, double k_ang) {
   return chain;
 }
 
+/// \brief Seven spheres in a row on x, in contact with their neighbours: six pressed together and one left free.
+///
+/// Spheres 0-5 are 0.384 to 0.416 apart against a contact distance of 0.4, and loads on 0 and 5 press them together.
+/// Sphere 6 sits 0.05 clear of sphere 5, which is pulled away from it, so their contact never pushes.
+SolveInput<ContactViews<HostExecSpace>> make_sphere_row_problem() {
+  constexpr size_t kNumPressed = 6;
+  RodViews<HostExecSpace> rods(kNumPressed + 1);
+  for (size_t k = 0; k < kNumPressed; ++k) {
+    rods.center(k) = Vector3d{(0.38 + 0.004 * static_cast<double>(k)) * static_cast<double>(k), 0.0, 0.0};
+  }
+  rods.center(kNumPressed) = Vector3d(rods.center(kNumPressed - 1)) + Vector3d{0.45, 0.0, 0.0};
+  for (size_t k = 0; k < rods.size(); ++k) {
+    rods.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
+    rods.radius(k) = 0.2;
+    rods.length(k) = 0.0;
+  }
+  zero_rod_state(rods);
+  rods.force(0) = Vector3d{1.0, 0.0, 0.0};
+  rods.force(kNumPressed - 1) = Vector3d{-1.0, 0.0, 0.0};
+
+  ContactViews<HostExecSpace> contacts(kNumPressed);
+  for (size_t k = 0; k < kNumPressed; ++k) {
+    contacts.rod_i(k) = static_cast<int>(k);
+    contacts.rod_j(k) = static_cast<int>(k + 1);
+  }
+
+  MixedLCPConfig cfg;
+  cfg.dt = 0.3;
+  cfg.viscosity = 1.0;
+  cfg.outer_tol = 1e-10;
+  return {rods, make_constraint_set(contacts), cfg};
+}
+
 //@}
 
 //! \name Copying between memory spaces
@@ -1410,6 +1443,47 @@ TEST(Mbody, ContactOnlyInactiveMatchesScalarLCP) {
   EXPECT_TRUE(r.converged);
   ASSERT_GT(r.sep0, 0.0) << "test setup should start separated";
   EXPECT_NEAR(r.lambda, 0.0, 1e-6);
+}
+
+// outer_tol bounds every contact's linearized end-of-step separation Phi + dt D^T U: within outer_tol of zero where the
+// contact pushes, and at least -outer_tol where it does not. Recomputing the separation from the returned velocities
+// rounds differently from the solve, by about 1e-16.
+TEST(Mbody, OuterTolBoundsEndOfStepSeparations) {
+  const auto p = make_sphere_row_problem();
+  const auto& contacts = get<ContactViews<HostExecSpace>>(p.constraints);
+  const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
+  auto sep0_d = make_constraint_values(contacts);
+  const impl::PairGeometry<TestExecSpace> geo =
+      impl::compute_geometry(rods_d, create_mirror_view_and_copy(TestExecSpace{}, contacts), sep0_d);
+  const impl::PairForceOpT<TestExecSpace> DT(geo, p.rods.size());
+  const auto sep0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sep0_d);
+
+  for (const double outer_tol : {1e-2, 1e-6, 1e-12}) {
+    // Solve
+    const auto rods = copy_to<HostExecSpace>(p.rods);
+    const auto constraints = copy_to<HostExecSpace>(p.constraints);
+    MixedLCPConfig cfg = p.cfg;
+    cfg.outer_tol = outer_tol;
+    const MixedLCPResult result = solve_on_device(rods, constraints, cfg);
+    ASSERT_TRUE(result.converged) << "outer_tol " << outer_tol << ": " << result;
+
+    // End-of-step separations
+    Kokkos::View<double*, TestMemSpace> rate_d("rate", contacts.size());
+    DT.apply(create_mirror_view_and_copy(TestExecSpace{}, rods.velocity_omega_view()), rate_d);
+    const auto rate = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rate_d);
+    const auto& solved_contacts = get<ContactViews<HostExecSpace>>(constraints);
+    size_t num_pushing = 0;
+    for (size_t k = 0; k < contacts.size(); ++k) {
+      const double separation = sep0(k) + cfg.dt * rate(k);
+      if (solved_contacts.lambda(k) > 0.0) {
+        ++num_pushing;
+        EXPECT_LE(std::abs(separation), outer_tol + 1e-15) << "outer_tol " << outer_tol << ", contact " << k;
+      } else {
+        EXPECT_GE(separation, -outer_tol - 1e-15) << "outer_tol " << outer_tol << ", contact " << k;
+      }
+    }
+    EXPECT_EQ(num_pushing, contacts.size() - 1) << "outer_tol " << outer_tol;
+  }
 }
 
 // Empty families are zero-column operators, and a solve over them converges at once.
@@ -2483,31 +2557,15 @@ TEST(Mbody, IterationsDoNotAllocate) {
   ASSERT_LT(bilateral_short.num_iters, bilateral_long.num_iters);
   EXPECT_EQ(bilateral_short_allocations, bilateral_long_allocations);
 
-  // The unilateral block alone, by PGD to different tolerances: a row of spheres pressed together end to end
-  constexpr size_t kNumSpheres = 6;
-  RodViews<HostExecSpace> spheres(kNumSpheres);
-  for (size_t k = 0; k < kNumSpheres; ++k) {
-    spheres.center(k) = Vector3d{(0.38 + 0.004 * static_cast<double>(k)) * static_cast<double>(k), 0.0, 0.0};
-    spheres.orientation(k) = Quaterniond{1.0, 0.0, 0.0, 0.0};
-    spheres.radius(k) = 0.2;
-    spheres.length(k) = 0.0;
-  }
-  zero_rod_state(spheres);
-  spheres.force(0) = Vector3d{1.0, 0.0, 0.0};
-  spheres.force(kNumSpheres - 1) = Vector3d{-1.0, 0.0, 0.0};
-  ContactViews<HostExecSpace> contacts(kNumSpheres - 1);
-  for (size_t k = 0; k + 1 < kNumSpheres; ++k) {
-    contacts.rod_i(k) = static_cast<int>(k);
-    contacts.rod_j(k) = static_cast<int>(k + 1);
-  }
-  const auto unilateral_only = make_constraint_set(contacts);
-  MixedLCPConfig loose = p.cfg;
+  // The unilateral block alone, by PGD to different tolerances
+  const auto row = make_sphere_row_problem();
+  MixedLCPConfig loose = row.cfg;
   loose.outer_tol = 1e-4;
-  MixedLCPConfig tight = p.cfg;
+  MixedLCPConfig tight = row.cfg;
   tight.outer_tol = 1e-12;
-  lcp_allocations(spheres, unilateral_only, tight);
-  const auto [unilateral_loose, unilateral_loose_allocations] = lcp_allocations(spheres, unilateral_only, loose);
-  const auto [unilateral_tight, unilateral_tight_allocations] = lcp_allocations(spheres, unilateral_only, tight);
+  lcp_allocations(row.rods, row.constraints, tight);
+  const auto [unilateral_loose, unilateral_loose_allocations] = lcp_allocations(row.rods, row.constraints, loose);
+  const auto [unilateral_tight, unilateral_tight_allocations] = lcp_allocations(row.rods, row.constraints, tight);
   ASSERT_TRUE(unilateral_loose.converged && unilateral_tight.converged) << unilateral_loose << "\n" << unilateral_tight;
   ASSERT_LT(unilateral_loose.num_iters, unilateral_tight.num_iters);
   EXPECT_EQ(unilateral_loose_allocations, unilateral_tight_allocations);
