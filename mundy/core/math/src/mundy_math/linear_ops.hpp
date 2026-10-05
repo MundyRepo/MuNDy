@@ -73,14 +73,18 @@ class QuadraticFormOp {
   using linear_op_m_storage_t = ::mundy::storage<LinearOpM>;
   using linear_op_d_storage_t = ::mundy::storage<LinearOpD>;
 
-  template <class FVector, class UVector>
-  struct Workspace : impl::CommitGroup<> {
+  template <class FVector, class UVector, class DTWorkspace, class MWorkspace, class DWorkspace>
+  struct Workspace : impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace> {
    private:
-    using base_t = impl::CommitGroup<>;
+    using base_t = impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace>;
 
    public:
-    KOKKOS_INLINE_FUNCTION Workspace(FVector&& f, UVector&& u, bool committed = false)
-        : base_t(committed), f_storage_(std::forward<FVector>(f)), u_storage_(std::forward<UVector>(u)) {
+    KOKKOS_INLINE_FUNCTION Workspace(FVector&& f, UVector&& u, DTWorkspace&& dt_workspace, MWorkspace&& m_workspace,
+                                     DWorkspace&& d_workspace, bool committed = false)
+        : base_t(std::forward<DTWorkspace>(dt_workspace), std::forward<MWorkspace>(m_workspace),
+                 std::forward<DWorkspace>(d_workspace), committed),
+          f_storage_(std::forward<FVector>(f)),
+          u_storage_(std::forward<UVector>(u)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {
@@ -88,6 +92,9 @@ class QuadraticFormOp {
     }
     MUNDY_OP_WORKSPACE(f, FVector)
     MUNDY_OP_WORKSPACE(u, UVector)
+    MUNDY_OP_WORKSPACE_CHILD(dt_workspace, 0)
+    MUNDY_OP_WORKSPACE_CHILD(m_workspace, 1)
+    MUNDY_OP_WORKSPACE_CHILD(d_workspace, 2)
   };
 
   KOKKOS_INLINE_FUNCTION
@@ -129,20 +136,31 @@ class QuadraticFormOp {
     return Backend::make_range_vector(DT());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
-    return make_workspace(Backend::make_domain_vector(M_storage_.get()), Backend::make_range_vector(M_storage_.get()));
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(Backend::make_domain_vector(M_storage_.get()), Backend::make_range_vector(M_storage_.get()),
+                          committed);
   }
 
   template <class FVector, class UVector>
   KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u, bool committed = false) const {
-    return Workspace<FVector, UVector>(std::forward<FVector>(f), std::forward<UVector>(u), committed);
+    return make_workspace(std::forward<FVector>(f), std::forward<UVector>(u), impl::make_workspace(DT()),
+                          impl::make_workspace(M()), impl::make_workspace(D()), committed);
+  }
+
+  template <class FVector, class UVector, class DTWorkspace, class MWorkspace, class DWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u, DTWorkspace&& dt_workspace,
+                                             MWorkspace&& m_workspace, DWorkspace&& d_workspace,
+                                             bool committed = false) const {
+    return Workspace<FVector, UVector, DTWorkspace, MWorkspace, DWorkspace>(
+        std::forward<FVector>(f), std::forward<UVector>(u), std::forward<DTWorkspace>(dt_workspace),
+        std::forward<MWorkspace>(m_workspace), std::forward<DWorkspace>(d_workspace), committed);
   }
 
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
-    Backend::apply(D_storage_.get(), x, workspace.f());
-    Backend::apply(M_storage_.get(), workspace.f(), workspace.u());
-    Backend::apply(DT_storage_.get(), workspace.u(), y);
+    Backend::apply(D_storage_.get(), x, workspace.f(), workspace.d_workspace());
+    Backend::apply(M_storage_.get(), workspace.f(), workspace.u(), workspace.m_workspace());
+    Backend::apply(DT_storage_.get(), workspace.u(), y, workspace.dt_workspace());
   }
 
   // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
