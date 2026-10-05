@@ -187,6 +187,22 @@ TEST(LinearOperators, SumOpWorksWithAWorkspaceOnlyChild) {
   }
 }
 
+TEST(LinearOperators, QuadraticFormOpWorksWithWorkspaceOnlyChildren) {
+  // Every child only exposes apply(x, y, workspace), so the form can apply them only through its own workspace.
+  auto form = make_quadratic_form<backend_t>(WorkspaceOnlyScaleOp(2.0, 3), WorkspaceOnlyScaleOp(3.0, 3),
+                                             WorkspaceOnlyScaleOp(5.0, 3));
+
+  const view_t x = make_view({1.0, 2.0, 3.0});
+  view_t y = form.make_range_vector();
+  form.apply(x, y);
+
+  // D^T M D x with D^T = 2, M = 3, D = 5
+  const std::vector<double> result = to_host(y);
+  EXPECT_DOUBLE_EQ(result[0], 30.0 * 1.0);
+  EXPECT_DOUBLE_EQ(result[1], 30.0 * 2.0);
+  EXPECT_DOUBLE_EQ(result[2], 30.0 * 3.0);
+}
+
 TEST(LinearOperators, ScaledOpUsesGenericFallbackForAnUnfusedOp) {
   ScaleOp op(2.0);
   op.set_size(3);
