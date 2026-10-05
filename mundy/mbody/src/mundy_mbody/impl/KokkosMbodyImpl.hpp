@@ -49,7 +49,8 @@
 #include <mundy_math/lcp.hpp>              // for mundy::{make_lcp, solve_lcp}
 #include <mundy_math/linear_ops.hpp>       // for mundy::{make_concat_domain_op, make_scaled_op, make_sum_op, ...}
 #include <mundy_math/linear_system.hpp>    // for mundy::{CGConfig, make_cg_inv_op}
-#include <mundy_math/pgd.hpp>              // for mundy::{PGDConfig, PGDResult, make_pgd_solution_strategy}
+#include <mundy_math/pgd.hpp>              // for mundy::{BBStepStrategy, PGDConfig, PGDResult, make_pgd_state, ...}
+#include <mundy_math/residuals.hpp>        // for mundy::LinfNormProjectedGradientResidual
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
 #include <mundy_utils/throw_assert.hpp>
@@ -1999,7 +2000,7 @@ void solve_linearization(const StepData<ExecSpace, Families...>& step,
   Kokkos::deep_copy(out.x, x_start);
   out.result = PGDResult<double>{0, 0.0, 0.0 <= workspace.pgd_config.tol};
   if (has_unilateral) {
-    auto pgd = make_pgd_solution_strategy(workspace.pgd_config);
+    auto pgd = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, workspace.pgd_config);
     auto pgd_state = make_pgd_state(out.x, workspace.grad, workspace.x_tmp, workspace.grad_tmp);
     if (has_bilateral) {
       const auto mcqpp =
