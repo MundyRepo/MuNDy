@@ -31,6 +31,7 @@
 #include <algorithm>    // for std::max, std::count
 #include <array>        // for std::array
 #include <concepts>     // for std::same_as
+#include <optional>     // for std::optional
 #include <type_traits>  // for std::false_type, std::true_type, std::remove_cvref_t
 #include <utility>      // for std::declval, std::index_sequence, std::move
 
@@ -1519,8 +1520,8 @@ void compute_group_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet
 template <ConstraintType Block, typename ExecSpace, typename ValueView, typename... Families, typename... Geometries>
   requires ConstraintValueView<ValueView>
 void compute_block_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
-                            const ConstraintIndexMap<Families...>& index_map, const BlockGeometry<Geometries...>& geometry,
-                            const ValueView& values) {
+                            const ConstraintIndexMap<Families...>& index_map,
+                            const BlockGeometry<Geometries...>& geometry, const ValueView& values) {
   MUNDY_THROW_ASSERT(
       values.extent(0) == (Block == ConstraintType::UNILATERAL ? index_map.num_unilateral : index_map.num_bilateral),
       std::invalid_argument, "compute_block_geometry: values must have one entry per block row.");
@@ -1794,6 +1795,20 @@ struct LinearizedStep {
   PGDResult<double> result;
 };
 
+/// \brief Storage for one linearization of the step.
+template <typename ExecSpace, typename... Families>
+LinearizedStep<ExecSpace> make_linearized_step(const StepData<ExecSpace, Families...>& step) {
+  using view_t = typename LinearizedStep<ExecSpace>::view_t;
+  const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * step.num_rods;
+  return LinearizedStep<ExecSpace>{view_t("x", step.index_map.num_unilateral),
+                                   view_t("y", step.index_map.num_bilateral),
+                                   view_t("bilateral_wrench", num_rows),
+                                   view_t("wrench", num_rows),
+                                   view_t("m_wrench", num_rows),
+                                   view_t("velocity", num_rows),
+                                   PGDResult<double>{}};
+}
+
 /// \brief The displacement duration * velocity of every rod's center of mass and orientation.
 template <typename ExecSpace>
 struct Displacement {
@@ -1801,105 +1816,230 @@ struct Displacement {
   double duration;
 };
 
-/// \brief Solve the mixed LCP with the step's unilateral block and the bilateral block linearized at geo.
+/// \brief The bilateral block's Schur complement S := (B^T dt M B + K^{-1})^{-1}, with B read from geometry.
 ///
-/// to_free_end is the displacement Delta from geo's configuration to the step's constraint-free end configuration, so
-/// the bilateral linear term b = psi + B^T Delta is the linear model about geo's configuration of psi at that end. The
-/// unilateral solve starts from x_start.
+/// S is applied by matrix-free CG to cg_config.
 template <typename ExecSpace, typename BilateralGeometry, typename... Families>
-LinearizedStep<ExecSpace> solve_linearization(const StepData<ExecSpace, Families...>& step,
-                                              const BilateralGeometry& geo,
-                                              const Kokkos::View<double*, typename ExecSpace::memory_space>& psi,
-                                              const Displacement<ExecSpace>& to_free_end,
-                                              const Kokkos::View<double*, typename ExecSpace::memory_space>& x_start,
-                                              const PGDConfig<double>& pgd_cfg, const CGConfig<double>& cg_cfg) {
-  using view_t = typename LinearizedStep<ExecSpace>::view_t;
+auto make_schur_complement(const StepData<ExecSpace, Families...>& step, const BilateralGeometry& geometry,
+                           const CGConfig<double>& cg_config) {
+  using backend_t = KokkosBackend<ExecSpace>;
+  return make_cg_inv_op<backend_t>(
+      make_sum_op<backend_t>(
+          make_quadratic_form<backend_t>(make_block_rate_op<ExecSpace>(geometry, step.num_rods),
+                                         make_scaled_op<backend_t>(step.dt, ::mundy::own(step.mobility)),
+                                         make_block_force_op<ExecSpace>(geometry, step.num_rods)),
+          make_diagonal_op<backend_t>(::mundy::own(step.kinv))),
+      cg_config);
+}
+
+/// \brief The storage of a step's linearizations: the bilateral block's linearization point and everything a solve at
+/// it writes.
+///
+/// Each linearization overwrites it in place. Only the storage of the blocks the step has is allocated.
+template <typename ExecSpace, typename... Families>
+class LinearizationWorkspace {
+ public:
+  using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
+  using step_t = StepData<ExecSpace, Families...>;
+  using bilateral_geometry_t = decltype(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(
+      std::declval<const ConstraintIndexMap<Families...>&>()));
+
+ private:
+  using backend_t = KokkosBackend<ExecSpace>;
+  using unilateral_geometry_t = typename step_t::unilateral_geometry_t;
+  using d_t = decltype(make_block_force_op<ExecSpace>(std::declval<const unilateral_geometry_t&>(), size_t{}));
+  using dt_t = decltype(make_block_rate_op<ExecSpace>(std::declval<const unilateral_geometry_t&>(), size_t{}));
+  using b_t = decltype(make_block_force_op<ExecSpace>(std::declval<const bilateral_geometry_t&>(), size_t{}));
+  using bt_t = decltype(make_block_rate_op<ExecSpace>(std::declval<const bilateral_geometry_t&>(), size_t{}));
+  using mobility_t = LocalDragMobilityOp<ExecSpace>;
+  using m_dt_t = decltype(make_scaled_op<backend_t>(double{}, std::declval<const mobility_t&>()));
+  using schur_complement_t =
+      decltype(make_schur_complement(std::declval<const step_t&>(), std::declval<const bilateral_geometry_t&>(),
+                                     std::declval<const CGConfig<double>&>()));
+  template <typename Op>
+  using apply_workspace_t = decltype(backend_t::make_workspace(std::declval<const Op&>()));
+  using lcp_workspace_t =
+      decltype(make_quadratic_form<backend_t>(std::declval<const dt_t&>(), std::declval<const m_dt_t&>(),
+                                              std::declval<const d_t&>())
+                   .make_workspace());
+  using mixed_cqpp_workspace_t = decltype(make_mixed_cqpp_workspace<backend_t>(
+      std::declval<const dt_t&>(), std::declval<const m_dt_t&>(), std::declval<const d_t&>(),
+      std::declval<const view_t&>(), std::declval<const b_t&>(), std::declval<const schur_complement_t&>(),
+      std::declval<const bt_t&>()));
+
+ public:
+  LinearizationWorkspace(const StepData<ExecSpace, Families...>& step, const PGDConfig<double>& pgd_cfg,
+                         const CGConfig<double>& cg_cfg)
+      : geometry_(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(step.index_map)),
+        psi_("psi", step.index_map.num_bilateral),
+        pgd_config(pgd_cfg),
+        b("b", step.index_map.num_bilateral),
+        b_rate("b_rate", step.index_map.num_bilateral),
+        y_rhs("y_rhs", step.index_map.num_bilateral),
+        grad("grad", step.index_map.num_unilateral),
+        x_tmp("x_tmp", step.index_map.num_unilateral),
+        grad_tmp("grad_tmp", step.index_map.num_unilateral),
+        dx("Dx", has_unilateral(step) ? num_rows(step) : 0),
+        mdx("MDx", has_unilateral(step) && has_bilateral(step) ? num_rows(step) : 0),
+        d_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(step.unilateral_geo, step.num_rods))),
+        b_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(geometry_, step.num_rods))),
+        bt_workspace(backend_t::make_workspace(make_block_rate_op<ExecSpace>(geometry_, step.num_rods))),
+        m_dt_workspace(backend_t::make_workspace(make_scaled_op<backend_t>(step.dt, step.mobility))),
+        mobility_workspace(backend_t::make_workspace(step.mobility)) {
+    if (has_bilateral(step)) {
+      schur_complement.emplace(make_schur_complement(step, geometry_, cg_cfg));
+      s_workspace.emplace(backend_t::make_workspace(*schur_complement));
+    }
+    if (has_unilateral(step)) {
+      const auto D = make_block_force_op<ExecSpace>(step.unilateral_geo, step.num_rods);
+      const auto DT = make_block_rate_op<ExecSpace>(step.unilateral_geo, step.num_rods);
+      const auto M_dt = make_scaled_op<backend_t>(step.dt, step.mobility);
+      if (has_bilateral(step)) {
+        const auto B = make_block_force_op<ExecSpace>(geometry_, step.num_rods);
+        const auto BT = make_block_rate_op<ExecSpace>(geometry_, step.num_rods);
+        mixed_cqpp_workspace.emplace(
+            make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, step.q, B, *schur_complement, BT));
+      } else {
+        lcp_workspace.emplace(make_quadratic_form<backend_t>(DT, M_dt, D).make_workspace());
+      }
+    }
+  }
+
+  LinearizationWorkspace(const LinearizationWorkspace&) = delete;
+  LinearizationWorkspace& operator=(const LinearizationWorkspace&) = delete;
+  LinearizationWorkspace(LinearizationWorkspace&&) = default;
+  LinearizationWorkspace& operator=(LinearizationWorkspace&&) = default;
+
+  /// \brief The bilateral block's Jacobian and constraint values psi at the linearization point.
+  const bilateral_geometry_t& geometry() const {
+    return geometry_;
+  }
+  const view_t& psi() const {
+    return psi_;
+  }
+
+ private:
+  static bool has_unilateral(const step_t& step) {
+    return step.index_map.num_unilateral > 0;
+  }
+  static bool has_bilateral(const step_t& step) {
+    return step.index_map.num_bilateral > 0;
+  }
+  static size_t num_rows(const step_t& step) {
+    return RodViews<ExecSpace>::rows_per_entry * step.num_rods;
+  }
+
+  // S reads the geometry's storage, so the geometry is never rebound.
+  bilateral_geometry_t geometry_;
+  view_t psi_;
+
+ public:
+  PGDConfig<double> pgd_config;
+  view_t b;
+  view_t b_rate;
+  view_t y_rhs;
+  view_t grad;
+  view_t x_tmp;
+  view_t grad_tmp;
+  view_t dx;
+  view_t mdx;
+  apply_workspace_t<d_t> d_workspace;
+  apply_workspace_t<b_t> b_workspace;
+  apply_workspace_t<bt_t> bt_workspace;
+  apply_workspace_t<m_dt_t> m_dt_workspace;
+  apply_workspace_t<mobility_t> mobility_workspace;
+  std::optional<schur_complement_t> schur_complement;
+  std::optional<apply_workspace_t<schur_complement_t>> s_workspace;
+  std::optional<lcp_workspace_t> lcp_workspace;
+  std::optional<mixed_cqpp_workspace_t> mixed_cqpp_workspace;
+};
+
+/// \brief Linearize the bilateral block at rods' configuration: its Jacobian and psi, into workspace.
+template <typename ExecSpace, typename... Families>
+void linearize(const StepData<ExecSpace, Families...>& step, LinearizationWorkspace<ExecSpace, Families...>& workspace,
+               const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints) {
+  compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, step.index_map, workspace.geometry(),
+                                                    workspace.psi());
+}
+
+/// \brief Solve the mixed LCP with the step's unilateral block and the bilateral block at workspace's linearization
+/// point, into out.
+///
+/// to_free_end is the displacement Delta from the linearization point's configuration to the step's constraint-free end
+/// configuration, so the bilateral linear term b = psi + B^T Delta is the linear model about that configuration of psi
+/// at that end. The unilateral solve starts from x_start. out shares no storage with to_free_end or x_start.
+template <typename ExecSpace, typename... Families>
+void solve_linearization(const StepData<ExecSpace, Families...>& step,
+                         LinearizationWorkspace<ExecSpace, Families...>& workspace,
+                         const Displacement<ExecSpace>& to_free_end,
+                         const Kokkos::View<double*, typename ExecSpace::memory_space>& x_start,
+                         LinearizedStep<ExecSpace>& out) {
   using backend_t = KokkosBackend<ExecSpace>;
 
   const size_t num_rods = step.num_rods;
-  const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * num_rods;
-  const size_t num_unilateral = step.index_map.num_unilateral;
-  const size_t num_bilateral = step.index_map.num_bilateral;
-  const bool has_unilateral = num_unilateral > 0;
-  const bool has_bilateral = num_bilateral > 0;
+  const bool has_unilateral = step.index_map.num_unilateral > 0;
+  const bool has_bilateral = step.index_map.num_bilateral > 0;
 
   const auto D = make_block_force_op<ExecSpace>(step.unilateral_geo, num_rods);
   const auto DT = make_block_rate_op<ExecSpace>(step.unilateral_geo, num_rods);
-  const auto B = make_block_force_op<ExecSpace>(geo, num_rods);
-  const auto BT = make_block_rate_op<ExecSpace>(geo, num_rods);
+  const auto B = make_block_force_op<ExecSpace>(workspace.geometry(), num_rods);
+  const auto BT = make_block_rate_op<ExecSpace>(workspace.geometry(), num_rods);
   // The mixed CQPP's "M" is dt * mobility: it maps a constraint force to the displacement it causes over the step,
   // not to a velocity. The velocity this step returns uses raw M.
   const auto M_dt = make_scaled_op<backend_t>(step.dt, step.mobility);
 
-  view_t b("b", num_bilateral);
-  Kokkos::deep_copy(b, psi);
   if (has_bilateral) {
-    view_t b_rate("b_rate", num_bilateral);
-    BT.apply(to_free_end.velocity, b_rate);
-    backend_t::axpby(to_free_end.duration, b_rate, 1.0, b);
+    Kokkos::deep_copy(workspace.b, workspace.psi());
+    backend_t::apply(BT, to_free_end.velocity, workspace.b_rate, workspace.bt_workspace);
+    backend_t::axpby(to_free_end.duration, workspace.b_rate, 1.0, workspace.b);
   }
-
-  // Schur complement S := (B^T M B + K^{-1})^{-1}, realized via matrix-free CG.
-  const auto btmb_plus_kinv =
-      make_sum_op<backend_t>(make_quadratic_form<backend_t>(BT, M_dt, B), make_diagonal_op<backend_t>(step.kinv));
-  const auto S = make_cg_inv_op<backend_t>(btmb_plus_kinv, cg_cfg);
 
   // x* (unilateral multipliers): the reduced CQPP, which without bilateral rows is the LCP. Without unilateral rows
   // x* is empty, and its projected residual is zero before any iteration.
-  LinearizedStep<ExecSpace> out;
-  out.x = view_t("x", num_unilateral);
   Kokkos::deep_copy(out.x, x_start);
-  out.result = PGDResult<double>{0, 0.0, 0.0 <= pgd_cfg.tol};
+  out.result = PGDResult<double>{0, 0.0, 0.0 <= workspace.pgd_config.tol};
   if (has_unilateral) {
-    view_t grad("grad", num_unilateral);
-    view_t x_tmp("x_tmp", num_unilateral);
-    view_t grad_tmp("grad_tmp", num_unilateral);
-
-    auto pgd = make_pgd_solution_strategy(pgd_cfg);
-    auto pgd_state = make_pgd_state(out.x, grad, x_tmp, grad_tmp);
+    auto pgd = make_pgd_solution_strategy(workspace.pgd_config);
+    auto pgd_state = make_pgd_state(out.x, workspace.grad, workspace.x_tmp, workspace.grad_tmp);
     if (has_bilateral) {
       const auto mcqpp =
-          make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, S, BT, b, LowerBoundSpace<double>{.lower_bound = 0.0});
+          make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, *workspace.schur_complement, BT, workspace.b,
+                                     LowerBoundSpace<double>{.lower_bound = 0.0}, *workspace.mixed_cqpp_workspace);
       out.result = solve_mixed_cqpp(mcqpp, pgd, pgd_state);
     } else {
-      out.result = solve_lcp(make_lcp<backend_t>(DT, M_dt, D, step.q), pgd, pgd_state);
+      const auto lcp =
+          make_lcp<backend_t>(make_quadratic_form<backend_t>(DT, M_dt, D), step.q, *workspace.lcp_workspace);
+      out.result = solve_lcp(lcp, pgd, pgd_state);
     }
   }
   MUNDY_THROW_REQUIRE(out.result.converged, std::runtime_error, "mbody: outer PGD solve failed to converge.");
 
   // y* = -S (b + B^T M D x*), and the constraint force/torque D x* + B y*.
-  view_t Dx("Dx", num_rows);
   if (has_unilateral) {
-    D.apply(out.x, Dx);
+    backend_t::apply(D, out.x, workspace.dx, workspace.d_workspace);
   }
-  out.y = view_t("y", num_bilateral);
-  out.bilateral_wrench = view_t("bilateral_wrench", num_rows);
   if (has_bilateral) {
-    view_t y_rhs("y_rhs", num_bilateral);
     if (has_unilateral) {
-      view_t MDx("MDx", num_rows);
-      M_dt.apply(Dx, MDx);
-      BT.apply(MDx, y_rhs);
-      backend_t::axpby(1.0, b, 1.0, y_rhs);  // y_rhs = b + B^T M D x*
+      backend_t::apply(M_dt, workspace.dx, workspace.mdx, workspace.m_dt_workspace);
+      backend_t::apply(BT, workspace.mdx, workspace.y_rhs, workspace.bt_workspace);
+      backend_t::axpby(1.0, workspace.b, 1.0, workspace.y_rhs);  // y_rhs = b + B^T M D x*
     } else {
-      Kokkos::deep_copy(y_rhs, b);
+      Kokkos::deep_copy(workspace.y_rhs, workspace.b);
     }
-    S.apply(y_rhs, out.y);
+    backend_t::apply(*workspace.schur_complement, workspace.y_rhs, out.y, *workspace.s_workspace);
     backend_t::axpby(-1.0, out.y, 0.0, out.y);  // y := -y
-    B.apply(out.y, out.bilateral_wrench);
+    backend_t::apply(B, out.y, out.bilateral_wrench, workspace.b_workspace);
+  } else {
+    Kokkos::deep_copy(out.bilateral_wrench, 0.0);
   }
-  out.wrench = view_t("wrench", num_rows);
   Kokkos::deep_copy(out.wrench, out.bilateral_wrench);
   if (has_unilateral) {
-    backend_t::axpby(1.0, Dx, 1.0, out.wrench);
+    backend_t::axpby(1.0, workspace.dx, 1.0, out.wrench);
   }
 
-  out.m_wrench = view_t("m_wrench", num_rows);
-  step.mobility.apply(out.wrench, out.m_wrench);
-  out.velocity = view_t("velocity", num_rows);
+  backend_t::apply(step.mobility, out.wrench, out.m_wrench, workspace.mobility_workspace);
   Kokkos::deep_copy(out.velocity, step.u_free);
   backend_t::axpby(1.0, out.m_wrench, 1.0, out.velocity);
-  return out;
 }
 
 /// \brief Apply a linearization to rods and constraints.
@@ -1918,28 +2058,28 @@ void write_step(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...
    ...);
 }
 
-/// \brief An iterate's largest acceptance residual over its tolerance, at the configuration it moves the rods to.
+/// \brief An iterate's largest acceptance residual over its tolerance, at the configuration it moves the rods to, which
+/// workspace is linearized at.
 ///
 /// The residuals are |psi + K^-1 y| there, each in its row's unit, and M (B' y - B y), the displacement by which the
 /// bilateral force directions there would change the step, where B and B' map multipliers to center-of-mass force and
 /// torque at the iterate's linearization point and at that configuration. B y is the iterate's bilateral wrench.
-template <typename ExecSpace, typename BilateralGeometry, typename... Families>
-double slcp_merit(const StepData<ExecSpace, Families...>& step, const LinearizedStep<ExecSpace>& iterate,
-                  const BilateralGeometry& trial_geo,
-                  const Kokkos::View<double*, typename ExecSpace::memory_space>& trial_psi,
-                  const Kokkos::View<RowUnit*, typename ExecSpace::memory_space>& row_units, double length_tol,
+/// wrench_change and displacement_change receive B' y - B y and dt M (B' y - B y).
+template <typename ExecSpace, typename... Families>
+double slcp_merit(const StepData<ExecSpace, Families...>& step,
+                  LinearizationWorkspace<ExecSpace, Families...>& workspace, const LinearizedStep<ExecSpace>& iterate,
+                  const Kokkos::View<RowUnit*, typename ExecSpace::memory_space>& row_units,
+                  Kokkos::View<double*, typename ExecSpace::memory_space>& wrench_change,
+                  Kokkos::View<double*, typename ExecSpace::memory_space>& displacement_change, double length_tol,
                   double angle_tol) {
-  using view_t = typename StepData<ExecSpace, Families...>::view_t;
   using backend_t = KokkosBackend<ExecSpace>;
   const size_t num_rods = step.num_rods;
-  const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * num_rods;
 
-  const LengthAngleMax rows = max_bilateral_residual<ExecSpace>(trial_psi, step.kinv, iterate.y, row_units);
+  const LengthAngleMax rows = max_bilateral_residual<ExecSpace>(workspace.psi(), step.kinv, iterate.y, row_units);
 
-  view_t wrench_change("wrench_change", num_rows);
-  make_block_force_op<ExecSpace>(trial_geo, num_rods).apply(iterate.y, wrench_change);
+  backend_t::apply(make_block_force_op<ExecSpace>(workspace.geometry(), num_rods), iterate.y, wrench_change,
+                   workspace.b_workspace);
   backend_t::axpby(-1.0, iterate.bilateral_wrench, 1.0, wrench_change);
-  view_t displacement_change("displacement_change", num_rows);
   step.mobility.apply(step.dt, wrench_change, 0.0, displacement_change);
   const LengthAngleMax moved = max_displacement<ExecSpace>(displacement_change, num_rods);
 

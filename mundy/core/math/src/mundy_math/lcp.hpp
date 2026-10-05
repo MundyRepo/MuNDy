@@ -45,8 +45,9 @@ namespace mundy {
 ///   0 <= A x + q _|_ x >= 0
 /// where A is a symmetric positive semi-definite matrix, q is a vector, and x is the solution vector.
 ///
-/// This is equivalent to solving the following constrained quadratic programming problem:
+/// Symmetry and positive semi-definiteness make the LCP the optimality condition of the convex quadratic program
 ///   x^* = argmin 0.5 x^T A x + q^T x  s.t. x in R^n, x >= 0
+/// making it amicable to efficient solution strategies.
 template <typename Backend, typename LinearOp, typename QVector,
           typename Workspace = impl::workspace_for_t<std::remove_cvref_t<LinearOp>>>
 class LCP {

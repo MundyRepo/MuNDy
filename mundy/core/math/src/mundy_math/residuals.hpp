@@ -129,7 +129,7 @@ struct LinfNormProjectedGradientResidual {
 
           value_type abs_projected_grad;
           if (x_i < get_zero_tolerance<value_type>()) {
-            abs_projected_grad = max(value_type(0), grad_i);
+            abs_projected_grad = max(value_type(0), -grad_i);
           } else {
             abs_projected_grad = abs(grad_i);
           }

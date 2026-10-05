@@ -32,6 +32,7 @@
 #endif
 
 // C++ core
+#include <cmath>    // for std::ldexp
 #include <ostream>  // for std::cout
 
 // Mundy
@@ -170,8 +171,8 @@ struct RandomLCP {
 
   KOKKOS_INLINE_FUNCTION
   RandomLCP() {
-    // 1. Build M
-    A_ = gen_random_p_matrix();
+    // 1. Build A
+    A_ = gen_random_spd_matrix();
 
     // 2. Choose disjoint supports for z* and w*
     for (size_t i = 0; i < N; ++i) {
@@ -211,20 +212,21 @@ struct RandomLCP {
   }
 
   KOKKOS_INLINE_FUNCTION
-  linear_op_t gen_random_matrix() {
+  linear_op_t gen_random_symmetric_matrix() {
     linear_op_t mat;
     for (size_t i = 0; i < N; ++i) {
-      for (size_t j = 0; j < N; ++j) {
+      for (size_t j = i; j < N; ++j) {
         mat(i, j) = 1.0 - 2 * static_cast<double>(rand()) / RAND_MAX;
+        mat(j, i) = mat(i, j);
       }
     }
     return mat;
   }
 
   KOKKOS_INLINE_FUNCTION
-  linear_op_t gen_random_p_matrix() {
-    // Strictly diagonally dominant with positive diagonal
-    linear_op_t mat = gen_random_matrix();
+  linear_op_t gen_random_spd_matrix() {
+    // Symmetric and strictly diagonally dominant with a positive diagonal, so SPD
+    linear_op_t mat = gen_random_symmetric_matrix();
     for (size_t i = 0; i < N; ++i) {
       value_type off_diag_abs_row_sum = 0;
       for (size_t j = 0; j < N; ++j) {
@@ -677,8 +679,8 @@ struct RandomLCP {
   }
 
   RandomLCP(unsigned size) : size_(size) {
-    // 1. Build M
-    A_ = gen_random_p_matrix(size_);
+    // 1. Build A
+    A_ = gen_random_spd_matrix(size_);
 
     // 2. Choose disjoint supports for z* and w*
     x_star_ = vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_star"), size_);
@@ -722,29 +724,29 @@ struct RandomLCP {
     return q_;
   }
 
-  linear_op_t gen_random_matrix(unsigned size) {
+  linear_op_t gen_random_symmetric_matrix(unsigned size) {
     linear_op_t mat(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mat"), size, size);
 
-    // Fill with random values in [-1, 1] (not a statistically random matrix but this is a test)
+    // Fill with random values in [-1, 1] (not a statistically random matrix but this is a test), one draw per {i, j}
     Kokkos::parallel_for(
-        "gen_random_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
+        "gen_random_symmetric_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
-          openrand::Philox rng = make_philox(i, j);
+          openrand::Philox rng = make_philox(Kokkos::min(i, j), Kokkos::max(i, j));
           mat(i, j) = rng.uniform<double>(-1.0, 1.0);
         });
 
     return mat;
   }
 
-  linear_op_t gen_random_p_matrix(unsigned size) {
-    // Strictly diagonally dominant with positive diagonal
-    linear_op_t mat = gen_random_matrix(size);
+  linear_op_t gen_random_spd_matrix(unsigned size) {
+    // Symmetric and strictly diagonally dominant with a positive diagonal, so SPD
+    linear_op_t mat = gen_random_symmetric_matrix(size);
 
     // Team loop over each row, thread reduce over columns
     using team_policy = Kokkos::TeamPolicy<exec_space>;
     using team_member = typename team_policy::member_type;
     Kokkos::parallel_for(
-        "gen_random_p_matrix", team_policy(size, Kokkos::AUTO()), KOKKOS_LAMBDA(const team_member& team) {
+        "gen_random_spd_matrix", team_policy(size, Kokkos::AUTO()), KOKKOS_LAMBDA(const team_member& team) {
           size_t i = team.league_rank();
           value_type off_diag_abs_row_sum = 0;
           Kokkos::parallel_reduce(
@@ -1435,6 +1437,67 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   ASSERT_EQ(backend_t::domain_size(M_op), backend_t::size(f_b)) << "M and f_b should be compatible for multiplication";
   ASSERT_EQ(backend_t::domain_size(DT_op), backend_t::range_size(M_op)) << "DT and M should be compatible for DT * M";
 }
+
+/// \brief The number of Kokkos allocations made while f runs.
+template <class F>
+size_t count_allocations(F&& f) {
+  static size_t count = 0;
+  count = 0;
+  Kokkos::Tools::Experimental::set_init_callback([](const int, const uint64_t, const uint32_t,
+                                                    Kokkos_Profiling_KokkosPDeviceInfo*) {});
+  Kokkos::Tools::Experimental::set_allocate_data_callback(
+      [](const Kokkos_Profiling_SpaceHandle, const char*, const void*, const uint64_t) { ++count; });
+  f();
+  Kokkos::Tools::Experimental::set_allocate_data_callback(nullptr);
+  Kokkos::Tools::Experimental::set_init_callback(nullptr);
+  return count;
+}
+
+// A mixed CQPP formed in a reused workspace solves exactly as one formed in fresh storage, and forming and solving it
+// through that workspace allocates nothing.
+void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
+  using backend_t = KokkosBackend<decltype(test.get_exec_space())>;
+  const auto DT = test.get_DT();
+  const auto M = test.get_M();
+  const auto D = test.get_D();
+  const auto q = test.get_q();
+  const auto B = test.get_B();
+  const auto S = test.get_S();
+  const auto BT = test.get_BT();
+  const auto b = test.get_b();
+  const auto space = test.get_space_x();
+  using vector_t = decltype(test.get_exact_x());
+  const size_t size = test.get_exact_x().extent(0);
+
+  const auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = 1e-6});
+  vector_t grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size);
+
+  // Fresh storage
+  vector_t x_fresh("x_fresh", size);
+  Kokkos::deep_copy(x_fresh, 99.99);
+  auto fresh_state = make_pgd_state(x_fresh, grad, x_tmp, grad_tmp);
+  const auto fresh = solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space), pgd, fresh_state);
+  ASSERT_TRUE(fresh.converged) << test.name();
+  const auto x_fresh_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_fresh);
+
+  // One workspace, twice
+  auto workspace = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT);
+  vector_t x_reused("x_reused", size);
+  for (int pass = 0; pass < 2; ++pass) {
+    Kokkos::deep_copy(x_reused, 99.99);
+    auto state = make_pgd_state(x_reused, grad, x_tmp, grad_tmp);
+    PGDResult<double> result;
+    const size_t num_allocations = count_allocations([&] {
+      result = solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, workspace), pgd, state);
+    });
+    const auto x_reused_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_reused);
+    EXPECT_EQ(result.num_iters, fresh.num_iters) << test.name() << " pass " << pass;
+    for (size_t i = 0; i < size; ++i) {
+      EXPECT_EQ(x_reused_host(i), x_fresh_host(i)) << test.name() << " pass " << pass << " entry " << i;
+    }
+    EXPECT_EQ(num_allocations, 0u) << test.name() << " pass " << pass;
+  }
+}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 TEST(Convex, MundyMathAnalyticalSolutions) {
@@ -1462,6 +1525,59 @@ TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test_in_kernel(test_case), ...); }, test_cases);
+}
+
+// PGD commutes with scaling the problem: (c A, c q) to tolerance c tol has the same minimizer, its steps scale as 1/c
+// and its gradients as c. A power-of-two c scales exactly, so the scaled solves match the unscaled one bit for bit.
+TEST(Convex, PGDIsScaleInvariant) {
+  const math_backend::RandomLCP<7> test;
+  using vector_t = decltype(test.get_exact_solution());
+  const auto make_pgd = [](double tol) {
+    return make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{},
+                                      PGDConfig<double>{.max_iters = 1000, .tol = tol});
+  };
+
+  // Unscaled
+  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+  x.fill(99.99);
+  auto state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  const auto unscaled =
+      solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A(), test.get_q(), test.get_space()), make_pgd(1e-12), state);
+  ASSERT_TRUE(unscaled.converged) << unscaled;
+
+  // Scaled by 2^-20 and 2^-40
+  for (const int exponent : {-20, -40}) {
+    const double c = std::ldexp(1.0, exponent);
+    vector_t x_scaled{}, grad_scaled{}, x_tmp_scaled{}, grad_tmp_scaled{};
+    x_scaled.fill(99.99);
+    auto scaled_state = make_pgd_state(x_scaled, grad_scaled, x_tmp_scaled, grad_tmp_scaled);
+    const auto scaled = solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A() * c, test.get_q() * c, test.get_space()),
+                                   make_pgd(c * 1e-12), scaled_state);
+    EXPECT_TRUE(scaled.converged) << "c = 2^" << exponent << ": " << scaled;
+    EXPECT_EQ(scaled.num_iters, unscaled.num_iters) << "c = 2^" << exponent;
+    for (size_t i = 0; i < vector_t::size; ++i) {
+      EXPECT_EQ(x_scaled[i], x[i]) << "c = 2^" << exponent << ", entry " << i;
+    }
+  }
+}
+
+// Over x >= 0, x is optimal when grad_i = 0 where x_i > 0 and grad_i >= 0 where x_i = 0. Both residuals measure the
+// violation: |grad_i| off the bound and max(0, -grad_i) on it. The projected difference resolves its step h = 1e-6
+// only to ulp(x) / h ~ 1e-10.
+TEST(Convex, ResidualsMeasureOptimalityViolation) {
+  const LowerBoundSpace<double> space{.lower_bound = 0.0};
+  const Vector3d x{0.0, 0.0, 1.0};
+  const Vector3d optimal{0.5, 0.0, 0.0};           // x_0 pressed onto its bound, x_2 stationary
+  const Vector3d pulled_off_bound{-0.5, 0.0, 0.0};  // x_0 would decrease the objective by leaving its bound
+  const Vector3d not_stationary{0.5, 0.0, 0.3};     // x_2 off its bound with a nonzero gradient
+
+  EXPECT_EQ(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, optimal, space), 0.0);
+  EXPECT_EQ(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, pulled_off_bound, space), 0.5);
+  EXPECT_EQ(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, not_stationary, space), 0.3);
+
+  EXPECT_EQ(LinfNormProjectedDiffResidual{}(MundyMathBackend{}, x, optimal, space), 0.0);
+  EXPECT_NEAR(LinfNormProjectedDiffResidual{}(MundyMathBackend{}, x, pulled_off_bound, space), 0.5, 1e-9);
+  EXPECT_NEAR(LinfNormProjectedDiffResidual{}(MundyMathBackend{}, x, not_stationary, space), 0.3, 1e-9);
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
@@ -1511,6 +1627,16 @@ TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
   auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
+}
+
+TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
+  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
+  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_workspace_test(test_case), ...); }, test_cases);
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
