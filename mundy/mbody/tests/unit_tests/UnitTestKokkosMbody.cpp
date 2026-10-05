@@ -899,15 +899,11 @@ TEST(Mbody, SingleForceOpIsExactAdjoint) {
   constexpr size_t kGenDim = 6 * kNumRods;
   const int owners[kNumRows] = {0, 0, 0, 2, 2, 2, 3, 3, 1};  // rod 0 x3, rod 2 x3, rod 3 x2, rod 1 x1
 
-  Kokkos::View<int*, Kokkos::HostSpace> owner("owner", kNumRows);
-  for (size_t p = 0; p < kNumRows; ++p) {
-    owner(p) = owners[p];
-  }
-
   std::mt19937 rng(20260925);
   std::uniform_real_distribution<double> dist(-1.0, 1.0);
-  const impl::SingleGeometry<HostExecSpace> geo_h(owner);
+  const impl::SingleGeometry<HostExecSpace> geo_h(kNumRows);
   for (size_t p = 0; p < kNumRows; ++p) {
+    geo_h.owner_view()(p) = owners[p];
     geo_h.force(static_cast<int>(p)) = Vector3d{dist(rng), dist(rng), dist(rng)};
     geo_h.torque(static_cast<int>(p)) = Vector3d{dist(rng), dist(rng), dist(rng)};
   }
@@ -953,17 +949,13 @@ TEST(Mbody, PairAdjoint) {
   const int owners_i[kNumRows] = {0, 0, 0, 2, 2, 2, 1, 3};
   const int owners_j[kNumRows] = {1, 1, 1, 3, 3, 3, 3, 0};
 
-  Kokkos::View<int*, Kokkos::HostSpace> owner_i("owner_i", kNumRows), owner_j("owner_j", kNumRows);
-  for (size_t p = 0; p < kNumRows; ++p) {
-    owner_i(p) = owners_i[p];
-    owner_j(p) = owners_j[p];
-  }
-
   std::mt19937 rng(20261002);
   std::uniform_real_distribution<double> dist(-1.0, 1.0);
-  const impl::PairGeometry<HostExecSpace> geo_h(owner_i, owner_j);
+  const impl::PairGeometry<HostExecSpace> geo_h(kNumRows);
   for (size_t p = 0; p < kNumRows; ++p) {
     const int row = static_cast<int>(p);
+    geo_h.owner_i_view()(p) = owners_i[p];
+    geo_h.owner_j_view()(p) = owners_j[p];
     geo_h.force_i(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
     geo_h.torque_i(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
     geo_h.force_j(row) = Vector3d{dist(rng), dist(rng), dist(rng)};
@@ -1474,11 +1466,12 @@ TEST(Mbody, EmptySpringBlockSchurComplementConvergesInZeroIterations) {
   const LinearSpringViews<TestExecSpace> lin_springs(0);
   const AngularSpringViews<TestExecSpace> ang_springs(0);
 
-  auto b0_lin = make_constraint_values(lin_springs);
-  auto b0_ang = make_constraint_values(ang_springs);
-  const impl::PairGeometry<TestExecSpace> lin_geo = impl::compute_geometry(rods_d, lin_springs, b0_lin);
-  const impl::PairGeometry<TestExecSpace> ang_geo = impl::compute_geometry(rods_d, ang_springs, b0_ang);
-  const impl::PairGeometry<TestExecSpace> spring_geo = impl::concat_pair_geometry(lin_geo, ang_geo);
+  const auto springs = make_constraint_set(lin_springs, ang_springs);
+  const auto index_map = impl::make_constraint_index_map(springs);
+  const auto block = impl::make_block_geometry<ConstraintType::BILATERAL, TestExecSpace>(index_map);
+  const Kokkos::View<double*, TestMemSpace> b0("b0", index_map.num_bilateral);
+  impl::compute_block_geometry<ConstraintType::BILATERAL>(rods_d, springs, index_map, block, b0);
+  const impl::PairGeometry<TestExecSpace>& spring_geo = ::mundy::get<0>(block.groups);
 
   const impl::PairForceOp<TestExecSpace> B(spring_geo, rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(spring_geo, rods.size());
@@ -2234,15 +2227,17 @@ double spring_network_stiffness(const SolveInput<Families...>& p) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
   const auto ang_springs_d = create_mirror_view_and_copy(TestExecSpace{}, ang_springs);
-  auto b0_lin = make_constraint_values(lin_springs_d);
-  auto b0_ang = make_constraint_values(ang_springs_d);
-  const impl::PairGeometry<TestExecSpace> geo = impl::concat_pair_geometry(
-      impl::compute_geometry(rods_d, lin_springs_d, b0_lin), impl::compute_geometry(rods_d, ang_springs_d, b0_ang));
+  const auto springs_d = make_constraint_set(lin_springs_d, ang_springs_d);
+  const auto index_map = impl::make_constraint_index_map(springs_d);
+  const auto block = impl::make_block_geometry<ConstraintType::BILATERAL, TestExecSpace>(index_map);
+  const Kokkos::View<double*, TestMemSpace> b0("b0", index_map.num_bilateral);
+  impl::compute_block_geometry<ConstraintType::BILATERAL>(rods_d, springs_d, index_map, block, b0);
+  const impl::PairGeometry<TestExecSpace>& geo = ::mundy::get<0>(block.groups);
   const impl::PairForceOp<TestExecSpace> B(geo, p.rods.size());
   const impl::PairForceOpT<TestExecSpace> BT(geo, p.rods.size());
   const impl::LocalDragMobilityOp<TestExecSpace> M(p.cfg.viscosity, rods_d);
 
-  // Spring rows are packed linear then angular, matching the concatenated geometry.
+  // Spring rows are packed linear then angular, matching the pair group.
   const size_t num_linear = lin_springs.size();
   const size_t num_springs = geo.size();
   Kokkos::View<double*, Kokkos::HostSpace> sqrt_k("sqrt_k", num_springs), q0("q0", num_springs);

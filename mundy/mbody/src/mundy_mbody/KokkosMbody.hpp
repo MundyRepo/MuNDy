@@ -148,7 +148,8 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
   const CGConfig<double> cg_cfg{cfg.max_cg_iters, cfg.cg_tol};
   const impl::StepData<ExecSpace, Families...> step = impl::make_step_data(rods, constraints, cfg.dt, cfg.viscosity);
   view_t psi("psi", step.index_map.num_bilateral);
-  const auto geo = impl::compute_bilateral_geometry(rods, constraints, step.index_map, psi);
+  const auto geo = impl::make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(step.index_map);
+  impl::compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, step.index_map, geo, psi);
   if (step.index_map.num_unilateral == 0 && step.index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedLCPResult{0, 0.0, 0.0 <= cfg.outer_tol};
@@ -199,7 +200,8 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
       impl::make_step_data(rods, constraints, lcp_cfg.dt, lcp_cfg.viscosity);
   const impl::ConstraintIndexMap<Families...>& index_map = step.index_map;
   view_t psi("psi", index_map.num_bilateral);
-  const auto geo = impl::compute_bilateral_geometry(rods, constraints, index_map, psi);
+  const auto geo = impl::make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(index_map);
+  impl::compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, index_map, geo, psi);
   if (index_map.num_unilateral == 0 && index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedSLCPResult{1, 0.0, true, MixedLCPResult{0, 0.0, 0.0 <= lcp_cfg.outer_tol}};
@@ -223,11 +225,9 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
     Kokkos::deep_copy(trial.orientation_view(), rods.orientation_view());
     Kokkos::deep_copy(trial.velocity_omega_view(), iterate.velocity);
     advance_rods(trial, lcp_cfg.dt);
-    view_t trial_psi("trial_psi", index_map.num_bilateral);
-    const auto trial_geo = impl::compute_bilateral_geometry(trial, constraints, index_map, trial_psi);
+    impl::compute_block_geometry<ConstraintType::BILATERAL>(trial, constraints, index_map, geo, psi);
 
-    const double merit =
-        impl::slcp_merit(step, iterate, trial_geo, trial_psi, row_units, cfg.length_tol, cfg.angle_tol);
+    const double merit = impl::slcp_merit(step, iterate, geo, psi, row_units, cfg.length_tol, cfg.angle_tol);
     if (num_iters == 1) {
       first_merit = merit;
     }
@@ -249,9 +249,8 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
     }
     previous_merit = merit;
 
-    iterate = impl::solve_linearization(step, trial_geo, trial_psi,
-                                        impl::Displacement<ExecSpace>{iterate.m_wrench, -lcp_cfg.dt}, iterate.x,
-                                        pgd_cfg, cg_cfg);
+    iterate = impl::solve_linearization(step, geo, psi, impl::Displacement<ExecSpace>{iterate.m_wrench, -lcp_cfg.dt},
+                                        iterate.x, pgd_cfg, cg_cfg);
   }
 }
 
