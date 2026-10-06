@@ -39,9 +39,9 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>  // for Vector3
-#include <mundy_utils/rng.hpp>     // for mundy::make_philox
+#include <mundy_math/Vector3.hpp>     // for Vector3
 #include <mundy_mbody/Periphery.hpp>  // for gen_sphere_quadrature, fill_skfie_matrix, apply_skfie, PeripheryT, ...
+#include <mundy_utils/rng.hpp>        // for mundy::make_philox
 
 namespace mundy {
 
@@ -311,8 +311,8 @@ void apply_skfie_matrix_wrapper(const double viscosity,
   const size_t num_quadrature_points = weights.extent(0);
   Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> M("M", 3 * num_quadrature_points,
                                                                   3 * num_quadrature_points);
-  fill_skfie_matrix(Kokkos::DefaultHostExecutionSpace(), viscosity, num_quadrature_points, points, normals, weights,
-                    M, /*outward_normal=*/false);
+  fill_skfie_matrix(Kokkos::DefaultHostExecutionSpace(), viscosity, num_quadrature_points, points, normals, weights, M,
+                    /*outward_normal=*/false);
   KokkosBlas::gemv(Kokkos::DefaultHostExecutionSpace(), "N", 1.0, M, input_field, 0.0, output_field);
 }
 
@@ -347,8 +347,8 @@ void apply_resistance(const double viscosity,
 
   // Fill the SKFIE matrix M
   Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> M("M", 3 * num_surface_points, 3 * num_surface_points);
-  fill_skfie_matrix(Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_points, surface_points,
-                    surface_normals, surface_weights, M, outward_normal);
+  fill_skfie_matrix(Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_points, surface_points, surface_normals,
+                    surface_weights, M, outward_normal);
 
   // Invert the SKFIE matrix
   Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> M_inv("M_inv", 3 * num_surface_points,
@@ -1341,8 +1341,9 @@ TEST(PeripheryTest, MatrixFreeMatchesDirectInverse) {
 
     // Direct dense inverse.
     Periphery periphery_direct(num_nodes, viscosity);
-    periphery_direct.set_surface_positions(points).set_surface_normals(normals, outward_normal).set_quadrature_weights(
-        weights);
+    periphery_direct.set_surface_positions(points)
+        .set_surface_normals(normals, outward_normal)
+        .set_quadrature_weights(weights);
     periphery_direct.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
     periphery_direct.set_inverse_method(InverseMethod::Direct);
     view_t f_direct("f_direct", 3 * num_nodes);
@@ -1351,8 +1352,9 @@ TEST(PeripheryTest, MatrixFreeMatchesDirectInverse) {
 
     // Matrix-free GMRES inverse over the same geometry.
     Periphery periphery_mf(num_nodes, viscosity);
-    periphery_mf.set_surface_positions(points).set_surface_normals(normals, outward_normal).set_quadrature_weights(
-        weights);
+    periphery_mf.set_surface_positions(points)
+        .set_surface_normals(normals, outward_normal)
+        .set_quadrature_weights(weights);
     mundy::BelosConfig<double> cfg;
     cfg.solver = mundy::BelosSolver::PSEUDOBLOCK_GMRES;
     cfg.tol = 1.0e-10;
@@ -1452,9 +1454,8 @@ TEST(PeripheryTest, SkfieConstantDensityJump) {
         pv_rel_err.push_back(std::fabs(pv_mean - pv_expected) / std::fabs(pv_expected));
 
         std::cout << "SkfieConstantDensityJump: outward_normal=" << outward_normal << " viscosity=" << viscosity
-                  << " order=" << order << "  max_err dense=" << max_err_dense
-                  << " matrix_free=" << max_err_matrix_free << " ss=" << max_err_ss
-                  << "  area-mean PV T[1] rel_err=" << pv_rel_err.back() << std::endl;
+                  << " order=" << order << "  max_err dense=" << max_err_dense << " matrix_free=" << max_err_matrix_free
+                  << " ss=" << max_err_ss << "  area-mean PV T[1] rel_err=" << pv_rel_err.back() << std::endl;
 
         // The difference form is algebraically exact for a constant density; only roundoff remains.
         const double tol = 1.0e-11 / viscosity;
@@ -1523,8 +1524,9 @@ TEST(PeripheryTest, SkfieReproducesInteriorStokesFlow) {
         apply_stokes_kernel(space, viscosity, source_position, points, source_force, slip);
 
         HostPeripheryType periphery(num_nodes, viscosity);
-        periphery.set_surface_positions(points).set_surface_normals(normals, outward_normal).set_quadrature_weights(
-            weights);
+        periphery.set_surface_positions(points)
+            .set_surface_normals(normals, outward_normal)
+            .set_quadrature_weights(weights);
         periphery.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
         view_t surface_forces("surface_forces", 3 * num_nodes);
         periphery.compute_surface_forces(slip, surface_forces);
@@ -1757,8 +1759,8 @@ TEST(PeripheryTest, MotileBodyStokesDrag) {
     const double U_expected = 1.0 / (6.0 * M_PI * mu * a);           // U = F / (6 pi mu a)
     const double Om_expected = 1.0 / (8.0 * M_PI * mu * a * a * a);  // Omega = tau / (8 pi mu a^3)
     std::cout << "MotileBodyStokesDrag: mu=" << mu << " num_quadrature_points=" << num_quadrature_points
-              << " converged=" << result.converged
-              << " iters=" << result.num_iters << " residual=" << result.residual << "\n"
+              << " converged=" << result.converged << " iters=" << result.num_iters << " residual=" << result.residual
+              << "\n"
               << "  U  = (" << U[0] << ", " << U[1] << ", " << U[2] << ")  expected Ux=" << U_expected << "\n"
               << "  Om = (" << Om[0] << ", " << Om[1] << ", " << Om[2] << ")  expected Oz=" << Om_expected << std::endl;
 
@@ -2012,8 +2014,8 @@ void solve_cavity(const double mu, const double a, const double b, const int ord
   auto p_normals = periphery.get_surface_normals();
   auto p_weights = periphery.get_quadrature_weights();
 
-  BodySet<ExecSpace> body_set = make_sphere_body_set<ExecSpace>(
-      order, a, mundy::Vector3d(0.0, 0.0, 0.0), mundy::Quaternion<double>(1.0, 0.0, 0.0, 0.0), F, tau);
+  BodySet<ExecSpace> body_set = make_sphere_body_set<ExecSpace>(order, a, mundy::Vector3d(0.0, 0.0, 0.0),
+                                                                mundy::Quaternion<double>(1.0, 0.0, 0.0, 0.0), F, tau);
 
   SphereSet<ExecSpace> no_spheres;
   view_t empty_p;
@@ -2103,8 +2105,8 @@ TEST(PeripheryTest, MotileBodyInSphericalCavityDrag) {
       // translation exactly), so all of the confined error is wall coupling.
       EXPECT_LT(err_unb, 1.0e-8) << "unbounded Stokes drag must be exact at order " << order << " (err " << err_unb
                                  << ")";
-      std::cout << "  order=" << order << "  U_unb_err=" << err_unb << "   U_conf=" << U_conf[0]
-                << "  err=" << err_conf << "\n";
+      std::cout << "  order=" << order << "  U_unb_err=" << err_unb << "   U_conf=" << U_conf[0] << "  err=" << err_conf
+                << "\n";
     }
     std::cout << std::flush;
 
@@ -2187,8 +2189,8 @@ TEST(PeripheryTest, MotileBodyInSphericalCavityRotation) {
 
     std::vector<double> rel_err_conf;
     rel_err_conf.reserve(orders.size());
-    std::cout << "MotileBodyInSphericalCavityRotation: mu=" << mu << " a=" << a << " b=" << b
-              << " lambda=" << lambda << "  Om_stokes=" << om_stokes << "  Om_exact=" << Om_exact << "\n";
+    std::cout << "MotileBodyInSphericalCavityRotation: mu=" << mu << " a=" << a << " b=" << b << " lambda=" << lambda
+              << "  Om_stokes=" << om_stokes << "  Om_exact=" << Om_exact << "\n";
     for (const int order : orders) {
       mundy::Vector3d U_unb;
       mundy::Vector3d Om_unb;
@@ -2684,9 +2686,8 @@ auto run_periphery_rpyc(const double& viscosity, const int num_spheres,
                         const Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace>& sphere_velocities,
                         const std::shared_ptr<HostPeriphery>& periphery_ptr) {
   // Apply the RPYC kernel
-  mundy::mbody::apply_rpyc_kernel(Kokkos::DefaultHostExecutionSpace(), viscosity, sphere_positions,
-                                             sphere_positions, sphere_radii, sphere_radii, sphere_forces,
-                                             sphere_velocities);
+  mundy::mbody::apply_rpyc_kernel(Kokkos::DefaultHostExecutionSpace(), viscosity, sphere_positions, sphere_positions,
+                                  sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
 
   // Now engage the periphery
   const size_t num_surface_nodes = periphery_ptr->get_num_nodes();
@@ -2700,17 +2701,16 @@ auto run_periphery_rpyc(const double& viscosity, const int num_spheres,
   Kokkos::deep_copy(surface_radii, 0.0);
 
   // Apply the RPY kernel from spheres to periphery
-  mundy::mbody::apply_rpyc_kernel(Kokkos::DefaultHostExecutionSpace(), viscosity, sphere_positions,
-                                             surface_positions, sphere_radii, surface_radii, sphere_forces,
-                                             surface_velocities);
+  mundy::mbody::apply_rpyc_kernel(Kokkos::DefaultHostExecutionSpace(), viscosity, sphere_positions, surface_positions,
+                                  sphere_radii, surface_radii, sphere_forces, surface_velocities);
 
   // Apply no-slip boundary conditions
   // This is done in two steps: first, we compute the forces on the periphery necessary to enforce no-slip
   // Then we evaluate the flow these forces induce on the spheres.
   periphery_ptr->compute_surface_forces(surface_velocities, surface_forces);
-  mundy::mbody::apply_stokes_double_layer_kernel(
-      Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_nodes, num_spheres, surface_positions,
-      sphere_positions, surface_normals, surface_weights, surface_forces, sphere_velocities);
+  mundy::mbody::apply_stokes_double_layer_kernel(Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_nodes,
+                                                 num_spheres, surface_positions, sphere_positions, surface_normals,
+                                                 surface_weights, surface_forces, sphere_velocities);
 
   mundy::Vector3d final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
   mundy::Vector3d final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
@@ -2783,8 +2783,7 @@ TEST(PeripheryTest, SphereInPeripheryMobilitySymmetry) {
   const double periphery_radius = 13.5;
   const std::vector<int> orders = {8, 16, 24};
   const mundy::Vector3d center(0.0, 0.0, 0.0);
-  const mundy::Vector3d off_center =
-      mundy::Vector3d(1.0, 2.0, 3.0) * (0.5 * periphery_radius / std::sqrt(14.0));
+  const mundy::Vector3d off_center = mundy::Vector3d(1.0, 2.0, 3.0) * (0.5 * periphery_radius / std::sqrt(14.0));
 
   std::vector<std::array<std::array<double, 3>, 3>> scaled_corrections;  // viscosity * C at the finest order
   for (const double viscosity : {1.0, 0.5305}) {
@@ -2941,8 +2940,8 @@ TEST(PeripheryDiagnostic, SphereQuadPeripheryRPYC) {
     const bool outward_normal = false;
     const bool include_poles = false;
     const size_t spectral_order = order;
-    mundy::mbody::gen_sphere_quadrature(spectral_order, periphery_radius, &points_vec, &weights_vec,
-                                                   &normals_vec, include_poles, outward_normal);
+    mundy::mbody::gen_sphere_quadrature(spectral_order, periphery_radius, &points_vec, &weights_vec, &normals_vec,
+                                        include_poles, outward_normal);
     // Create the periphery object
     const size_t num_surface_nodes = weights_vec.size();
     std::cout << " | N = " << num_surface_nodes << std::endl;
@@ -3147,6 +3146,6 @@ TEST(PeripheryDiagnostic, ExternalQuadPeripheryRPYC) {
 
 }  // namespace
 
-}  // mbody
+}  // namespace mbody
 
 }  // namespace mundy

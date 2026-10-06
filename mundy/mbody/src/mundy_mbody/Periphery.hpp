@@ -259,19 +259,6 @@ inline double interior_trace_coefficient(const double viscosity, const bool outw
 
 }  // namespace impl
 
-KOKKOS_INLINE_FUNCTION
-double quake_inv_sqrt(double number) {
-  double y = number;
-  double x2 = y * 0.5;
-  std::int64_t i = *(std::int64_t*)&y;
-  // The magic number is for doubles is from https://cs.uwaterloo.ca/~m32rober/rsqrt.pdf
-  i = 0x5fe6eb50c7b537a9 - (i >> 1);
-  y = *(double*)&i;
-  y = y * (1.5 - (x2 * y * y));  // 1st iteration
-  //      y  = y * ( 1.5 - ( x2 * y * y ) );   // 2nd iteration, this can be removed (left out of respect for Quake)
-  return y;
-}
-
 /// \brief Get the Gauss Legrandre-based quadrature weights, nodes, and normals for a sphere
 ///
 /// Point order: 0 at northpole, then 2p+2 points per circle. the last at south pole

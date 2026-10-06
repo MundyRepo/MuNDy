@@ -115,9 +115,9 @@ template <typename T, ValidAccessor<T> Accessor, typename OutputType = typename 
 KOKKOS_INLINE_FUNCTION AVector3<OutputType> perp(const AVector3<T, Accessor>& v) {
   const AVector3<OutputType> v_out{static_cast<OutputType>(v[0]), static_cast<OutputType>(v[1]),
                                    static_cast<OutputType>(v[2])};
-  const OutputType abs_x = Kokkos::abs(v_out[0]);
-  const OutputType abs_y = Kokkos::abs(v_out[1]);
-  const OutputType abs_z = Kokkos::abs(v_out[2]);
+  const OutputType abs_x = abs(v_out[0]);
+  const OutputType abs_y = abs(v_out[1]);
+  const OutputType abs_z = abs(v_out[2]);
 
   const AVector3<OutputType> least_aligned_axis =
       (abs_x <= abs_y && abs_x <= abs_z)

@@ -39,6 +39,7 @@
 #include <utility>
 
 // Mundy
+#include <mundy_math/NumTraits.hpp>        // for mundy::NumTraits
 #include <mundy_math/Tolerance.hpp>        // for mundy::get_relaxed_zero_tolerance<T>
 #include <mundy_math/cmath.hpp>            // for mundy::sqrt
 #include <mundy_math/linear_ops.hpp>       // for mundy::make_shifted_op
@@ -199,7 +200,7 @@ class PowerStrategy {
     state.iter() = 0;
     state.converged() = false;
     state.residual() = zero;
-    state.eigenvalue() = Kokkos::Experimental::infinity_v<value_type>;
+    state.eigenvalue() = NumTraits<value_type>::infinity();
   }
 
   template <class Problem, class State>

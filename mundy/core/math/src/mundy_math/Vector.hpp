@@ -932,7 +932,9 @@ template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAcc
           typename OutputType = typename NumTraits<scalar_product_result_t<U, T>>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle(const AVector<U, N, Accessor1>& a,
                                                         const AVector<T, N, Accessor2>& b) {
-  return Kokkos::numbers::pi_v<OutputType> - minor_angle<N, U, T, Accessor1, Accessor2, OutputType>(a, b);
+  // pi - acos(c) == acos(-c): the minor angle between -a and b. Negating in OutputType keeps unsigned inputs from
+  // wrapping, and no pi constant is needed, so custom scalars work too.
+  return static_cast<OutputType>(minor_angle(-cast<OutputType>(a), b));
 }
 
 /// \brief Major angle between two vectors, in radians (integral inputs promote to float).
