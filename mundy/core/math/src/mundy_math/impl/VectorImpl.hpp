@@ -35,7 +35,7 @@
 // Mundy
 #include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
 #include <mundy_math/Array.hpp>                 // for mundy::Array
-#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::is_passive_scalar_v
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
 #include <mundy_math/cmath.hpp>
@@ -271,7 +271,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(std::index_seque
 /// \param[in] tol The tolerance.
 template <size_t... Is, size_t N, typename U, typename T, typename V, ValidAccessor<U> Accessor,
           ValidAccessor<T> OtherAccessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<V>)
+MUNDY_REQUIRES(is_passive_scalar_v<V>)
 KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>, const AVector<U, N, Accessor>& vec1,
                                                     const AVector<T, N, OtherAccessor>& vec2, const V& tol) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");

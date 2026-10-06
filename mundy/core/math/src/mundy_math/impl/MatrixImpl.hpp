@@ -36,7 +36,7 @@
 #include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
 #include <mundy_math/Array.hpp>                 // for mundy::Array
 #include <mundy_math/MaskedAccessor.hpp>        // for mundy::MaskedAccessor
-#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::NumTraits
+#include <mundy_math/NumTraits.hpp>             // for mundy::{ValidScalarType, NumTraits, is_passive_scalar_v}
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
 #include <mundy_math/ShiftedAccessor.hpp>       // for mundy::ShiftedAccessor
 #include <mundy_math/StridedAccessor.hpp>       // for mundy::StridedAccessor
@@ -417,12 +417,12 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(std::index_seque
 /// \param[in] tol The tolerance.
 template <size_t... Is, typename T, size_t N, size_t M, typename U, typename V, ValidAccessor<T> Accessor,
           ValidAccessor<U> OtherAccessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<V>)
+MUNDY_REQUIRES(is_passive_scalar_v<V>)
 KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>, const AMatrix<U, N, M, Accessor>& mat1,
                                                     const AMatrix<T, N, M, OtherAccessor>& mat2, const V& tol) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  // Use the type of the tolerance to determine the comparison type
-  return ((abs(static_cast<V>(mat1[Is]) - static_cast<V>(mat2[Is])) <= tol) && ...);
+  // Compares values against a passive-typed tolerance, so a custom scalar yields a plain bool.
+  return ((abs(mat1[Is] - mat2[Is]) <= tol) && ...);
 }
 
 /// \brief Sum of all elements

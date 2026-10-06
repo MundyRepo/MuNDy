@@ -35,7 +35,7 @@
 // Mundy
 #include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor, impl::access_at
 #include <mundy_math/Array.hpp>                 // for mundy::Array
-#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::is_passive_scalar_v
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_comparison_tolerance
 #include <mundy_utils/requires.hpp>
@@ -675,27 +675,27 @@ KOKKOS_INLINE_FUNCTION constexpr auto cast(const ScalarType& s) {
 // These operate on raw T* pointers rather than on AScalar objects so that the same mundy::atomic_add etc.
 // call works regardless of whether you're dealing with a raw scalar or a vector/matrix element.
 //
-// Constrained to arithmetic T: Kokkos atomics are not defined for custom scalars such as autodiff
-// duals, so this excludes them and makes misuse a compile error.
+// Constrained to passive scalars (arithmetic types and custom non-autodiff scalars): autodiff duals are excluded, so
+// misuse is a compile error. Custom scalars go through Kokkos' generic (compare-and-swap or lock-based) atomics.
 //@{
 
 /// \brief Atomic load: s_copy = *s
 template <typename T>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_load(T* const s) {
   return Kokkos::atomic_load(s);
 }
 
 /// \brief Atomic store: *s = value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_store(T* const s, const U& value) {
   Kokkos::atomic_store(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
   Kokkos::atomic_add(s, static_cast<T>(value));
 }
@@ -703,105 +703,105 @@ KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
 /// \brief Atomic *s += value — AScalar overload: operates on the underlying scalar, bypassing
 /// AScalar's operator+ (which returns a different storage type incompatible with CAS loops).
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_add(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_add(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_sub(T* const s, const U& value) {
   Kokkos::atomic_sub(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value — AScalar overload.
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_sub(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_sub(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_mul(T* const s, const U& value) {
   Kokkos::atomic_mul(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value — AScalar overload.
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_mul(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_mul(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_div(T* const s, const U& value) {
   Kokkos::atomic_div(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value — AScalar overload.
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_div(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_div(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_add(T* const s, const U& value) {
   return Kokkos::atomic_fetch_add(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_sub(T* const s, const U& value) {
   return Kokkos::atomic_fetch_sub(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_mul(T* const s, const U& value) {
   return Kokkos::atomic_fetch_mul(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_div(T* const s, const U& value) {
   return Kokkos::atomic_fetch_div(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_add_fetch(T* const s, const U& value) {
   return Kokkos::atomic_add_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_sub_fetch(T* const s, const U& value) {
   return Kokkos::atomic_sub_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_mul_fetch(T* const s, const U& value) {
   return Kokkos::atomic_mul_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
   return Kokkos::atomic_div_fetch(s, static_cast<T>(value));
 }

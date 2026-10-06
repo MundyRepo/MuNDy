@@ -194,7 +194,7 @@ static_assert(std::is_same_v<decltype(std::declval<ADScalar>() + std::declval<AD
 static_assert(std::is_same_v<decltype(std::declval<ADScalar>() * std::declval<AD>()), ADScalar>);
 static_assert(std::is_same_v<decltype(std::declval<Scalar<double>>() + std::declval<ADScalar>()), ADScalar>);
 
-// Atomics are constrained to arithmetic scalars, so they are unavailable for AD.
+// Atomics are constrained to passive scalars, so they are unavailable for AD.
 template <typename T>
 concept HasAtomicAdd = requires(T* p, T v) { mundy::atomic_add(p, v); };
 static_assert(HasAtomicAdd<double>);

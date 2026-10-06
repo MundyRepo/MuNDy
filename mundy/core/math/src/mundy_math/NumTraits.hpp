@@ -34,12 +34,36 @@
 
 // C++ core
 #include <concepts>     // for std::convertible_to
-#include <type_traits>  // for std::is_arithmetic_v, std::is_integral_v, std::is_signed_v, std::conditional_t
+#include <type_traits>  // for std::is_arithmetic_v, std::is_integral_v, std::is_signed_v, std::conditional_t, ...
 
 // Mundy
 #include <mundy_math/ScalarBinaryOpTraits.hpp>
 
 namespace mundy {
+
+//! \name Scalar kinds
+//@{
+
+/// \brief Whether T is a real scalar that carries no derivatives: arithmetic types, plus custom types that opt in.
+///
+/// Custom non-autodiff scalars specialize this to true. It gates code that needs a plain real number, such as
+/// tolerances and atomics.
+template <typename T>
+struct is_passive_scalar : std::bool_constant<std::is_arithmetic_v<T>> {};
+
+template <typename T>
+inline constexpr bool is_passive_scalar_v = is_passive_scalar<std::remove_cv_t<T>>::value;
+
+/// \brief Whether T is a forward-mode autodiff scalar: a value plus derivatives.
+///
+/// Autodiff scalars specialize this to true and expose their passive type as \c value_type, plus \c value(),
+/// \c derivatives(), and \c num_derivatives.
+template <typename T>
+struct is_autodiff_scalar : std::false_type {};
+
+template <typename T>
+inline constexpr bool is_autodiff_scalar_v = is_autodiff_scalar<std::remove_cv_t<T>>::value;
+//@}
 
 /// \brief Numeric traits for an arithmetic scalar type; the reusable base \c NumTraits forwards to.
 ///

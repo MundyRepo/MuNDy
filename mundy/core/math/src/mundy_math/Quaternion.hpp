@@ -1135,7 +1135,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector
       ny = -v_from[0];
       nz = CommonType(0);
     }
-    const CommonType inv_len = CommonType(1) / Kokkos::sqrt(nx * nx + ny * ny + nz * nz);
+    const CommonType inv_len = CommonType(1) / sqrt(nx * nx + ny * ny + nz * nz);
     quat.w() = CommonType(0);
     quat.x() = nx * inv_len;
     quat.y() = ny * inv_len;
@@ -1145,7 +1145,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector
 
   // Regular case
   const auto cross_product = cross(v_from, v_to);
-  const CommonType sqrt_term = Kokkos::sqrt(CommonType(0.5) * one_plus_dot);
+  const CommonType sqrt_term = sqrt(CommonType(0.5) * one_plus_dot);
   const auto vec = CommonType(0.5) * cross_product / sqrt_term;
   quat.w() = sqrt_term;
   quat.x() = vec[0];

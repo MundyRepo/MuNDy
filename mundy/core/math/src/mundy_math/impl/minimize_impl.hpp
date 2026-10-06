@@ -32,7 +32,8 @@
 #include <iostream>
 
 // Mundy
-#include <mundy_math/Vector.hpp>  // for mundy::Vector
+#include <mundy_math/NumTraits.hpp>  // for mundy::NumTraits
+#include <mundy_math/Vector.hpp>     // for mundy::Vector
 #include <mundy_math/cmath.hpp>
 
 namespace mundy {
@@ -46,7 +47,7 @@ KOKKOS_INLINE_FUNCTION T3 put_in_range(T1 min_val, T2 max_val, T3 val) {
 
 template <typename T>
 KOKKOS_INLINE_FUNCTION bool is_subnormal(T value) {
-  return (value != 0) && (abs(value) < Kokkos::Experimental::norm_min_v<T>);
+  return (value != 0) && (abs(value) < NumTraits<T>::norm_min());
 }
 
 KOKKOS_INLINE_FUNCTION double poly_min_extrap(const double f0, const double d0, const double f1, const double d1,

@@ -38,6 +38,7 @@
 
 // Mundy
 #include <mundy_math/Matrix.hpp>     // for mundy::is_matrix_v
+#include <mundy_math/NumTraits.hpp>  // for mundy::NumTraits
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance<T>
 #include <mundy_math/Vector.hpp>     // for mundy::Vector
 #include <mundy_math/cmath.hpp>
@@ -770,7 +771,7 @@ struct MundyMathBackend {
   template <size_t... Is, class Functor, class ReductionScalar>
   KOKKOS_INLINE_FUNCTION static void reduce_max_impl(std::index_sequence<Is...>, const Functor& func,
                                                      ReductionScalar& result) {
-    ReductionScalar max_val = -Kokkos::Experimental::infinity_v<ReductionScalar>;
+    ReductionScalar max_val = -NumTraits<ReductionScalar>::infinity();
     ((func(Is, max_val)), ...);
     result = max_val;
   }
