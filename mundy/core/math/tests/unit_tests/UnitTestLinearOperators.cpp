@@ -49,6 +49,21 @@ view_t make_view(std::initializer_list<double> values) {
   return v;
 }
 
+/// \brief The number of Kokkos allocations made while f runs.
+template <class F>
+size_t count_allocations(F&& f) {
+  static size_t count = 0;
+  count = 0;
+  Kokkos::Tools::Experimental::set_init_callback(
+      [](const int, const uint64_t, const uint32_t, Kokkos_Profiling_KokkosPDeviceInfo*) {});
+  Kokkos::Tools::Experimental::set_allocate_data_callback(
+      [](const Kokkos_Profiling_SpaceHandle, const char*, const void*, const uint64_t) { ++count; });
+  f();
+  Kokkos::Tools::Experimental::set_allocate_data_callback(nullptr);
+  Kokkos::Tools::Experimental::set_init_callback(nullptr);
+  return count;
+}
+
 std::vector<double> to_host(const view_t& v) {
   auto v_host = Kokkos::create_mirror_view(v);
   Kokkos::deep_copy(v_host, v);
@@ -232,6 +247,25 @@ TEST(LinearOperators, ScaledOpUsesFusedFastPathWhenAvailable) {
   EXPECT_DOUBLE_EQ(result[0], 4.0 * 2.0 * 1.0);
   EXPECT_DOUBLE_EQ(result[1], 4.0 * 2.0 * 2.0);
   EXPECT_DOUBLE_EQ(result[2], 4.0 * 2.0 * 3.0);
+}
+
+// The child only exposes apply(x, y, workspace), so the scaled op can apply it only through its own workspace, which
+// then serves every apply without allocating.
+TEST(LinearOperators, ScaledOpWorksWithAWorkspaceOnlyChild) {
+  const auto scaled = ScaledOp(backend_t{}, /*alpha=*/4.0, WorkspaceOnlyScaleOp(2.0, 3));
+  const view_t x = make_view({1.0, 2.0, 3.0});
+  view_t y = scaled.make_range_vector();
+  auto workspace = scaled.make_workspace();
+
+  // Apply twice through one workspace
+  backend_t::apply(scaled, x, y, workspace);
+  const size_t num_allocations = count_allocations([&] { backend_t::apply(scaled, x, y, workspace); });
+
+  const std::vector<double> result = to_host(y);
+  EXPECT_EQ(result[0], 4.0 * 2.0 * 1.0);
+  EXPECT_EQ(result[1], 4.0 * 2.0 * 2.0);
+  EXPECT_EQ(result[2], 4.0 * 2.0 * 3.0);
+  EXPECT_EQ(num_allocations, 0u);
 }
 
 // A linear operator with independent domain/range sizes that scales its input into a chosen slice of the range
