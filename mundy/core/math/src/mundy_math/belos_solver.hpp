@@ -55,6 +55,7 @@
 #include <mundy_math/Tolerance.hpp>               // for mundy::get_relaxed_zero_tolerance<T>
 #include <mundy_math/impl/belos_solver_impl.hpp>  // for the (self-contained) Tpetra/Belos machinery
 #include <mundy_math/linear_system.hpp>           // for mundy::LinearSystem
+#include <mundy_math/preconditioners.hpp>         // for mundy::NoPreconditioner
 #include <mundy_math/solver_backends.hpp>         // for the Backend contract
 #include <mundy_utils/storage.hpp>                // for value-or-reference storage
 #include <mundy_utils/throw_assert.hpp>
@@ -175,7 +176,7 @@ Teuchos::RCP<Teuchos::ParameterList> make_parameter_list(const BelosConfig<Scala
 ///
 /// On non-convergence this returns a result with converged == false and leaves the best iterate in \p x; it does
 /// not throw. Requires a host-orchestrating backend (KokkosBackend); it is not valid with MundyMathBackend.
-template <class Problem, class XVector, class Precond = impl::NoPreconditioner>
+template <class Problem, class XVector, class Precond = NoPreconditioner>
 auto belos_solve(const Problem& prob, XVector& x, const BelosConfig<typename Problem::value_type>& cfg,
                  const Precond& precond = {}) -> BelosResult<typename Problem::value_type> {
   using value_type = typename Problem::value_type;
@@ -205,7 +206,7 @@ auto belos_solve(const Problem& prob, XVector& x, const BelosConfig<typename Pro
 /// start even when \p warm_start is set; thereafter warm_start reuses the previous solution as the initial guess.
 /// \p Precond, when not NoPreconditioner, is applied as a right preconditioner (its apply() computes the
 /// approximate-inverse action). apply() throws std::runtime_error if the inner solve does not converge. Host-only.
-template <typename Backend, typename Op, typename Precond = impl::NoPreconditioner>
+template <typename Backend, typename Op, typename Precond = NoPreconditioner>
 class BelosInvOp {
  public:
   using backend_t = Backend;
@@ -271,7 +272,7 @@ BelosInvOp(Backend, Op&&, const BelosConfig<Scalar>&, Precond&&, bool) -> BelosI
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 /// \brief Build a BelosInvOp. \p precond defaults to no preconditioner.
-template <class Backend, class Op, class Scalar, class Precond = impl::NoPreconditioner>
+template <class Backend, class Op, class Scalar, class Precond = NoPreconditioner>
 auto make_belos_inv_op(Op&& op, const BelosConfig<Scalar>& cfg, Precond&& precond = {}, bool warm_start = false) {
   return BelosInvOp(Backend{}, std::forward<Op>(op), cfg, std::forward<Precond>(precond), warm_start);
 }

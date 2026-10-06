@@ -24,12 +24,15 @@
 #include <Kokkos_Core.hpp>
 
 // C++ core
+#include <cmath>      // for std::ldexp
+#include <limits>     // for std::numeric_limits
 #include <stdexcept>  // for std::runtime_error
 
 // Mundy
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/linear_system.hpp>
+#include <mundy_math/preconditioners.hpp>
 #include <mundy_math/solver_backends.hpp>
 
 namespace mundy {
@@ -53,6 +56,34 @@ using mm_backend_t = MundyMathBackend;
 static_assert(VectorResidualPolicy<L2Residual, mm_backend_t, Vector3d, Vector3d>);
 static_assert(VectorResidualPolicy<RelativeL2Residual, mm_backend_t, Vector3d, Vector3d>);
 static_assert(VectorResidualPolicy<LinfResidual, mm_backend_t, Vector3d, Vector3d>);
+static_assert(Preconditioner<NoPreconditioner, mm_backend_t, Vector3d>);
+static_assert(Preconditioner<JacobiPreconditioner<mm_backend_t, Vector3d>, mm_backend_t, Vector3d>);
+static_assert(!Preconditioner<bool, mm_backend_t, Vector3d>);
+
+using Vector7d = Vector<double, 7>;
+using Matrix7d = Matrix<double, 7, 7>;
+
+/// \brief A symmetric, strictly diagonally dominant (so SPD) 7x7 matrix with exactly representable entries.
+Matrix7d spd_matrix7() {
+  Matrix7d A = Matrix7d();
+  for (size_t i = 0; i < 7; ++i) {
+    A(i, i) = 4.0 + static_cast<double>(i);
+  }
+  for (size_t i = 0; i + 1 < 7; ++i) {
+    A(i, i + 1) = -1.0 - 0.25 * static_cast<double>(i);
+    A(i + 1, i) = A(i, i + 1);
+  }
+  return A;
+}
+
+/// \brief The diagonal of a 7x7 matrix.
+Vector7d diagonal7(const Matrix7d& A) {
+  Vector7d d = Vector7d();
+  for (size_t i = 0; i < 7; ++i) {
+    d[i] = A(i, i);
+  }
+  return d;
+}
 
 // Solves spd_matrix() x = spd_rhs() inside a kernel, constructing the LinearSystem there.
 void solve_spd_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>& x,
@@ -69,6 +100,38 @@ void solve_spd_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecutionSpa
           x(i) = state.x()[i];
         }
         converged() = result.converged;
+      });
+}
+
+// Applies cold, warm-started, and Jacobi-preconditioned inverses of spd_matrix() to one rhs inside a kernel, the warm
+// one twice. The inverses are const, so all their state changes go through mutable members. Solution k is
+// x(3k), ..., x(3k + 2) and took iters(k) iterations.
+void apply_cg_inv_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>& x,
+                            const Kokkos::View<unsigned*, Kokkos::DefaultExecutionSpace::memory_space>& iters) {
+  Kokkos::parallel_for(
+      "apply_cg_inv_in_kernel", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1), KOKKOS_LAMBDA(const int) {
+        const Matrix3d A{2.0,  -1.0, 0.0,   //
+                         -1.0, 2.0,  -1.0,  //
+                         0.0,  -1.0, 2.0};
+        const Vector3d rhs{0.3, -0.1, 0.7};
+        const auto cold = make_cg_inv_op<mm_backend_t>(Matrix3d(A), CGConfig<double>{});
+        const auto warm = make_cg_inv_op<mm_backend_t>(Matrix3d(A), CGConfig<double>{}, /*warm_start=*/true);
+        const auto jacobi = make_cg_inv_op<mm_backend_t>(
+            Matrix3d(A), CGConfig<double>{}, make_jacobi_preconditioner<mm_backend_t>(Vector3d{2.0, 2.0, 2.0}));
+        Vector3d out[4];
+        cold.apply(rhs, out[0]);
+        iters(0) = cold.last_result().num_iters;
+        warm.apply(rhs, out[1]);
+        iters(1) = warm.last_result().num_iters;
+        warm.apply(rhs, out[2]);
+        iters(2) = warm.last_result().num_iters;
+        jacobi.apply(rhs, out[3]);
+        iters(3) = jacobi.last_result().num_iters;
+        for (int k = 0; k < 4; ++k) {
+          for (int i = 0; i < 3; ++i) {
+            x(3 * k + i) = out[k][i];
+          }
+        }
       });
 }
 
@@ -173,6 +236,7 @@ TEST(LinearSystem, CGInvOpMatchesDenseInverse) {
   const Vector3d rhs{0.3, -0.1, 0.7};
   const Vector3d expected = inverse(A) * rhs;
 
+  // Unpreconditioned
   auto cg_inv = CGInvOp(mm_backend_t{}, Matrix3d(A), CGConfig<double>{});
   Vector3d out{0.0, 0.0, 0.0};
   cg_inv.apply(rhs, out);
@@ -181,6 +245,17 @@ TEST(LinearSystem, CGInvOpMatchesDenseInverse) {
     EXPECT_NEAR(out[i], expected[i], 1e-6);
   }
   EXPECT_TRUE(cg_inv.last_result().converged);
+
+  // Jacobi-preconditioned
+  auto pcg_inv = make_cg_inv_op<mm_backend_t>(Matrix3d(A), CGConfig<double>{},
+                                              make_jacobi_preconditioner<mm_backend_t>(Vector3d{2.0, 2.0, 2.0}));
+  Vector3d pcg_out{0.0, 0.0, 0.0};
+  pcg_inv.apply(rhs, pcg_out);
+
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(pcg_out[i], expected[i], 1e-6);
+  }
+  EXPECT_TRUE(pcg_inv.last_result().converged);
 }
 
 TEST(LinearSystem, CGInvOpReusedAcrossMultipleRhsAlwaysColdStarts) {
@@ -197,6 +272,93 @@ TEST(LinearSystem, CGInvOpReusedAcrossMultipleRhsAlwaysColdStarts) {
   const Vector3d expected2 = inverse(A) * Vector3d{0.0, 0.0, 1.0};
   for (int i = 0; i < 3; ++i) {
     EXPECT_NEAR(out2[i], expected2[i], 1e-6);
+  }
+}
+
+// With P = I, preconditioned CG is plain CG: z = r ./ 1 is r itself, so the solves agree bit for bit.
+TEST(LinearSystem, UnitJacobiIsPlainCG) {
+  const Matrix7d A = spd_matrix7();
+  const Vector7d b = A * Vector7d{1.0, -2.0, 0.5, 3.0, -1.0, 2.0, 0.25};
+  const Vector7d ones{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+  const CGConfig<double> cfg{.max_iters = 100, .tol = 1e-12};
+
+  // Solve
+  auto plain_state = CGState(Vector7d(), Vector7d(), Vector7d(), Vector7d());
+  const auto plain = solve_linear_system(LinearSystem(mm_backend_t{}, Matrix7d(A), Vector7d(b)),
+                                         CGStrategy(L2Residual{}, cfg), plain_state);
+  auto unit_state = CGState(Vector7d(), Vector7d(), Vector7d(), Vector7d());
+  const auto unit = solve_linear_system(
+      LinearSystem(mm_backend_t{}, Matrix7d(A), Vector7d(b)),
+      CGStrategy(L2Residual{}, cfg, make_jacobi_preconditioner<mm_backend_t>(Vector7d(ones))), unit_state);
+
+  // Bit for bit
+  ASSERT_TRUE(plain.converged);
+  EXPECT_EQ(unit.converged, plain.converged);
+  EXPECT_EQ(unit.num_iters, plain.num_iters);
+  EXPECT_EQ(unit.residual, plain.residual);
+  for (size_t i = 0; i < 7; ++i) {
+    EXPECT_EQ(unit_state.x()[i], plain_state.x()[i]) << "entry " << i;
+  }
+}
+
+// Jacobi-preconditioned CG is invariant under diagonal scaling: its iterates on D A D y = D b are D^-1 those on
+// A x = b. Powers of two scale exactly, so the two runs agree bit for bit, and n = 7 iterations reach the solution.
+TEST(LinearSystem, JacobiIsDiagonalScalingInvariant) {
+  const Matrix7d A = spd_matrix7();
+  const Vector7d x_exact{1.0, -2.0, 0.5, 3.0, -1.0, 2.0, 0.25};
+  const Vector7d b = A * x_exact;
+  const int exponents[7] = {-6, 3, 0, 5, -2, 7, -4};
+  Matrix7d DAD = Matrix7d();
+  Vector7d Db = Vector7d();
+  for (size_t i = 0; i < 7; ++i) {
+    Db[i] = std::ldexp(b[i], exponents[i]);
+    for (size_t j = 0; j < 7; ++j) {
+      DAD(i, j) = std::ldexp(A(i, j), exponents[i] + exponents[j]);
+    }
+  }
+  const CGConfig<double> cfg{.max_iters = 7, .tol = 0.0};
+
+  // Solve
+  auto state = CGState(Vector7d(), Vector7d(), Vector7d(), Vector7d());
+  solve_linear_system(LinearSystem(mm_backend_t{}, Matrix7d(A), Vector7d(b)),
+                      CGStrategy(L2Residual{}, cfg, make_jacobi_preconditioner<mm_backend_t>(diagonal7(A))), state);
+  auto scaled_state = CGState(Vector7d(), Vector7d(), Vector7d(), Vector7d());
+  solve_linear_system(LinearSystem(mm_backend_t{}, Matrix7d(DAD), Vector7d(Db)),
+                      CGStrategy(L2Residual{}, cfg, make_jacobi_preconditioner<mm_backend_t>(diagonal7(DAD))),
+                      scaled_state);
+
+  // D^-1 x, bit for bit, at the solution
+  for (size_t i = 0; i < 7; ++i) {
+    EXPECT_EQ(std::ldexp(scaled_state.x()[i], exponents[i]), state.x()[i]) << "entry " << i;
+    EXPECT_NEAR(state.x()[i], x_exact[i], 1e-12) << "entry " << i;
+  }
+}
+
+// CG starts from alpha g for a guess g, alpha = g^T b / g^T A g: a guess along the solution starts on it, and a zero
+// right-hand side starts at zero. Every quantity here is exact.
+TEST(LinearSystem, WarmStartRescalesGuess) {
+  const Matrix3d A = spd_matrix();
+  const Vector3d x_exact{1.0, 0.0, 1.0};
+  const CGConfig<double> cfg;
+
+  // A guess along the solution: g = 2 x*, alpha = 1/2
+  auto along = CGState(Vector3d(2.0 * x_exact), Vector3d{}, Vector3d{}, Vector3d{});
+  const auto along_result = solve_linear_system(LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(A * x_exact)),
+                                                CGStrategy(L2Residual{}, cfg), along);
+  EXPECT_TRUE(along_result.converged);
+  EXPECT_EQ(along_result.num_iters, 0u);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(along.x()[i], x_exact[i]);
+  }
+
+  // A zero right-hand side: alpha = 0
+  auto zero_rhs = CGState(Vector3d{0.3, -0.7, 1.1}, Vector3d{}, Vector3d{}, Vector3d{});
+  const auto zero_rhs_result = solve_linear_system(LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d{0.0, 0.0, 0.0}),
+                                                   CGStrategy(L2Residual{}, cfg), zero_rhs);
+  EXPECT_TRUE(zero_rhs_result.converged);
+  EXPECT_EQ(zero_rhs_result.num_iters, 0u);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(zero_rhs.x()[i], 0.0);
   }
 }
 
@@ -225,6 +387,28 @@ TEST(LinearSystem, NotPositiveDefiniteStopsEarly) {
   EXPECT_THROW(cg_inv.apply(b, out), std::runtime_error);
 }
 
+// CGInvOps constructed and applied inside a kernel. The warm inverse's first apply is the cold solve, and its second
+// starts on the solution.
+TEST(LinearSystem, CGInvOpInKernel) {
+  Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space> x("x", 12);
+  Kokkos::View<unsigned*, Kokkos::DefaultExecutionSpace::memory_space> iters("iters", 4);
+  apply_cg_inv_in_kernel(x, iters);
+
+  const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+  const auto iters_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, iters);
+  const Vector3d expected = inverse(spd_matrix()) * Vector3d{0.3, -0.1, 0.7};
+  for (int k = 0; k < 4; ++k) {
+    for (int i = 0; i < 3; ++i) {
+      EXPECT_NEAR(x_host(3 * k + i), expected[i], 1e-6) << "solution " << k << ", entry " << i;
+    }
+  }
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(x_host(3 + i), x_host(i)) << "entry " << i;
+  }
+  EXPECT_EQ(iters_host(1), iters_host(0));
+  EXPECT_EQ(iters_host(2), 0u);
+}
+
 // A LinearSystem constructed and solved inside a kernel.
 TEST(LinearSystem, MundyMathBackendInKernel) {
   Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space> x("x", 3);
@@ -248,7 +432,7 @@ using view_t = Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space
 // A hand-rolled 3x3 SPD tridiagonal operator over Kokkos::View, avoiding any dependence on
 // KokkosBlas/KokkosLapack (which may not have a usable LAPACK backend in a given build environment) -- this
 // proves the CG solver itself works against a duck-typed, View-backed operator under KokkosBackend, independent
-// of whatever BLAS/LAPACK support happens to be configured.
+// of whatever BLAS/LAPACK support happens to be configured. Its vectors start NaN-filled, as uninitialized storage may.
 struct TridiagKokkosOp {
   size_t domain_size() const {
     return 3;
@@ -257,10 +441,14 @@ struct TridiagKokkosOp {
     return 3;
   }
   view_t make_domain_vector() const {
-    return view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "tridiag_domain"), 3);
+    view_t v(Kokkos::view_alloc(Kokkos::WithoutInitializing, "tridiag_domain"), 3);
+    Kokkos::deep_copy(v, std::numeric_limits<double>::quiet_NaN());
+    return v;
   }
   view_t make_range_vector() const {
-    return view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "tridiag_range"), 3);
+    view_t v(Kokkos::view_alloc(Kokkos::WithoutInitializing, "tridiag_range"), 3);
+    Kokkos::deep_copy(v, std::numeric_limits<double>::quiet_NaN());
+    return v;
   }
   void apply(const view_t& x, view_t& y) const {
     Kokkos::parallel_for(
@@ -298,6 +486,47 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
   EXPECT_NEAR(x_host(0), 1.0, 1e-8);
   EXPECT_NEAR(x_host(1), 0.0, 1e-8);
   EXPECT_NEAR(x_host(2), 1.0, 1e-8);
+
+  // Jacobi-preconditioned, with A's diagonal (2, 2, 2)
+  view_t d("d", 3);
+  Kokkos::deep_copy(d, 2.0);
+  auto pcg_state = CGState(view_t("x", 3), A.make_range_vector(), A.make_range_vector(), A.make_range_vector());
+  const auto pcg_result = solve_linear_system(
+      LinearSystem(kokkos_backend_t{}, TridiagKokkosOp(A), view_t(b)),
+      CGStrategy(L2Residual{}, CGConfig<double>{}, make_jacobi_preconditioner<kokkos_backend_t>(d)), pcg_state);
+  EXPECT_TRUE(pcg_result.converged);
+  EXPECT_LE(pcg_result.num_iters, 3u);
+
+  const auto pcg_x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, pcg_state.x());
+  EXPECT_NEAR(pcg_x_host(0), 1.0, 1e-8);
+  EXPECT_NEAR(pcg_x_host(1), 0.0, 1e-8);
+  EXPECT_NEAR(pcg_x_host(2), 1.0, 1e-8);
+}
+
+// The solution buffer starts zeroed, so a warm-started inverse's first apply is a cold solve, bit for bit.
+TEST(LinearSystem, CGInvOpFirstWarmApplyIsCold) {
+  view_t rhs("rhs", 3);
+  auto rhs_host = Kokkos::create_mirror_view(rhs);
+  rhs_host(0) = 0.3;
+  rhs_host(1) = -0.1;
+  rhs_host(2) = 0.7;
+  Kokkos::deep_copy(rhs, rhs_host);
+  const CGConfig<double> cfg;
+
+  // Solve
+  auto warm = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg, /*warm_start=*/true);
+  auto cold = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg, /*warm_start=*/false);
+  view_t warm_out("warm_out", 3), cold_out("cold_out", 3);
+  warm.apply(rhs, warm_out);
+  cold.apply(rhs, cold_out);
+
+  // Bit for bit
+  EXPECT_EQ(warm.last_result().num_iters, cold.last_result().num_iters);
+  const auto warm_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, warm_out);
+  const auto cold_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, cold_out);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(warm_host(i), cold_host(i)) << "entry " << i;
+  }
 }
 
 // Every residual is a norm, so that of a zero-length vector is exactly zero.

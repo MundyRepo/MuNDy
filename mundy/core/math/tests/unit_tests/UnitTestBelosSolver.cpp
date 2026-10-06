@@ -266,7 +266,7 @@ view_t known_rhs(const Op& A, const host_view_t& x_exact_h) {
 }
 
 // Solve A x = rhs from a cold start via belos_solve; return the result, leaving the solution in x_out.
-template <class Op, class Precond = impl::NoPreconditioner>
+template <class Op, class Precond = NoPreconditioner>
 BelosResult<double> solve_into(const Op& A, const view_t& rhs, view_t& x_out, BelosConfig<double> cfg,
                                const Precond& precond = {}) {
   Kokkos::deep_copy(x_out, 0.0);
@@ -501,9 +501,9 @@ TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
   cfg.extra->set("Implicit Residual Scaling", std::string("Norm of RHS"));
   cfg.extra->set("Explicit Residual Scaling", std::string("Norm of RHS"));
 
-  auto warm = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, impl::NoPreconditioner{},
+  auto warm = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, NoPreconditioner{},
                                                   /*warm_start=*/true);
-  auto cold = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, impl::NoPreconditioner{},
+  auto cold = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, NoPreconditioner{},
                                                   /*warm_start=*/false);
 
   const host_view_t x1 = ramp(n, 0.1);

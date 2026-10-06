@@ -56,15 +56,13 @@
 #include <BelosTypes.hpp>
 
 // Mundy:
+#include <mundy_math/preconditioners.hpp>  // for mundy::NoPreconditioner
 #include <mundy_math/solver_backends.hpp>
 #include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
 namespace impl {
-
-/// \brief Sentinel meaning "no preconditioner" for the optional preconditioner argument.
-struct NoPreconditioner {};
 
 /// \brief Plain solve statistics returned by belos_solve_raw (kept free of the public config/result types).
 struct BelosSolveStats {

@@ -394,6 +394,16 @@ struct KokkosBackend {
         KOKKOS_LAMBDA(const int i) { z(i) = x(i) * y(i); });
   }
 
+  /// \brief z := x ./ y, elementwise.
+  template <class XVector, class YVector, class ZVector>
+  static void elementwise_div(const XVector& x, const YVector& y, ZVector& z) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && y.extent(0) == z.extent(0), std::invalid_argument,
+                       "x, y, and z must have the same size.");
+    Kokkos::parallel_for(
+        "elementwise_div", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i) { z(i) = x(i) / y(i); });
+  }
+
   template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>
   static void wrapped_axpbyz(const Scalar alpha, const XVector& x, const Scalar beta, const YVector& y, ZVector& z,
                              const Wrapper& wrapper) {
@@ -716,6 +726,12 @@ struct MundyMathBackend {
   template <class XVector, class YVector, class ZVector>
   KOKKOS_INLINE_FUNCTION static void elementwise_mul(const XVector& x, const YVector& y, ZVector& z) {
     z = ::mundy::elementwise_mul(x, y);
+  }
+
+  /// \brief z := x ./ y, elementwise.
+  template <class XVector, class YVector, class ZVector>
+  KOKKOS_INLINE_FUNCTION static void elementwise_div(const XVector& x, const YVector& y, ZVector& z) {
+    z = ::mundy::elementwise_div(x, y);
   }
 
   template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>
