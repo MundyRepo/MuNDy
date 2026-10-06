@@ -28,8 +28,9 @@
 #include <type_traits>  // for std::is_same_v
 
 // Mundy
-#include <mundy_math/linear_system.hpp>  // for mundy::CGConfig
-#include <mundy_math/pgd.hpp>            // for mundy::PGDConfig
+#include <mundy_math/linear_system.hpp>         // for mundy::CGConfig
+#include <mundy_math/pgd.hpp>                   // for mundy::PGDConfig
+#include <mundy_mbody/KokkosMbodyMobility.hpp>  // for mundy::mbody::MobilityModel
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
 #include <mundy_mbody/impl/KokkosMbodyImpl.hpp>
 
@@ -46,7 +47,6 @@ namespace mbody {
 /// and no two bodies that push on each other are more than outer_tol apart.
 struct MixedLCPConfig {
   double dt = 1.0;
-  double viscosity = 1.0;
   unsigned max_outer_iters = 1000;
   double outer_tol = 1e-6;
   unsigned max_cg_iters = 200;
@@ -132,8 +132,9 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 /// constraint values, such as a contact's separation. B and B^T do the same for the bilateral multipliers and the
 /// rates of change of their constraint values. K^{-1} is the per-constraint compliance, zero for a rigidly held one.
 /// The rigid rows must be independent: two of them holding the same degree of freedom, such as two anchors on one rod,
-/// leave S undefined. M is the local-drag rod mobility, dt M in the problem above. S is SPD and only its apply-action
-/// is cheap, so it is realized by a matrix-free CG, not an explicit inverse.
+/// leave S undefined. M is the rods' mobility at C^k, mobility_model.make_mobility(rods), and dt M appears in the
+/// problem above. S is SPD and only its apply-action is cheap, so it is realized by a matrix-free CG, not an explicit
+/// inverse.
 ///
 /// On entry rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext. On exit
 /// force/torque is F_ext + D x* + B y*, velocity/omega is U_free + M (D x* + B y*), every family's lambda holds its
@@ -144,16 +145,19 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 /// A body held by a constraint contributes its reaction to B y, which cancels out of the relaxation's
 /// fixed point exactly; a body held by discarding its velocity after the solve leaves that reaction
 /// outside B, and the fixed point then carries an error of order dt times the body's mobility.
-template <typename ExecSpace, typename... Families>
+template <typename ExecSpace, typename Model, typename... Families>
 MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
-                               const MixedLCPConfig& cfg) {
+                               const Model& mobility_model, const MixedLCPConfig& cfg) {
   static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
                 "mbody::solve_mixed_lcp: rods and every constraint family must share one execution space.");
+  static_assert(
+      MobilityModel<Model, ExecSpace>,
+      "mbody::solve_mixed_lcp: mobility_model must be a MobilityModel, whose make_mobility(rods) is a Mobility.");
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
 
   const PGDConfig<double> pgd_cfg{cfg.max_outer_iters, cfg.outer_tol};
   const CGConfig<double> cg_cfg{cfg.max_cg_iters, cfg.cg_tol};
-  const impl::StepData<ExecSpace, Families...> step = impl::make_step_data(rods, constraints, cfg.dt, cfg.viscosity);
+  const auto step = impl::make_step_data(rods, constraints, mobility_model.make_mobility(rods), cfg.dt);
   if (step.index_map.num_unilateral == 0 && step.index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedLCPResult{0, 0.0, 0.0 <= cfg.outer_tol};
@@ -189,11 +193,14 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
 /// force/torque is F_ext + W, velocity/omega is U_free + M W, every family's lambda holds its multipliers, all of the
 /// returned iterate, and the rods have not moved. advance_rods can be used to perform the consistent time integration,
 /// which for a converged iterate reaches the configuration at which it was accepted.
-template <typename ExecSpace, typename... Families>
+template <typename ExecSpace, typename Model, typename... Families>
 MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
-                                 const MixedSLCPConfig& cfg) {
+                                 const Model& mobility_model, const MixedSLCPConfig& cfg) {
   static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
                 "mbody::solve_mixed_slcp: rods and every constraint family must share one execution space.");
+  static_assert(
+      MobilityModel<Model, ExecSpace>,
+      "mbody::solve_mixed_slcp: mobility_model must be a MobilityModel, whose make_mobility(rods) is a Mobility.");
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
   MUNDY_THROW_REQUIRE(cfg.max_iters >= 1, std::invalid_argument, "mbody::solve_mixed_slcp: max_iters must be >= 1.");
   MUNDY_THROW_REQUIRE(cfg.length_tol > 0.0 && cfg.angle_tol > 0.0, std::invalid_argument,
@@ -202,8 +209,7 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
 
   const PGDConfig<double> pgd_cfg{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol};
   const CGConfig<double> cg_cfg{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol};
-  const impl::StepData<ExecSpace, Families...> step =
-      impl::make_step_data(rods, constraints, lcp_cfg.dt, lcp_cfg.viscosity);
+  const auto step = impl::make_step_data(rods, constraints, mobility_model.make_mobility(rods), lcp_cfg.dt);
   const impl::ConstraintIndexMap<Families...>& index_map = step.index_map;
   if (index_map.num_unilateral == 0 && index_map.num_bilateral == 0) {
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
