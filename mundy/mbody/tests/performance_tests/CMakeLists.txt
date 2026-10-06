@@ -20,6 +20,31 @@
 if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   message(STATUS
     "MundyMBody: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
+
+  tribits_add_executable(
+    PeripheryInverse
+    SOURCES PeripheryInverse.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
+  tribits_add_executable(
+    HydroStudies
+    SOURCES HydroStudies.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+  tribits_copy_files_to_binary_dir(
+    HydroStudiesCopyFiles
+    SOURCE_FILES
+      analyze_cavity.py
+      analyze_periphery_spd.py
+      analyze_sphere_spd.py
+      analyze_sphere_wilson.py
+    EXEDEPS HydroStudies
+    CATEGORIES PERFORMANCE
+  )
+
 else()
   message(STATUS
     "MundyMBody: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")

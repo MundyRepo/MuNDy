@@ -28,6 +28,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     SOURCES UnitTestKokkosMbody.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     MPI_PROC_RANGE 1
   )
+
+  tribits_add_executable_and_test(
+    UnitTestPeriphery
+    SOURCES UnitTestPeriphery.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
 else()
   message(STATUS "MundyMBody: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
 endif()

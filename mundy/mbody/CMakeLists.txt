@@ -12,9 +12,12 @@ tribits_subpackage(MBody)
 # find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
 # find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
 set(NOINSTALLHEADERS
-    src/mundy_mbody/KokkosMbody.hpp
-    src/mundy_mbody/KokkosMbodyTypes.hpp
+    src/mundy_mbody/Gauss_Legendre_Nodes_and_Weights.hpp
     src/mundy_mbody/impl/KokkosMbodyImpl.hpp
+    src/mundy_mbody/KokkosMbody.hpp
+    src/mundy_mbody/KokkosMbodyMobility.hpp
+    src/mundy_mbody/KokkosMbodyTypes.hpp
+    src/mundy_mbody/Periphery.hpp
 )
 
 set(SOURCES

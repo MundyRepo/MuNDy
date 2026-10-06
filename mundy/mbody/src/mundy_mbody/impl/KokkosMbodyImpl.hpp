@@ -24,8 +24,7 @@
 /// \file
 /// \brief Operators and geometry kernels for the multibody step solvers (mbody::solve_mixed_lcp, solve_mixed_slcp).
 ///
-/// The D/D^T and B/B^T Jacobian operators, the local drag mobility operator, and the geometry kernels
-/// that fill them.
+/// The D/D^T and B/B^T Jacobian operators and the geometry kernels that fill them.
 
 // C++ core
 #include <algorithm>    // for std::max, std::count
@@ -52,6 +51,7 @@
 #include <mundy_math/pgd.hpp>              // for mundy::{BBStepStrategy, PGDConfig, PGDResult, make_pgd_state, ...}
 #include <mundy_math/residuals.hpp>        // for mundy::LinfNormProjectedGradientResidual
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
+#include <mundy_mbody/KokkosMbodyMobility.hpp>  // for mundy::mbody::Mobility
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
 #include <mundy_utils/throw_assert.hpp>
 #include <mundy_utils/tuple.hpp>        // for mundy::{tuple, make_tuple, tuple_cat, get, tuple_size_v}
@@ -704,115 +704,6 @@ static_assert(::mundy::LinearOperator<::mundy::KokkosBackend<Kokkos::DefaultExec
                                       Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>,
                                       Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>>,
               "TripleForceOpT must satisfy ::mundy::LinearOperator");
-
-/// \brief Per-rod local drag mobility (force/torque -> velocity/omega), no hydrodynamic coupling.
-template <typename ExecSpace>
-class LocalDragMobilityOp {
- public:
-  using memory_space = typename ExecSpace::memory_space;
-  using view_t = Kokkos::View<double*, memory_space>;
-
-  LocalDragMobilityOp(double viscosity, const RodViews<ExecSpace>& rods) : viscosity_(viscosity), rods_(rods) {
-  }
-
-  size_t domain_size() const {
-    return 6 * rods_.size();
-  }
-  size_t range_size() const {
-    return 6 * rods_.size();
-  }
-
-  auto make_domain_vector() const {
-    return view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "M_domain"), domain_size());
-  }
-  auto make_range_vector() const {
-    return view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "M_range"), range_size());
-  }
-
-  void apply(const view_t& force_torque, view_t& vel_omega) const {
-    apply(1.0, force_torque, 0.0, vel_omega);
-  }
-
-  /// \brief vel_omega := alpha * M(force_torque) + beta * vel_omega.
-  ///
-  /// alpha == 0 skips the per-rod drag-coefficient computation entirely.
-  void apply(double alpha, const view_t& force_torque, double beta, view_t& vel_omega) const {
-    MUNDY_THROW_ASSERT(force_torque.extent(0) == domain_size(), std::invalid_argument,
-                       "LocalDragMobilityOp: size mismatch.");
-    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<double>();
-    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<double>();
-
-    if (alpha_is_zero) {
-      if (beta_is_zero) {
-        Kokkos::deep_copy(vel_omega, 0.0);
-      } else {
-        auto vel_omega_l = vel_omega;
-        Kokkos::parallel_for(
-            "LocalDragMobilityOp::apply(beta-only)", Kokkos::RangePolicy<ExecSpace>(0, vel_omega.extent(0)),
-            KOKKOS_LAMBDA(const int i) { vel_omega_l(i) *= beta; });
-      }
-      return;
-    }
-
-    const double viscosity = viscosity_;
-    auto rods = rods_;
-
-    constexpr double pi = Kokkos::numbers::pi_v<double>;
-    const double inv_four_pi_visc = 1.0 / (4.0 * pi * viscosity);
-    const double inv_two_pi_visc = 1.0 / (2.0 * pi * viscosity);
-    const double inv_pi_visc = 1.0 / (pi * viscosity);
-
-    Kokkos::parallel_for(
-        "LocalDragMobilityOp::apply", Kokkos::RangePolicy<ExecSpace>(0, rods.size()), KOKKOS_LAMBDA(const int i) {
-          const double length = rods.length(i);
-          const double radius = rods.radius(i);
-          const Vector3d tangent = rods.orientation(i) * Vector3d{0.0, 0.0, 1.0};
-
-          const double lprime = length + 2.0 * radius;
-          const double p = lprime / (2.0 * radius);
-          const double log_p = Kokkos::log(p);
-          const double inv_p = 1.0 / p;
-          const double inv_p2 = inv_p * inv_p;
-          const double inv_lprime = 1.0 / lprime;
-          const double inv_lprime3 = inv_lprime * inv_lprime * inv_lprime;
-
-          const double inv_drag_perp = (log_p + 0.839 + 0.185 * inv_p + 0.233 * inv_p2) * inv_lprime * inv_four_pi_visc;
-          const double inv_drag_para = (log_p - 0.207 + 0.98 * inv_p - 0.133 * inv_p2) * inv_lprime * inv_two_pi_visc;
-          const double inv_drag_rot = 3.0 * (log_p - 0.662 + 0.917 * inv_p - 0.05 * inv_p2) * inv_lprime3 * inv_pi_visc;
-
-          const Vector3d force = rod_force(force_torque, i);
-          const Vector3d torque = rod_torque(force_torque, i);
-
-          const Vector3d force_para = dot(force, tangent) * tangent;
-          const Vector3d force_perp = force - force_para;
-
-          const Vector3d velocity = inv_drag_perp * force_perp + inv_drag_para * force_para;
-          const Vector3d omega = inv_drag_rot * torque;
-
-          if (beta_is_zero) {
-            rod_velocity(vel_omega, i) = alpha * velocity;
-            rod_omega(vel_omega, i) = alpha * omega;
-          } else {
-            rod_velocity(vel_omega, i) = alpha * velocity + beta * rod_velocity(vel_omega, i);
-            rod_omega(vel_omega, i) = alpha * omega + beta * rod_omega(vel_omega, i);
-          }
-        });
-  }
-
- private:
-  double viscosity_;
-  RodViews<ExecSpace> rods_;
-};
-
-static_assert(::mundy::LinearOperator<::mundy::KokkosBackend<Kokkos::DefaultExecutionSpace>,
-                                      LocalDragMobilityOp<Kokkos::DefaultExecutionSpace>,
-                                      Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>,
-                                      Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>>,
-              "LocalDragMobilityOp must satisfy ::mundy::LinearOperator");
-static_assert(::mundy::HasScaledApplyMember<LocalDragMobilityOp<Kokkos::DefaultExecutionSpace>, double,
-                                            Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>,
-                                            Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>>,
-              "LocalDragMobilityOp must satisfy ::mundy::HasScaledApplyMember");
 
 //! \name Geometry kernels: a family's Jacobian and constraint values at rods' configuration
 //@{
@@ -1729,7 +1620,7 @@ LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num
 ///
 /// The unilateral block is linearized at the start of the step, C^k: its Jacobian and q = Phi(C^k) + dt D^T U_free.
 /// The mobility is that of C^k, and U_free = V_ext + M F_ext is the velocity without constraint forces.
-template <typename ExecSpace, typename... Families>
+template <typename ExecSpace, typename MobilityOp, typename... Families>
 struct StepData {
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
   using unilateral_geometry_t = decltype(make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(
@@ -1741,16 +1632,16 @@ struct StepData {
   unilateral_geometry_t unilateral_geo;
   view_t q;
   view_t kinv;
-  LocalDragMobilityOp<ExecSpace> mobility;
+  MobilityOp mobility;
   view_t u_free;
 };
 
-/// \brief The step data of rods and constraints at their current configuration.
-template <typename ExecSpace, typename... Families>
-StepData<ExecSpace, Families...> make_step_data(const RodViews<ExecSpace>& rods,
-                                                const ConstraintSet<Families...>& constraints, double dt,
-                                                double viscosity) {
-  using view_t = typename StepData<ExecSpace, Families...>::view_t;
+/// \brief The step data of rods and constraints at their current configuration, where their mobility is mobility.
+template <typename ExecSpace, typename MobilityOp, typename... Families>
+StepData<ExecSpace, MobilityOp, Families...> make_step_data(const RodViews<ExecSpace>& rods,
+                                                            const ConstraintSet<Families...>& constraints,
+                                                            const MobilityOp& mobility, double dt) {
+  using view_t = typename StepData<ExecSpace, MobilityOp, Families...>::view_t;
   using backend_t = KokkosBackend<ExecSpace>;
 
   const size_t num_rods = rods.size();
@@ -1760,12 +1651,11 @@ StepData<ExecSpace, Families...> make_step_data(const RodViews<ExecSpace>& rods,
   view_t q("q", num_unilateral);
   const auto unilateral_geo = make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(index_map);
   compute_block_geometry<ConstraintType::UNILATERAL>(rods, constraints, index_map, unilateral_geo, q);
-  const LocalDragMobilityOp<ExecSpace> mobility(viscosity, rods);
 
   view_t u_free("u_free", rods.num_rows());
   Kokkos::deep_copy(u_free, rods.velocity_omega_view());
   view_t m_force_torque_ext("m_force_torque_ext", rods.num_rows());
-  mobility.apply(rods.force_torque_view(), m_force_torque_ext);
+  backend_t::apply(mobility, rods.force_torque_view(), m_force_torque_ext);
   backend_t::axpby(1.0, m_force_torque_ext, 1.0, u_free);
 
   if (num_unilateral > 0) {
@@ -1774,7 +1664,7 @@ StepData<ExecSpace, Families...> make_step_data(const RodViews<ExecSpace>& rods,
     backend_t::axpby(dt, q_rate, 1.0, q);
   }
 
-  return StepData<ExecSpace, Families...>{
+  return StepData<ExecSpace, MobilityOp, Families...>{
       index_map, num_rods, dt, unilateral_geo, q, compliance_diagonal<ExecSpace>(constraints, index_map),
       mobility,  u_free};
 }
@@ -1797,8 +1687,8 @@ struct LinearizedStep {
 };
 
 /// \brief Storage for one linearization of the step.
-template <typename ExecSpace, typename... Families>
-LinearizedStep<ExecSpace> make_linearized_step(const StepData<ExecSpace, Families...>& step) {
+template <typename ExecSpace, typename MobilityOp, typename... Families>
+LinearizedStep<ExecSpace> make_linearized_step(const StepData<ExecSpace, MobilityOp, Families...>& step) {
   using view_t = typename LinearizedStep<ExecSpace>::view_t;
   const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * step.num_rods;
   return LinearizedStep<ExecSpace>{view_t("x", step.index_map.num_unilateral),
@@ -1820,8 +1710,8 @@ struct Displacement {
 /// \brief The bilateral block's Schur complement S := (B^T dt M B + K^{-1})^{-1}, with B read from geometry.
 ///
 /// S is applied by matrix-free CG to cg_config.
-template <typename ExecSpace, typename BilateralGeometry, typename... Families>
-auto make_schur_complement(const StepData<ExecSpace, Families...>& step, const BilateralGeometry& geometry,
+template <typename ExecSpace, typename MobilityOp, typename BilateralGeometry, typename... Families>
+auto make_schur_complement(const StepData<ExecSpace, MobilityOp, Families...>& step, const BilateralGeometry& geometry,
                            const CGConfig<double>& cg_config) {
   using backend_t = KokkosBackend<ExecSpace>;
   return make_cg_inv_op<backend_t>(
@@ -1837,11 +1727,11 @@ auto make_schur_complement(const StepData<ExecSpace, Families...>& step, const B
 /// it writes.
 ///
 /// Each linearization overwrites it in place. Only the storage of the blocks the step has is allocated.
-template <typename ExecSpace, typename... Families>
+template <typename ExecSpace, typename MobilityOp, typename... Families>
 class LinearizationWorkspace {
  public:
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
-  using step_t = StepData<ExecSpace, Families...>;
+  using step_t = StepData<ExecSpace, MobilityOp, Families...>;
   using bilateral_geometry_t = decltype(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(
       std::declval<const ConstraintIndexMap<Families...>&>()));
 
@@ -1852,7 +1742,7 @@ class LinearizationWorkspace {
   using dt_t = decltype(make_block_rate_op<ExecSpace>(std::declval<const unilateral_geometry_t&>(), size_t{}));
   using b_t = decltype(make_block_force_op<ExecSpace>(std::declval<const bilateral_geometry_t&>(), size_t{}));
   using bt_t = decltype(make_block_rate_op<ExecSpace>(std::declval<const bilateral_geometry_t&>(), size_t{}));
-  using mobility_t = LocalDragMobilityOp<ExecSpace>;
+  using mobility_t = MobilityOp;
   using m_dt_t = decltype(make_scaled_op<backend_t>(double{}, std::declval<const mobility_t&>()));
   using schur_complement_t =
       decltype(make_schur_complement(std::declval<const step_t&>(), std::declval<const bilateral_geometry_t&>(),
@@ -1869,7 +1759,7 @@ class LinearizationWorkspace {
       std::declval<const bt_t&>()));
 
  public:
-  LinearizationWorkspace(const StepData<ExecSpace, Families...>& step, const PGDConfig<double>& pgd_cfg,
+  LinearizationWorkspace(const StepData<ExecSpace, MobilityOp, Families...>& step, const PGDConfig<double>& pgd_cfg,
                          const CGConfig<double>& cg_cfg)
       : geometry_(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(step.index_map)),
         psi_("psi", step.index_map.num_bilateral),
@@ -1956,9 +1846,10 @@ class LinearizationWorkspace {
 };
 
 /// \brief Linearize the bilateral block at rods' configuration: its Jacobian and psi, into workspace.
-template <typename ExecSpace, typename... Families>
-void linearize(const StepData<ExecSpace, Families...>& step, LinearizationWorkspace<ExecSpace, Families...>& workspace,
-               const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints) {
+template <typename ExecSpace, typename MobilityOp, typename... Families>
+void linearize(const StepData<ExecSpace, MobilityOp, Families...>& step,
+               LinearizationWorkspace<ExecSpace, MobilityOp, Families...>& workspace, const RodViews<ExecSpace>& rods,
+               const ConstraintSet<Families...>& constraints) {
   compute_block_geometry<ConstraintType::BILATERAL>(rods, constraints, step.index_map, workspace.geometry(),
                                                     workspace.psi());
 }
@@ -1969,9 +1860,9 @@ void linearize(const StepData<ExecSpace, Families...>& step, LinearizationWorksp
 /// to_free_end is the displacement Delta from the linearization point's configuration to the step's constraint-free end
 /// configuration, so the bilateral linear term b = psi + B^T Delta is the linear model about that configuration of psi
 /// at that end. The unilateral solve starts from x_start. out shares no storage with to_free_end or x_start.
-template <typename ExecSpace, typename... Families>
-void solve_linearization(const StepData<ExecSpace, Families...>& step,
-                         LinearizationWorkspace<ExecSpace, Families...>& workspace,
+template <typename ExecSpace, typename MobilityOp, typename... Families>
+void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& step,
+                         LinearizationWorkspace<ExecSpace, MobilityOp, Families...>& workspace,
                          const Displacement<ExecSpace>& to_free_end,
                          const Kokkos::View<double*, typename ExecSpace::memory_space>& x_start,
                          LinearizedStep<ExecSpace>& out) {
@@ -2066,9 +1957,10 @@ void write_step(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...
 /// bilateral force directions there would change the step, where B and B' map multipliers to center-of-mass force and
 /// torque at the iterate's linearization point and at that configuration. B y is the iterate's bilateral wrench.
 /// wrench_change and displacement_change receive B' y - B y and dt M (B' y - B y).
-template <typename ExecSpace, typename... Families>
-double slcp_merit(const StepData<ExecSpace, Families...>& step,
-                  LinearizationWorkspace<ExecSpace, Families...>& workspace, const LinearizedStep<ExecSpace>& iterate,
+template <typename ExecSpace, typename MobilityOp, typename... Families>
+double slcp_merit(const StepData<ExecSpace, MobilityOp, Families...>& step,
+                  LinearizationWorkspace<ExecSpace, MobilityOp, Families...>& workspace,
+                  const LinearizedStep<ExecSpace>& iterate,
                   const Kokkos::View<RowUnit*, typename ExecSpace::memory_space>& row_units,
                   Kokkos::View<double*, typename ExecSpace::memory_space>& wrench_change,
                   Kokkos::View<double*, typename ExecSpace::memory_space>& displacement_change, double length_tol,
@@ -2081,7 +1973,8 @@ double slcp_merit(const StepData<ExecSpace, Families...>& step,
   backend_t::apply(make_block_force_op<ExecSpace>(workspace.geometry(), num_rods), iterate.y, wrench_change,
                    workspace.b_workspace);
   backend_t::axpby(-1.0, iterate.bilateral_wrench, 1.0, wrench_change);
-  step.mobility.apply(step.dt, wrench_change, 0.0, displacement_change);
+  backend_t::apply(make_scaled_op<backend_t>(step.dt, step.mobility), wrench_change, displacement_change,
+                   workspace.m_dt_workspace);
   const LengthAngleMax moved = max_displacement<ExecSpace>(displacement_change, num_rods);
 
   return std::max(
