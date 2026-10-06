@@ -40,6 +40,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/Matrix.hpp
   src/mundy_math/minimize.hpp
   src/mundy_math/NumTraits.hpp
+  src/mundy_math/preconditioners.hpp
   src/mundy_math/Quaternion.hpp
   src/mundy_math/residuals.hpp
   src/mundy_math/ScalarBinaryOpTraits.hpp
