@@ -509,13 +509,30 @@ class SumOp {
 
 /// \brief The scalar multiple Op := alpha * op.
 ///
-/// Applies via Backend::apply(alpha, op, x, beta, y): the fused path when op provides HasScaledApplyMember, else
-/// an apply-then-axpby fallback. Holds no persistent workspace; op's own (if any) is rebuilt per apply.
+/// Uses op's own fused scaled apply where op provides one; otherwise applies op, through its workspace, and scales the
+/// result in place.
 template <class Backend, class Scalar, class Op>
 class ScaledOp {
  public:
   using backend_t = Backend;
   using op_storage_t = ::mundy::storage<Op>;
+
+  template <class OpWorkspace>
+  struct Workspace : impl::CommitGroup<OpWorkspace> {
+   private:
+    using base_t = impl::CommitGroup<OpWorkspace>;
+
+   public:
+    KOKKOS_INLINE_FUNCTION
+    explicit Workspace(OpWorkspace&& op_workspace, bool committed = false)
+        : base_t(std::forward<OpWorkspace>(op_workspace), committed) {
+    }
+
+    KOKKOS_INLINE_FUNCTION Backend backend() const {
+      return Backend{};
+    }
+    MUNDY_OP_WORKSPACE_CHILD(op_workspace, 0)
+  };
 
   KOKKOS_INLINE_FUNCTION
   ScaledOp(backend_t, Scalar alpha, Op&& op) : alpha_(alpha), op_storage_(std::forward<Op>(op)) {
@@ -551,10 +568,32 @@ class ScaledOp {
     return Backend::make_range_vector(op());
   }
 
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(impl::make_workspace(op()), committed);
+  }
+
+  template <class OpWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace, bool committed = false) const {
+    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace), committed);
+  }
+
+  template <class XVector, class YVector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+    using value_type = impl::vector_value_type<YVector>;
+    constexpr auto zero = static_cast<value_type>(0);
+    const auto alpha = static_cast<value_type>(alpha_);
+    if constexpr (HasScaledApplyMember<std::remove_cvref_t<Op>, value_type, XVector, YVector>) {
+      Backend::apply(alpha, op(), x, zero, y, workspace.op_workspace());
+    } else {
+      Backend::apply(op(), x, y, workspace.op_workspace());
+      Backend::axpby(alpha, y, zero, y);
+    }
+  }
+
   template <class XVector, class YVector>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
-    constexpr auto zero = static_cast<impl::vector_value_type<YVector>>(0);
-    Backend::apply(alpha_, op(), x, zero, y);
+    auto tmp_workspace = make_workspace();
+    apply(x, y, tmp_workspace);
   }
 
  private:
