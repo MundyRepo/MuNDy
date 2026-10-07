@@ -41,9 +41,10 @@
 #include <vector>     // for std::vector
 
 // Mundy
-#include <mundy_math/Matrix.hpp>        // for mundy::Matrix
-#include <mundy_math/eigenvalues.hpp>   // for mundy::make_eigen_problem, mundy::solve_eigen_problem
-#include <mundy_mbody/KokkosMbody.hpp>  // for mundy::mbody::{solve_mixed_lcp, solve_mixed_slcp, advance_rods}
+#include <mundy_math/Matrix.hpp>           // for mundy::Matrix
+#include <mundy_math/eigenvalues.hpp>      // for mundy::make_eigen_problem, mundy::solve_eigen_problem
+#include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, JacobiPreconditioner}
+#include <mundy_mbody/KokkosMbody.hpp>     // for mundy::mbody::{solve_mixed_lcp, solve_mixed_slcp, advance_rods}
 
 namespace mundy {
 
@@ -155,6 +156,82 @@ struct IsotropicMobility {
   template <typename Space>
   IsotropicMobilityOp<Space> make_mobility(const RodViews<Space>& rods) const {
     return IsotropicMobilityOp<Space>{m, m_rot, rods.size()};
+  }
+};
+
+//@}
+
+//! \name A caller's preconditioners
+//@{
+
+/// \brief Jacobi with d = 1, under which preconditioned CG performs plain CG's arithmetic.
+///
+/// d is NaN until the first update, so a solve that precedes it fails.
+template <typename Space>
+struct UnitJacobiOp : JacobiPreconditioner<KokkosBackend<Space>, Kokkos::View<double*, typename Space::memory_space>> {
+  using view_t = Kokkos::View<double*, typename Space::memory_space>;
+
+  explicit UnitJacobiOp(size_t num_rows)
+      : JacobiPreconditioner<KokkosBackend<Space>, view_t>(KokkosBackend<Space>{}, make_nan_view(num_rows)) {
+  }
+
+  template <typename Linearization>
+  void update(const Linearization&) {
+    Kokkos::deep_copy(this->diag(), 1.0);
+  }
+
+  static view_t make_nan_view(size_t num_rows) {
+    const view_t d(Kokkos::view_alloc(Kokkos::WithoutInitializing, "unit_jacobi_d"), num_rows);
+    Kokkos::deep_copy(d, std::numeric_limits<double>::quiet_NaN());
+    return d;
+  }
+};
+
+/// \brief Jacobi with d = 1.
+struct UnitJacobi {
+  template <typename Linearization>
+  UnitJacobiOp<typename Linearization::execution_space> make_preconditioner(const Linearization& linearization) const {
+    return UnitJacobiOp<typename Linearization::execution_space>(linearization.num_rows());
+  }
+};
+
+/// \brief At one update, SelfMobilityJacobi's d and the diagonal of dt B^T M B + K^-1 probed by unit vectors.
+struct ProbedDiagonal {
+  std::vector<double> self_mobility_jacobi;
+  std::vector<double> probed;
+};
+
+/// \brief SelfMobilityJacobi, recording at each update its d and the diagonal it should equal.
+template <typename Space>
+struct ProbingSelfMobilityJacobiOp : SelfMobilityJacobiOp<Space> {
+  std::vector<ProbedDiagonal>* records;
+
+  template <typename Linearization>
+  void update(const Linearization& linearization) {
+    SelfMobilityJacobiOp<Space>::update(linearization);
+    const size_t num_rows = linearization.num_rows();
+    const auto d = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, this->diagonal());
+    Kokkos::View<double*, typename Space::memory_space> e("e", num_rows), column("column", num_rows);
+    ProbedDiagonal record{std::vector<double>(num_rows), std::vector<double>(num_rows)};
+    for (size_t i = 0; i < num_rows; ++i) {
+      Kokkos::deep_copy(e, 0.0);
+      Kokkos::deep_copy(Kokkos::subview(e, i), 1.0);
+      linearization.apply(e, column);
+      record.self_mobility_jacobi[i] = d(i);
+      record.probed[i] = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, column)(i);
+    }
+    records->push_back(record);
+  }
+};
+
+/// \brief SelfMobilityJacobi, recording into records at each update.
+struct ProbingSelfMobilityJacobi {
+  std::vector<ProbedDiagonal>* records;
+
+  template <typename Linearization>
+  auto make_preconditioner(const Linearization& linearization) const {
+    return ProbingSelfMobilityJacobiOp<typename Linearization::execution_space>{
+        SelfMobilityJacobi{}.make_preconditioner(linearization), records};
   }
 };
 
@@ -310,23 +387,25 @@ void reset_rod_state(const RodViews<Space>& rods, const Kokkos::View<double*, ty
 }
 
 /// \brief One backward-Euler step under a constant external load.
-template <typename Space, typename Model, typename... Families>
+template <typename Space, typename Model, typename Policy = NoPreconditioner, typename... Families>
 MixedLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
                          const Model& mobility_model, const MixedLCPConfig& cfg,
-                         const Kokkos::View<double*, typename Space::memory_space>& load) {
+                         const Kokkos::View<double*, typename Space::memory_space>& load,
+                         const Policy& preconditioner_policy = Policy{}) {
   reset_rod_state(rods, load);
-  const MixedLCPResult result = solve_mixed_lcp(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_mixed_lcp(rods, constraints, mobility_model, cfg, preconditioner_policy);
   advance_rods(rods, cfg.dt);
   return result;
 }
 
 /// \brief One step under a constant external load with its bilateral rows held at its end.
-template <typename Space, typename Model, typename... Families>
+template <typename Space, typename Model, typename Policy = NoPreconditioner, typename... Families>
 MixedSLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
                           const Model& mobility_model, const MixedSLCPConfig& cfg,
-                          const Kokkos::View<double*, typename Space::memory_space>& load) {
+                          const Kokkos::View<double*, typename Space::memory_space>& load,
+                          const Policy& preconditioner_policy = Policy{}) {
   reset_rod_state(rods, load);
-  const MixedSLCPResult result = solve_mixed_slcp(rods, constraints, mobility_model, cfg);
+  const MixedSLCPResult result = solve_mixed_slcp(rods, constraints, mobility_model, cfg, preconditioner_policy);
   advance_rods(rods, cfg.inner_lcp_config.dt);
   return result;
 }
@@ -367,14 +446,14 @@ bool lcp_converged(const MixedSLCPResult& result) {
 /// \brief Step until no rod moves farther than settled_step, or turns through a larger angle, in one step.
 ///
 /// Returns whether that happened within max_steps.
-template <typename Space, typename Model, typename Config, typename... Families>
+template <typename Space, typename Model, typename Config, typename Policy = NoPreconditioner, typename... Families>
 bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
                         const Model& mobility_model, const Config& cfg,
                         const Kokkos::View<double*, typename Space::memory_space>& load, double settled_step,
-                        int max_steps) {
+                        int max_steps, const Policy& preconditioner_policy = Policy{}) {
   for (int step = 0; step < max_steps; ++step) {
-    MUNDY_THROW_REQUIRE(lcp_converged(step_rods(rods, constraints, mobility_model, cfg, load)), std::runtime_error,
-                        "step_until_settled: a step's mixed LCP solve failed to converge.");
+    MUNDY_THROW_REQUIRE(lcp_converged(step_rods(rods, constraints, mobility_model, cfg, load, preconditioner_policy)),
+                        std::runtime_error, "step_until_settled: a step's mixed LCP solve failed to converge.");
     if (max_step_displacement(rods, step_size(cfg)) <= settled_step) {
       return true;
     }
@@ -2604,15 +2683,15 @@ std::map<std::pair<std::string, uint64_t>, size_t> record_allocations(F&& f) {
 }
 
 /// \brief solve_mixed_slcp() on TestExecSpace copies of rods and constraints, and the allocations it makes.
-template <typename Model, typename... Families>
+template <typename Model, typename Policy = NoPreconditioner, typename... Families>
 std::pair<MixedSLCPResult, std::map<std::pair<std::string, uint64_t>, size_t>> slcp_allocations(
     const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints, const Model& mobility_model,
-    const MixedSLCPConfig& cfg) {
+    const MixedSLCPConfig& cfg, const Policy& preconditioner_policy = Policy{}) {
   const auto rods_d = copy_to<TestExecSpace>(rods);
   const auto constraints_d = copy_to<TestExecSpace>(constraints);
   MixedSLCPResult result;
-  const auto allocations =
-      record_allocations([&] { result = solve_mixed_slcp(rods_d, constraints_d, mobility_model, cfg); });
+  const auto allocations = record_allocations(
+      [&] { result = solve_mixed_slcp(rods_d, constraints_d, mobility_model, cfg, preconditioner_policy); });
   return {result, allocations};
 }
 
@@ -2647,6 +2726,16 @@ TEST(Mbody, IterationsDoNotAllocate) {
   ASSERT_TRUE(both_short.converged && both_long.converged) << both_short << "\n" << both_long;
   ASSERT_LT(both_short.num_iters, both_long.num_iters);
   EXPECT_EQ(both_short_allocations, both_long_allocations);
+
+  // Both blocks, with the Schur complement preconditioned by its self-mobility Jacobi
+  slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
+  const auto [jacobi_short, jacobi_short_allocations] =
+      slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5}, SelfMobilityJacobi{});
+  const auto [jacobi_long, jacobi_long_allocations] =
+      slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
+  ASSERT_TRUE(jacobi_short.converged && jacobi_long.converged) << jacobi_short << "\n" << jacobi_long;
+  ASSERT_LT(jacobi_short.num_iters, jacobi_long.num_iters);
+  EXPECT_EQ(jacobi_short_allocations, jacobi_long_allocations);
 
   slcp_allocations(p.rods, bilateral_only, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   const auto [bilateral_short, bilateral_short_allocations] =
@@ -2709,11 +2798,12 @@ MixedSLCPConfig make_pendulum_config(double dt, unsigned max_iters, double lengt
   return cfg;
 }
 
-/// \brief A sphere held by a fixed length from an anchored sphere, stepped num_steps times at dt = h tau.
+/// \brief A sphere held by a fixed length from an anchored sphere, stepped num_steps times at dt = h tau, with the
+/// Schur complement preconditioned by its self-mobility Jacobi if preconditioned.
 ///
 /// The bob, at L = kPendulumArm under a constant force f, turns in the plane normal to its axis, where its mobility is
 /// m I, so tau = L / (m f). Its constraint error is |r| - L.
-PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double length_tol) {
+PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double length_tol, bool preconditioned) {
   const double radius = 0.2, f = 0.5, L = kPendulumArm;
   const double tau = L / (expected_inv_drag_perp(radius, 0.0, kPendulumMobilityModel.viscosity) * f);
 
@@ -2742,7 +2832,9 @@ PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double
 
   PendulumRun run{{kPendulumTheta0}, {}, {}};
   for (int step = 0; step < num_steps; ++step) {
-    run.results.push_back(step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d));
+    run.results.push_back(
+        preconditioned ? step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d, SelfMobilityJacobi{})
+                       : step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d));
     deep_copy(rods, rods_d);
     const Vector3d r = rods.center(1) - rods.center(0);
     run.theta.push_back(std::atan2(r[0], -r[1]));
@@ -2751,12 +2843,13 @@ PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double
   return run;
 }
 
-/// \brief A rod pinned at one end to an anchored sphere, stepped num_steps times at dt = h tau.
+/// \brief A rod pinned at one end to an anchored sphere, stepped num_steps times at dt = h tau, with the Schur
+/// complement preconditioned by its self-mobility Jacobi if preconditioned.
 ///
 /// The rod, of half length a = kPendulumArm under a constant force f at its center, turns about its pinned end in the
 /// plane of its axis and the force, so tau = (m_perp + m_rot a^2) / (a m_perp m_rot f); theta is the angle of its
 /// axis. Its constraint error is the distance between the pinned points.
-PendulumRun run_rod_pendulum(double h, int num_steps, unsigned max_iters, double length_tol) {
+PendulumRun run_rod_pendulum(double h, int num_steps, unsigned max_iters, double length_tol, bool preconditioned) {
   const double radius = 0.1, f = 1.0, a = kPendulumArm;
   const double m_perp = expected_inv_drag_perp(radius, 2.0 * a, kPendulumMobilityModel.viscosity);
   const double m_rot = expected_inv_drag_rot(radius, 2.0 * a, kPendulumMobilityModel.viscosity);
@@ -2791,7 +2884,9 @@ PendulumRun run_rod_pendulum(double h, int num_steps, unsigned max_iters, double
 
   PendulumRun run{{kPendulumTheta0}, {}, {}};
   for (int step = 0; step < num_steps; ++step) {
-    run.results.push_back(step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d));
+    run.results.push_back(
+        preconditioned ? step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d, SelfMobilityJacobi{})
+                       : step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d));
     deep_copy(rods, rods_d);
     const Vector3d t = rods.orientation(1) * axis_body;
     run.theta.push_back(std::atan2(t[0], -t[1]));
@@ -2808,10 +2903,12 @@ const char* pendulum_name(Pendulum pendulum) {
   return pendulum == Pendulum::BOB ? "bob" : "pinned rod";
 }
 
-/// \brief A pendulum of either realization, stepped num_steps times at dt = h tau.
-PendulumRun run_pendulum(Pendulum pendulum, double h, int num_steps, unsigned max_iters, double length_tol) {
-  return pendulum == Pendulum::BOB ? run_bob_pendulum(h, num_steps, max_iters, length_tol)
-                                   : run_rod_pendulum(h, num_steps, max_iters, length_tol);
+/// \brief A pendulum of either realization, stepped num_steps times at dt = h tau, with the Schur complement
+/// preconditioned by its self-mobility Jacobi if preconditioned.
+PendulumRun run_pendulum(Pendulum pendulum, double h, int num_steps, unsigned max_iters, double length_tol,
+                         bool preconditioned) {
+  return pendulum == Pendulum::BOB ? run_bob_pendulum(h, num_steps, max_iters, length_tol, preconditioned)
+                                   : run_rod_pendulum(h, num_steps, max_iters, length_tol, preconditioned);
 }
 
 // For the bob, with h = dt / tau, both step maps are exact. A single linearization moves it along the tangent at the
@@ -2824,42 +2921,52 @@ PendulumRun run_pendulum(Pendulum pendulum, double h, int num_steps, unsigned ma
 //
 // At h = 5, |r + dt m F| >= (h - 1) L, so the sequence would contract at a rate |L - |r + dt m F|| / L >= 3: it stops
 // early, and the step is the single linearization.
+//
+// Preconditioning the Schur complement changes how CG reaches cg_tol, not the bound, so every map holds with and
+// without it.
 TEST(Mbody, PendulumBobStepsFollowExactMaps) {
   const double h = 0.1, L = kPendulumArm, length_tol = 1e-11;
   const int num_steps = 10;
 
-  // Single linearization
-  const PendulumRun single = run_bob_pendulum(h, num_steps, /*max_iters=*/1, length_tol);
-  for (int k = 0; k < num_steps; ++k) {
-    const double theta = single.theta[k];
-    EXPECT_TRUE(lcp_converged(single.results[k])) << single.results[k] << " at step " << k;
-    EXPECT_NEAR(single.theta[k + 1], theta - std::atan(h * std::sin(theta)), 2.0 * kPendulumCgTol / L) << "step " << k;
-    EXPECT_NEAR(single.constraint_error[k], L * std::sqrt(1.0 + h * h * std::sin(theta) * std::sin(theta)) - L,
-                2.0 * kPendulumCgTol)
-        << "step " << k;
-  }
+  for (const bool preconditioned : {false, true}) {
+    // Single linearization
+    const PendulumRun single = run_bob_pendulum(h, num_steps, /*max_iters=*/1, length_tol, preconditioned);
+    for (int k = 0; k < num_steps; ++k) {
+      const double theta = single.theta[k];
+      EXPECT_TRUE(lcp_converged(single.results[k]))
+          << single.results[k] << " at step " << k << " preconditioned=" << preconditioned;
+      EXPECT_NEAR(single.theta[k + 1], theta - std::atan(h * std::sin(theta)), 2.0 * kPendulumCgTol / L)
+          << "step " << k << " preconditioned=" << preconditioned;
+      EXPECT_NEAR(single.constraint_error[k], L * std::sqrt(1.0 + h * h * std::sin(theta) * std::sin(theta)) - L,
+                  2.0 * kPendulumCgTol)
+          << "step " << k << " preconditioned=" << preconditioned;
+    }
 
-  // Sequence
-  const PendulumRun sequence = run_bob_pendulum(h, num_steps, /*max_iters=*/50, length_tol);
-  for (int k = 0; k < num_steps; ++k) {
-    const double theta = sequence.theta[k];
-    const double p_norm = L * std::sqrt(1.0 + 2.0 * h * std::cos(theta) + h * h);
-    ASSERT_TRUE(sequence.results[k].converged) << sequence.results[k] << " at step " << k;
-    EXPECT_GE(sequence.results[k].num_iters, 2u) << "step " << k;
-    EXPECT_LE(std::abs(sequence.constraint_error[k]), length_tol) << "step " << k;
-    EXPECT_NEAR(sequence.theta[k + 1], std::atan2(std::sin(theta), std::cos(theta) + h),
-                std::sqrt(2.0) * length_tol / p_norm)
-        << "step " << k;
-  }
+    // Sequence
+    const PendulumRun sequence = run_bob_pendulum(h, num_steps, /*max_iters=*/50, length_tol, preconditioned);
+    for (int k = 0; k < num_steps; ++k) {
+      const double theta = sequence.theta[k];
+      const double p_norm = L * std::sqrt(1.0 + 2.0 * h * std::cos(theta) + h * h);
+      ASSERT_TRUE(sequence.results[k].converged)
+          << sequence.results[k] << " at step " << k << " preconditioned=" << preconditioned;
+      EXPECT_GE(sequence.results[k].num_iters, 2u) << "step " << k << " preconditioned=" << preconditioned;
+      EXPECT_LE(std::abs(sequence.constraint_error[k]), length_tol)
+          << "step " << k << " preconditioned=" << preconditioned;
+      EXPECT_NEAR(sequence.theta[k + 1], std::atan2(std::sin(theta), std::cos(theta) + h),
+                  std::sqrt(2.0) * length_tol / p_norm)
+          << "step " << k << " preconditioned=" << preconditioned;
+    }
 
-  // Beyond the convergence regime
-  const double h_beyond = 5.0;
-  const PendulumRun beyond = run_bob_pendulum(h_beyond, 12, /*max_iters=*/50, length_tol);
-  for (size_t k = 0; k < beyond.results.size(); ++k) {
-    const double theta = beyond.theta[k];
-    EXPECT_TRUE(lcp_converged(beyond.results[k])) << beyond.results[k] << " at step " << k;
-    EXPECT_NEAR(beyond.theta[k + 1], theta - std::atan(h_beyond * std::sin(theta)), 2.0 * kPendulumCgTol / L)
-        << "step " << k;
+    // Beyond the convergence regime
+    const double h_beyond = 5.0;
+    const PendulumRun beyond = run_bob_pendulum(h_beyond, 12, /*max_iters=*/50, length_tol, preconditioned);
+    for (size_t k = 0; k < beyond.results.size(); ++k) {
+      const double theta = beyond.theta[k];
+      EXPECT_TRUE(lcp_converged(beyond.results[k]))
+          << beyond.results[k] << " at step " << k << " preconditioned=" << preconditioned;
+      EXPECT_NEAR(beyond.theta[k + 1], theta - std::atan(h_beyond * std::sin(theta)), 2.0 * kPendulumCgTol / L)
+          << "step " << k << " preconditioned=" << preconditioned;
+    }
   }
 }
 
@@ -2872,7 +2979,7 @@ TEST(Mbody, PendulumBobStepsFollowExactMaps) {
 // The first-order error coefficients c = (theta_N - theta(T)) / h of the two schemes tend to -E and +E, with
 // E = sin(theta(T)) ln(sin theta0 / sin theta(T)) / 2, for either realization. Richardson extrapolation 2 c(2N) - c(N)
 // removes the O(h) term of c, so in the asymptotic range what remains is below |c(N) - c(2N)|; a per-step angle error
-// delta adds at most 9 N^2 delta / T.
+// delta adds at most 9 N^2 delta / T. Preconditioning the Schur complement leaves delta's bound unchanged.
 TEST(Mbody, PendulumRefinesToEulerErrorCoefficients) {
   const double T = 1.5;
   const double theta_T = 2.0 * std::atan(std::tan(kPendulumTheta0 / 2.0) * std::exp(-T));
@@ -2880,36 +2987,43 @@ TEST(Mbody, PendulumRefinesToEulerErrorCoefficients) {
   const double length_tol = 1e-12;
   const int num_steps[3] = {200, 400, 800};
 
-  for (const Pendulum pendulum : {Pendulum::BOB, Pendulum::PINNED_ROD}) {
-    for (const unsigned max_iters : {1u, 50u}) {
-      const bool sequence = max_iters > 1;
+  for (const bool preconditioned : {false, true}) {
+    for (const Pendulum pendulum : {Pendulum::BOB, Pendulum::PINNED_ROD}) {
+      for (const unsigned max_iters : {1u, 50u}) {
+        const bool sequence = max_iters > 1;
 
-      // Every step at every level
-      double coefficient[3];
-      for (int level = 0; level < 3; ++level) {
-        const double h = T / num_steps[level];
-        const PendulumRun run = run_pendulum(pendulum, h, num_steps[level], max_iters, length_tol);
-        coefficient[level] = (run.theta.back() - theta_T) / h;
-        for (size_t k = 0; k < run.results.size(); ++k) {
-          ASSERT_TRUE(lcp_converged(run.results[k])) << run.results[k] << " for the " << pendulum_name(pendulum)
-                                                     << " at N=" << num_steps[level] << " step " << k;
-          if (sequence) {
-            ASSERT_TRUE(run.results[k].converged) << run.results[k] << " for the " << pendulum_name(pendulum)
-                                                  << " at N=" << num_steps[level] << " step " << k;
-            EXPECT_LE(std::abs(run.constraint_error[k]), length_tol)
-                << "for the " << pendulum_name(pendulum) << " at N=" << num_steps[level] << " step " << k;
+        // Every step at every level
+        double coefficient[3];
+        for (int level = 0; level < 3; ++level) {
+          const double h = T / num_steps[level];
+          const PendulumRun run = run_pendulum(pendulum, h, num_steps[level], max_iters, length_tol, preconditioned);
+          coefficient[level] = (run.theta.back() - theta_T) / h;
+          for (size_t k = 0; k < run.results.size(); ++k) {
+            ASSERT_TRUE(lcp_converged(run.results[k]))
+                << run.results[k] << " for the " << pendulum_name(pendulum) << " at N=" << num_steps[level] << " step "
+                << k << " preconditioned=" << preconditioned;
+            if (sequence) {
+              ASSERT_TRUE(run.results[k].converged)
+                  << run.results[k] << " for the " << pendulum_name(pendulum) << " at N=" << num_steps[level]
+                  << " step " << k << " preconditioned=" << preconditioned;
+              EXPECT_LE(std::abs(run.constraint_error[k]), length_tol)
+                  << "for the " << pendulum_name(pendulum) << " at N=" << num_steps[level] << " step " << k
+                  << " preconditioned=" << preconditioned;
+            }
           }
         }
-      }
 
-      // Refinement
-      const double delta = sequence ? std::sqrt(2.0) * length_tol / kPendulumArm : 2.0 * kPendulumCgTol / kPendulumArm;
-      for (int level = 0; level + 1 < 3; ++level) {
-        const double n = num_steps[level];
-        const double richardson = 2.0 * coefficient[level + 1] - coefficient[level];
-        EXPECT_NEAR(richardson, sequence ? E : -E,
-                    std::abs(coefficient[level] - coefficient[level + 1]) + 9.0 * n * n * delta / T)
-            << "N=" << num_steps[level] << " for the " << pendulum_name(pendulum) << " at max_iters=" << max_iters;
+        // Refinement
+        const double delta =
+            sequence ? std::sqrt(2.0) * length_tol / kPendulumArm : 2.0 * kPendulumCgTol / kPendulumArm;
+        for (int level = 0; level + 1 < 3; ++level) {
+          const double n = num_steps[level];
+          const double richardson = 2.0 * coefficient[level + 1] - coefficient[level];
+          EXPECT_NEAR(richardson, sequence ? E : -E,
+                      std::abs(coefficient[level] - coefficient[level + 1]) + 9.0 * n * n * delta / T)
+              << "N=" << num_steps[level] << " for the " << pendulum_name(pendulum) << " at max_iters=" << max_iters
+              << " preconditioned=" << preconditioned;
+        }
       }
     }
   }
@@ -2921,7 +3035,7 @@ TEST(Mbody, PendulumSequencesStopEarlyBeyondConvergence) {
   const double h = 5.0, length_tol = 1e-12;
   const unsigned max_iters = 50;
   for (const Pendulum pendulum : {Pendulum::BOB, Pendulum::PINNED_ROD}) {
-    const PendulumRun run = run_pendulum(pendulum, h, 12, max_iters, length_tol);
+    const PendulumRun run = run_pendulum(pendulum, h, 12, max_iters, length_tol, /*preconditioned=*/false);
     for (size_t k = 0; k < run.results.size(); ++k) {
       EXPECT_TRUE(lcp_converged(run.results[k])) << run.results[k] << " for the " << pendulum_name(pendulum);
       EXPECT_FALSE(run.results[k].converged) << "for the " << pendulum_name(pendulum) << " at step " << k;
@@ -3395,10 +3509,11 @@ struct ProppedCantilever {
 
 /// \brief A cantilever with links of family Link whose tip rests on an anchored sphere, settled under a midspan load.
 ///
-/// Each step is a sequence of at most max_iters linearizations.
+/// Each step is a sequence of at most max_iters linearizations, with the Schur complement preconditioned by its
+/// self-mobility Jacobi if preconditioned.
 template <typename Link>
 ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double EI, double load, double dt,
-                                         unsigned max_iters) {
+                                         unsigned max_iters, bool preconditioned) {
   const size_t num_chain = num_segments + 2;
   const int midspan = static_cast<int>(num_segments / 2 + 1);
   const int tip = static_cast<int>(num_chain - 1);
@@ -3427,7 +3542,10 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
-  const bool settled = step_until_settled(rods_d, constraints_d, p.mobility_model, cfg, load_d, /*settled_step=*/1e-12,
+  const bool settled =
+      preconditioned ? step_until_settled(rods_d, constraints_d, p.mobility_model, cfg, load_d, /*settled_step=*/1e-12,
+                                          /*max_steps=*/1000, SelfMobilityJacobi{})
+                     : step_until_settled(rods_d, constraints_d, p.mobility_model, cfg, load_d, /*settled_step=*/1e-12,
                                           /*max_steps=*/1000);
   deep_copy(p.rods, rods_d);
   deep_copy(constraints, constraints_d);
@@ -3442,38 +3560,43 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
 //   R_N = P (N+2)(5N+2) / (8 (N+1)(2N+1)),
 //
 // first order in the spacing toward Euler-Bernoulli's 5P/16, with stiff-spring or rigid links and for either sequence
-// length. The steps keep the chain's geometry nonlinear, which at this load moves the reaction by at most about 1e-6 of
-// itself, shrinking as P^2.
+// length, and with and without the Schur complement preconditioned by its self-mobility Jacobi. The steps keep the
+// chain's geometry nonlinear, which at this load moves the reaction by at most about 1e-6 of itself, shrinking as P^2.
 TEST(Mbody, ProppedCantileverMatchesHenckyBarChain) {
   const double L = 8.0, EI = 5.0, load = 0.01;
   const double continuum = 5.0 * load / 16.0;
   const char* const link_names[2] = {"stiff springs", "fixed lengths"};
 
-  for (const unsigned max_iters : {1u, 50u}) {
-    for (int link = 0; link < 2; ++link) {
-      double finest_scaled_error = 0.0;
-      double finest_scaled_error_expected = 0.0;
-      for (const size_t num_segments : {4, 8, 16, 32}) {
-        const double n = static_cast<double>(num_segments);
-        const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
-        const ProppedCantilever r =
-            link == 0 ? run_propped_cantilever<LinearSpringViews<HostExecSpace>>(num_segments, L, EI, load,
-                                                                                 /*dt=*/100.0, max_iters)
-                      : run_propped_cantilever<FixedLengthViews<HostExecSpace>>(num_segments, L, EI, load,
-                                                                                /*dt=*/100.0, max_iters);
+  for (const bool preconditioned : {false, true}) {
+    for (const unsigned max_iters : {1u, 50u}) {
+      for (int link = 0; link < 2; ++link) {
+        double finest_scaled_error = 0.0;
+        double finest_scaled_error_expected = 0.0;
+        for (const size_t num_segments : {4, 8, 16, 32}) {
+          const double n = static_cast<double>(num_segments);
+          const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
+          const ProppedCantilever r =
+              link == 0
+                  ? run_propped_cantilever<LinearSpringViews<HostExecSpace>>(num_segments, L, EI, load,
+                                                                             /*dt=*/100.0, max_iters, preconditioned)
+                  : run_propped_cantilever<FixedLengthViews<HostExecSpace>>(num_segments, L, EI, load,
+                                                                            /*dt=*/100.0, max_iters, preconditioned);
 
-        ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
-        EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky)
-            << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
-        EXPECT_NEAR(r.tip_gap, 0.0, 1e-12)
-            << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters;
-        finest_scaled_error = n * (r.contact_force - continuum) / continuum;
-        finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+          ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments
+                                 << " max_iters=" << max_iters << " preconditioned=" << preconditioned;
+          EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky)
+              << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters
+              << " preconditioned=" << preconditioned;
+          EXPECT_NEAR(r.tip_gap, 0.0, 1e-12) << link_names[link] << " at num_segments=" << num_segments
+                                             << " max_iters=" << max_iters << " preconditioned=" << preconditioned;
+          finest_scaled_error = n * (r.contact_force - continuum) / continuum;
+          finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+        }
+
+        // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
+        EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4)
+            << link_names[link] << " at max_iters=" << max_iters << " preconditioned=" << preconditioned;
       }
-
-      // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
-      EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4)
-          << link_names[link] << " at max_iters=" << max_iters;
     }
   }
 }
@@ -3544,6 +3667,91 @@ TEST(Mbody, LocalDragSelfMobilityIsItsBlockOfM) {
       }
     }
   }
+}
+
+// SelfMobilityJacobi's d is the diagonal of dt B^T M B + K^-1, exact under local drag, which couples no two rods: on
+// rows coupling one, two and three rods, with and without torque, and with and without compliance (the fallback
+// problem with a triple-point angular spring added), and at every solve of a sequence. Probing by unit vectors applies
+// the operator CG inverts. The two sum the same terms dt v^T M_b v and K^-1 in different orders, each with a few dozen
+// roundings, and local drag's self blocks are well conditioned, so they agree to a few dozen ulps of d.
+TEST(Mbody, SelfMobilityJacobiIsTheDiagonal) {
+  const auto p = make_fallback_problem();
+  const auto& c = p.constraints;
+  TriplePointAngularSpringViews<HostExecSpace> bend(1);
+  bend.rod_i(0) = 2;
+  bend.rod_j(0) = 4;
+  bend.rod_k(0) = 3;
+  bend.rest_angle(0) = 1.5;
+  bend.spring_constant(0) = 2.0;
+  const auto constraints =
+      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
+                          get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
+                          get<FixedPositionViews<HostExecSpace>>(c), bend, get<ContactViews<HostExecSpace>>(c));
+
+  // Solve
+  std::vector<ProbedDiagonal> records;
+  const auto rods_d = copy_to<TestExecSpace>(p.rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  const MixedSLCPResult result =
+      solve_mixed_slcp(rods_d, constraints_d, p.mobility_model, MixedSLCPConfig{p.cfg, 3, 1e-300, 1e-300},
+                       ProbingSelfMobilityJacobi{&records});
+  ASSERT_GE(result.num_iters, 2u) << result;
+  ASSERT_EQ(records.size(), result.num_iters) << "one update per solve";
+
+  // Every row at every solve
+  for (size_t k = 0; k < records.size(); ++k) {
+    ASSERT_EQ(records[k].probed.size(), 15u);
+    for (size_t i = 0; i < records[k].probed.size(); ++i) {
+      EXPECT_NEAR(records[k].self_mobility_jacobi[i], records[k].probed[i],
+                  32.0 * std::numeric_limits<double>::epsilon() * records[k].probed[i])
+          << "row " << i << " at solve " << k;
+    }
+  }
+}
+
+// A caller's policy reaches CG, updated before every solve: with d = 1, preconditioned CG performs plain CG's
+// arithmetic, so the sequence reproduces the unpreconditioned one bit for bit, while d is NaN until the policy's first
+// update. Serial execution fixes the order of every atomic sum.
+TEST(Mbody, UnitJacobiIsUnpreconditioned) {
+  const auto p = make_fallback_problem();
+  const MixedSLCPConfig cfg{p.cfg, 50, 1e-9, 1e-9};
+  const auto rods_plain = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_plain = copy_to<Kokkos::Serial>(p.constraints);
+  const auto rods_unit = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_unit = copy_to<Kokkos::Serial>(p.constraints);
+
+  // Solve
+  const MixedSLCPResult plain = solve_mixed_slcp(rods_plain, constraints_plain, p.mobility_model, cfg);
+  const MixedSLCPResult unit = solve_mixed_slcp(rods_unit, constraints_unit, p.mobility_model, cfg, UnitJacobi{});
+  ASSERT_TRUE(plain.converged) << plain;
+  ASSERT_GE(plain.num_iters, 2u);
+
+  // The step
+  EXPECT_EQ(unit.num_iters, plain.num_iters);
+  EXPECT_EQ(std::bit_cast<uint64_t>(unit.residual), std::bit_cast<uint64_t>(plain.residual));
+  EXPECT_EQ(unit.accepted_lcp_result.num_iters, plain.accepted_lcp_result.num_iters);
+  EXPECT_EQ(std::bit_cast<uint64_t>(unit.accepted_lcp_result.residual),
+            std::bit_cast<uint64_t>(plain.accepted_lcp_result.residual));
+  EXPECT_EQ(count_bit_differences(rods_unit.force_torque_view(), rods_plain.force_torque_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_unit.velocity_omega_view(), rods_plain.velocity_omega_view()), 0u);
+  EXPECT_EQ(count_bit_differences(get<ContactViews<Kokkos::Serial>>(constraints_unit).lambda_view(),
+                                  get<ContactViews<Kokkos::Serial>>(constraints_plain).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<LinearSpringViews<Kokkos::Serial>>(constraints_unit).lambda_view(),
+                                  get<LinearSpringViews<Kokkos::Serial>>(constraints_plain).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<PinViews<Kokkos::Serial>>(constraints_unit).lambda_view(),
+                                  get<PinViews<Kokkos::Serial>>(constraints_plain).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedLengthViews<Kokkos::Serial>>(constraints_unit).lambda_view(),
+                                  get<FixedLengthViews<Kokkos::Serial>>(constraints_plain).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedPositionViews<Kokkos::Serial>>(constraints_unit).lambda_view(),
+                                  get<FixedPositionViews<Kokkos::Serial>>(constraints_plain).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedPoseViews<Kokkos::Serial>>(constraints_unit).lambda_view(),
+                                  get<FixedPoseViews<Kokkos::Serial>>(constraints_plain).lambda_view()),
+            0u);
 }
 
 // CGInvOp against the dense inverse of a random SPD system B^T M B + K^-1.

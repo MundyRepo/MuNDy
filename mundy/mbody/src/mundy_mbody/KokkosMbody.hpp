@@ -28,9 +28,11 @@
 #include <type_traits>  // for std::is_same_v
 
 // Mundy
-#include <mundy_math/linear_system.hpp>         // for mundy::CGConfig
-#include <mundy_math/pgd.hpp>                   // for mundy::PGDConfig
-#include <mundy_mbody/KokkosMbodyMobility.hpp>  // for mundy::mbody::MobilityModel
+#include <mundy_math/linear_system.hpp>                // for mundy::CGConfig
+#include <mundy_math/pgd.hpp>                          // for mundy::PGDConfig
+#include <mundy_math/preconditioners.hpp>              // for mundy::NoPreconditioner
+#include <mundy_mbody/KokkosMbodyMobility.hpp>         // for mundy::mbody::MobilityModel
+#include <mundy_mbody/KokkosMbodyPreconditioners.hpp>  // for mundy::mbody::SelfMobilityJacobi
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
 #include <mundy_mbody/impl/KokkosMbodyImpl.hpp>
 
@@ -45,6 +47,11 @@ namespace mbody {
 ///
 /// outer_tol is a length. At the end of the step (to first order in dt), no two bodies overlap by more than outer_tol,
 /// and no two bodies that push on each other are more than outer_tol apart.
+///
+/// Keep cg_tol <= outer_tol: cg_tol bounds the solve for the bilateral constraint forces y: at the end of the step (to
+/// first order in dt), the bilateral constraints' residuals psi + K^{-1} y, each a length or an angle in radians, have
+/// L2 norm at most cg_tol. The contacts see that error through the bodies' motion and cannot be resolved more finely
+/// than it, so an outer_tol below cg_tol may stall the outer solve.
 struct MixedLCPConfig {
   double dt = 1.0;
   unsigned max_outer_iters = 1000;
@@ -145,9 +152,12 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 /// A body held by a constraint contributes its reaction to B y, which cancels out of the relaxation's
 /// fixed point exactly; a body held by discarding its velocity after the solve leaves that reaction
 /// outside B, and the fixed point then carries an error of order dt times the body's mobility.
-template <typename ExecSpace, typename Model, typename... Families>
+///
+/// preconditioner_policy preconditions the CG behind S; the default, NoPreconditioner, leaves it unpreconditioned.
+template <typename ExecSpace, typename Model, typename Policy = NoPreconditioner, typename... Families>
 MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
-                               const Model& mobility_model, const MixedLCPConfig& cfg) {
+                               const Model& mobility_model, const MixedLCPConfig& cfg,
+                               const Policy& preconditioner_policy = Policy{}) {
   static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
                 "mbody::solve_mixed_lcp: rods and every constraint family must share one execution space.");
   static_assert(
@@ -163,7 +173,7 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
     return MixedLCPResult{0, 0.0, 0.0 <= cfg.outer_tol};
   }
 
-  impl::LinearizationWorkspace workspace(step, pgd_cfg, cg_cfg);
+  impl::LinearizationWorkspace workspace(step, pgd_cfg, cg_cfg, preconditioner_policy);
   impl::linearize(step, workspace, rods, constraints);
   impl::LinearizedStep<ExecSpace> linearized = impl::make_linearized_step(step);
   impl::solve_linearization(step, workspace, impl::Displacement<ExecSpace>{step.u_free, cfg.dt},
@@ -193,9 +203,12 @@ MixedLCPResult solve_mixed_lcp(const RodViews<ExecSpace>& rods, const Constraint
 /// force/torque is F_ext + W, velocity/omega is U_free + M W, every family's lambda holds its multipliers, all of the
 /// returned iterate, and the rods have not moved. advance_rods can be used to perform the consistent time integration,
 /// which for a converged iterate reaches the configuration at which it was accepted.
-template <typename ExecSpace, typename Model, typename... Families>
+///
+/// preconditioner_policy preconditions the CG behind each iterate's Schur complement, as in solve_mixed_lcp.
+template <typename ExecSpace, typename Model, typename Policy = NoPreconditioner, typename... Families>
 MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
-                                 const Model& mobility_model, const MixedSLCPConfig& cfg) {
+                                 const Model& mobility_model, const MixedSLCPConfig& cfg,
+                                 const Policy& preconditioner_policy = Policy{}) {
   static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
                 "mbody::solve_mixed_slcp: rods and every constraint family must share one execution space.");
   static_assert(
@@ -216,7 +229,7 @@ MixedSLCPResult solve_mixed_slcp(const RodViews<ExecSpace>& rods, const Constrai
     return MixedSLCPResult{1, 0.0, true, MixedLCPResult{0, 0.0, 0.0 <= lcp_cfg.outer_tol}};
   }
 
-  impl::LinearizationWorkspace workspace(step, pgd_cfg, cg_cfg);
+  impl::LinearizationWorkspace workspace(step, pgd_cfg, cg_cfg, preconditioner_policy);
   impl::linearize(step, workspace, rods, constraints);
   const view_t x_start("x_start", index_map.num_unilateral);
   impl::LinearizedStep<ExecSpace> first = impl::make_linearized_step(step);

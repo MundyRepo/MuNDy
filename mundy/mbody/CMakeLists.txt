@@ -15,6 +15,7 @@ set(NOINSTALLHEADERS
     src/mundy_mbody/impl/KokkosMbodyImpl.hpp
     src/mundy_mbody/KokkosMbody.hpp
     src/mundy_mbody/KokkosMbodyMobility.hpp
+    src/mundy_mbody/KokkosMbodyPreconditioners.hpp
     src/mundy_mbody/KokkosMbodyTypes.hpp
     src/mundy_mbody/Periphery.hpp
 )
