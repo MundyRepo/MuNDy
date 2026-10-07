@@ -117,6 +117,7 @@ periphery)
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_math/GaussLegendre.hpp>  // for mundy::gauss_legendre_rule
 #include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion (reference->lab rotation)
 #include <mundy_math/Vector3.hpp>        // for mundy::Vector3, mundy::cross
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
@@ -129,9 +130,6 @@ periphery)
 #include <mundy_math/belos_solver.hpp>     // for mundy::{make_belos_inv_op, BelosInvOp, BelosConfig, BelosSolver}
 #include <mundy_math/solver_backends.hpp>  // for mundy::KokkosBackend
 #endif
-
-// Our stuff
-#include "Gauss_Legendre_Nodes_and_Weights.hpp"  // for Gauss_Legendre_Nodes_and_Weights
 
 #define DOUBLE_ZERO 1.0e-12
 
@@ -294,7 +292,7 @@ void gen_sphere_quadrature(const int& order, const double& radius, std::vector<d
   // Compute the Gauss-Legendre nodes and weights
   std::vector<double> nodes_gl;  // cos thetaj = tj
   std::vector<double> weights_gl;
-  Gauss_Legendre_Nodes_and_Weights(order + 1u, nodes_gl, weights_gl);  // order+1 points, excluding the two poles
+  mundy::gauss_legendre_rule(order + 1, nodes_gl, weights_gl);  // order+1 points, excluding the two poles
 
   // Calculate the grid cordinates with the [0, 0, 1] at the north pole and [0, 0, -1] at the south pole.
   if (include_poles) {
