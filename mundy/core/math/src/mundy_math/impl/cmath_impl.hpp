@@ -25,11 +25,25 @@
 #include <Kokkos_Core.hpp>  // for KOKKOS_INLINE_FUNCTION, Kokkos::Experimental::quiet_NaN_v, ...
 
 // C++ core
-#include <cstdint>  // for std::int64_t, std::uint64_t
+#include <cstdint>      // for std::int64_t, std::uint32_t, std::uint64_t
+#include <type_traits>  // for std::conditional_t, std::is_same_v, std::is_trivially_copyable_v
 
 namespace mundy {
 
 namespace impl {
+
+/// \brief Reinterprets the bits of From as To, in constant expressions and on the device (see mundy::bit_cast).
+template <typename To, typename From>
+KOKKOS_INLINE_FUNCTION constexpr To bit_cast(const From& from) {
+  static_assert(sizeof(To) == sizeof(From), "bit_cast requires equal-size types.");
+  static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>,
+                "bit_cast requires trivially copyable types.");
+#if defined(__has_builtin) && __has_builtin(__builtin_bit_cast)
+  return __builtin_bit_cast(To, from);
+#else
+  return Kokkos::bit_cast<To>(from);
+#endif
+}
 
 //! \name Constant-expression versions of hardware math functions
 //@{
@@ -40,7 +54,11 @@ namespace impl {
 /// switch between the two without changing a result. The method writes a = r s^2 with r in [1, 4), runs Newton's
 /// iteration on r, rounds the root with exact integer arithmetic, and scales it by s.
 KOKKOS_INLINE_FUNCTION constexpr double constexpr_sqrt(double a) {
-  // +0, -0, +infinity, and NaN are their own square roots; negative numbers have none.
+  // +0, -0, +infinity, and NaN are their own square roots; negative numbers have none. NaN is caught with != first,
+  // because ordering a NaN raises an invalid-operation exception, which nvcc does not allow in a constant expression.
+  if (a != a) {
+    return a;
+  }
   if (!(a > 0.0 && a <= Kokkos::Experimental::finite_max_v<double>)) {
     return a < 0.0 ? Kokkos::Experimental::quiet_NaN_v<double> : a;
   }
@@ -95,6 +113,31 @@ KOKKOS_INLINE_FUNCTION constexpr double constexpr_sqrt(double a) {
 /// (Figueroa, 1995).
 KOKKOS_INLINE_FUNCTION constexpr float constexpr_sqrt(float a) {
   return static_cast<float>(constexpr_sqrt(static_cast<double>(a)));
+}
+
+/// \brief 1 / sqrt(a) of a float or double, usable in constant expressions: the host's 1 / sqrt, bit for bit.
+///
+/// Both round 1 / r for the correctly rounded root r. Dividing by zero, making a NaN, and ordering a NaN are not
+/// constant expressions (the last for nvcc), so the special values are returned directly, as the hardware gives them:
+/// 1 / sqrt(+-0) = +-infinity, a NaN gives itself, and a negative number gives NaN. 1 / sqrt(+infinity) = +0 needs no
+/// special case.
+template <typename Real>
+KOKKOS_INLINE_FUNCTION constexpr Real constexpr_rsqrt(const Real a) {
+  static_assert(std::is_same_v<Real, float> || std::is_same_v<Real, double>,
+                "constexpr_rsqrt: Real must be float or double.");
+  if (a != a) {
+    return a;
+  }
+  if (a == Real(0)) {
+    // Only the sign bit tells -0 from +0.
+    using Bits = std::conditional_t<std::is_same_v<Real, double>, std::uint64_t, std::uint32_t>;
+    const bool negative = (bit_cast<Bits>(a) >> (8 * sizeof(Real) - 1)) != 0;
+    return negative ? -Kokkos::Experimental::infinity_v<Real> : Kokkos::Experimental::infinity_v<Real>;
+  }
+  if (a < Real(0)) {
+    return Kokkos::Experimental::quiet_NaN_v<Real>;
+  }
+  return Real(1) / constexpr_sqrt(a);
 }
 //@}
 

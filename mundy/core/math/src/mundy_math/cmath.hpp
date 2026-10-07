@@ -30,6 +30,7 @@
 /// finds whatever overload the scalar type provides in its own namespace.
 ///
 /// abs and sqrt of float and double are also usable in constant expressions, with the same results as at run time.
+/// So is rsqrt, with the host's results.
 
 // External
 #include <Kokkos_Core.hpp>
@@ -41,7 +42,7 @@
 
 // Mundy
 #include <mundy_math/NumTraits.hpp>         // for mundy::NumTraits, mundy::is_autodiff_scalar_v
-#include <mundy_math/impl/cmath_impl.hpp>  // for mundy::impl::constexpr_sqrt
+#include <mundy_math/impl/cmath_impl.hpp>  // for mundy::impl::{bit_cast, constexpr_sqrt, constexpr_rsqrt}
 
 namespace mundy {
 
@@ -140,14 +141,7 @@ MUNDY_MATH_DISPATCH_BINARY(max)
 /// \param[in] from Value whose bit pattern is reinterpreted.
 template <typename To, typename From>
 KOKKOS_INLINE_FUNCTION constexpr To bit_cast(const From& from) {
-  static_assert(sizeof(To) == sizeof(From), "bit_cast requires equal-size types.");
-  static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>,
-                "bit_cast requires trivially copyable types.");
-#if defined(__has_builtin) && __has_builtin(__builtin_bit_cast)
-  return __builtin_bit_cast(To, from);
-#else
-  return Kokkos::bit_cast<To>(from);
-#endif
+  return impl::bit_cast<To>(from);
 }
 
 /// \brief Absolute value (constexpr-compatible for arithmetic types, ADL for others).
@@ -198,6 +192,30 @@ KOKKOS_INLINE_FUNCTION constexpr auto sqrt(const T& x) {
   } else {
     using std::sqrt;
     return sqrt(x);
+  }
+}
+
+/// \brief Reciprocal square root 1 / sqrt(x) (constexpr-compatible for float and double, ADL for non-arithmetic types).
+///
+/// At run time, float and double use Kokkos::rsqrt: on the host, 1 / sqrt, two correctly rounded operations; on a GPU,
+/// the vendor's rsqrt, which refines a hardware estimate and is cheaper than a divide and a square root there (CUDA's
+/// is within 1 ulp). So a GPU's result may differ from the host's in the last bit. In a constant expression they use
+/// impl::constexpr_rsqrt, which returns the host's bits. Other arithmetic types use 1 / Kokkos::sqrt; non-arithmetic
+/// types use 1 / sqrt, with sqrt found by ADL as above.
+///
+/// \param[in] x Value to take the reciprocal square root of.
+template <typename T>
+KOKKOS_INLINE_FUNCTION constexpr auto rsqrt(const T& x) {
+  if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+    if (std::is_constant_evaluated()) {
+      return impl::constexpr_rsqrt(x);
+    }
+    return Kokkos::rsqrt(x);
+  } else if constexpr (std::is_arithmetic_v<T>) {
+    const auto root = Kokkos::sqrt(x);
+    return decltype(root)(1) / root;
+  } else {
+    return passive_scalar_t<T>(1) / sqrt(x);
   }
 }
 

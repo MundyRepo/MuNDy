@@ -58,6 +58,7 @@
 
 // Mundy
 #include <mundy_math/Vector.hpp>      // for mundy::Vector, mundy::dot
+#include <mundy_math/cmath.hpp>       // for mundy::rsqrt
 #include <mundy_math/direct_sum.hpp>  // for mundy::direct_sum
 
 namespace {
@@ -80,7 +81,7 @@ struct Stokeslet {
     const vector3_t f{forces(3 * s), forces(3 * s + 1), forces(3 * s + 2)};
     const double r2 = mundy::dot(r, r);
     const bool coincident = r2 < 1e-24;
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double scale = one_over_eight_pi * rinv;
     return scale * f + (scale * mundy::dot(f, r) * rinv * rinv) * r;
   }

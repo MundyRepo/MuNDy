@@ -118,6 +118,7 @@ periphery)
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion (reference->lab rotation)
 #include <mundy_math/Vector3.hpp>              // for mundy::Vector3, mundy::cross
+#include <mundy_math/cmath.hpp>                // for mundy::rsqrt
 #include <mundy_math/direct_sum.hpp>           // for mundy::direct_sum
 #include <mundy_math/invert.hpp>               // for mundy::invert
 #include <mundy_math/matrix_market.hpp>        // for mundy::read_matrix_market, mundy::write_matrix_market
@@ -271,17 +272,15 @@ View read_matrix_market_with_extents(const std::string& filename, const size_t r
   return view;
 }
 
-/// \brief The direct_sum accumulator that adds target t's 3-vector sum to entries 3 t, 3 t + 1, 3 t + 2 of out.
-template <class View>
-auto add_to_vector3_entries(const View& out) {
-  return KOKKOS_LAMBDA(const size_t t, const mundy::Vector3d& sum) {
-    out(3 * t + 0) += sum[0];
-    out(3 * t + 1) += sum[1];
-    out(3 * t + 2) += sum[2];
-  };
-}
-
 }  // namespace impl
+
+/// \brief The direct_sum accumulator that adds target t's 3-vector sum to entries 3 t, 3 t + 1, 3 t + 2 of out.
+#define ADD_TO_VECTOR3_ENTRIES(out) \
+  KOKKOS_LAMBDA(const size_t t, const mundy::Vector3d& sum) { \
+    out(3 * t + 0) += sum[0]; \
+    out(3 * t + 1) += sum[1]; \
+    out(3 * t + 2) += sum[2]; \
+  }
 
 /// \brief Copy a host std::vector<double> into a fresh device (LayoutLeft) view of the same length.
 template <class ExecSpace = Kokkos::DefaultExecutionSpace>
@@ -339,7 +338,7 @@ void apply_stokes_kernel(const ExecutionSpace& space,                  //
 
     const double r2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
 
     const double f_dot_r = fx * dx + fy * dy + fz * dz;
@@ -351,7 +350,7 @@ void apply_stokes_kernel(const ExecutionSpace& space,                  //
   };
 
   mundy::direct_sum(space, num_target_points, num_source_points, stokes_computation,
-                    impl::add_to_vector3_entries(target_velocities));
+                    ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
 /// \brief Apply the stokes kernel to map source forces to target velocities: u_target += M f_source
@@ -410,7 +409,7 @@ void apply_weighted_stokes_kernel(const ExecutionSpace& space,                  
 
     const double r2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv2 = rinv * rinv;
 
     const double f_dot_r_rinv2 = (fx * dx + fy * dy + fz * dz) * rinv2;
@@ -422,7 +421,7 @@ void apply_weighted_stokes_kernel(const ExecutionSpace& space,                  
   };
 
   mundy::direct_sum(space, num_target_points, num_source_points, weighted_stokes_computation,
-                    impl::add_to_vector3_entries(target_velocities));
+                    ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
 /// \brief Apply the RPY kernel to map source forces to target velocities: u_target += M f_source
@@ -479,7 +478,7 @@ void apply_rpy_kernel(const ExecutionSpace& space,                  //
     const double a2_over_three = one_over_three * a * a;
     const double r2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
     const double rinv5 = rinv * rinv * rinv3;
     const double fdotr = fx * dx + fy * dy + fz * dz;
@@ -507,7 +506,7 @@ void apply_rpy_kernel(const ExecutionSpace& space,                  //
   };
 
   mundy::direct_sum(space, num_target_points, num_source_points, rpy_computation,
-                    impl::add_to_vector3_entries(target_velocities));
+                    ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
 /// \brief Apply the corrected RPY kernel to map source forces to target velocities: u_target += M f_source
@@ -628,7 +627,7 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
   };
 
   mundy::direct_sum(space, num_target_points, num_source_points, rpyc_computation,
-                    impl::add_to_vector3_entries(target_velocities));
+                    ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
 /// \brief Accumulate the singularity-subtracted exterior trace u += (J + T)[f] of a closed body surface.
@@ -684,7 +683,7 @@ void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,           
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -712,7 +711,7 @@ void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,           
   };
 
   mundy::direct_sum(space, num_points, num_points, stokes_double_layer_computation,
-                    impl::add_to_vector3_entries(velocities));
+                    ADD_TO_VECTOR3_ENTRIES(velocities));
 }
 
 /// \brief Apply the stokes double layer kernel to map source forces to target velocities: u_target += M f_source
@@ -765,7 +764,7 @@ void apply_stokes_double_layer_kernel(const ExecutionSpace& space,              
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -790,7 +789,7 @@ void apply_stokes_double_layer_kernel(const ExecutionSpace& space,              
   };
 
   mundy::direct_sum(space, num_target_points, num_source_points, stokes_double_layer_contribution,
-                    impl::add_to_vector3_entries(target_velocities));
+                    ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
 /// \brief Apply local drag to the sphere velocities v += 1/(6 pi mu r) f
@@ -838,7 +837,7 @@ void apply_local_drag([[maybe_unused]] const ExecutionSpace& space,       //
 /// \param[in] quadrature_weights The quadrature weights (size num_source_points)
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceNormalVectorType, typename QuadratureWeightVectorType, typename MatrixType>
-void fill_stokes_double_layer_matrix([[maybe_unused]] const ExecutionSpace& space,          //
+void fill_stokes_double_layer_matrix(const ExecutionSpace& space,                           //
                                      const double viscosity,                                //
                                      const size_t num_source_points,                        //
                                      const size_t num_target_points,                        //
@@ -867,7 +866,8 @@ void fill_stokes_double_layer_matrix([[maybe_unused]] const ExecutionSpace& spac
   // Compute the scale factor
   const double scale_factor = -3.0 / (4.0 * M_PI * viscosity);
   Kokkos::parallel_for(
-      "DoubleLayerMatrixFill", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_target_points, num_source_points}),
+      "DoubleLayerMatrixFill",
+      Kokkos::MDRangePolicy<ExecutionSpace, Kokkos::Rank<2>>(space, {0, 0}, {num_target_points, num_source_points}),
       KOKKOS_LAMBDA(const size_t t, const size_t s) {
         // Compute the distance vector
         const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
@@ -877,7 +877,7 @@ void fill_stokes_double_layer_matrix([[maybe_unused]] const ExecutionSpace& spac
         // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
         const double dr2 = dx * dx + dy * dy + dz * dz;
         const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-        const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
+        const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
         const double rinv2 = rinv * rinv;
         const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -1027,7 +1027,7 @@ void add_singularity_subtraction([[maybe_unused]] const ExecutionSpace& space, c
 /// \param[in] quadrature_weights The quadrature weights (size num_points)
 /// \param[in,out] T The matrix N is added to (size num_points * 3 x num_points * 3)
 template <class ExecutionSpace, typename NormalVectorType, typename QuadratureWeightVectorType, typename MatrixType>
-void add_complementary_matrix([[maybe_unused]] const ExecutionSpace& space,          //
+void add_complementary_matrix(const ExecutionSpace& space,                           //
                               const double viscosity,                                //
                               const double surface_area,                             //
                               const NormalVectorType& normals,                       //
@@ -1054,7 +1054,8 @@ void add_complementary_matrix([[maybe_unused]] const ExecutionSpace& space,     
   // Add the complementary matrix
   const double scale = 1.0 / (viscosity * surface_area);
   Kokkos::parallel_for(
-      "ComplementaryMatrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_points, num_points}),
+      "ComplementaryMatrix",
+      Kokkos::MDRangePolicy<ExecutionSpace, Kokkos::Rank<2>>(space, {0, 0}, {num_points, num_points}),
       KOKKOS_LAMBDA(const size_t t, const size_t s) {
         const double normal_s0 = normals(3 * s + 0);
         const double normal_s1 = normals(3 * s + 1);
@@ -1205,7 +1206,7 @@ void apply_skfie(const ExecutionSpace& space,                           //
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -1235,7 +1236,7 @@ void apply_skfie(const ExecutionSpace& space,                           //
                            dz * coeff + scaled_normal_dot_force * normal_t2};
   };
 
-  mundy::direct_sum(space, num_points, num_points, skfie_contribution, impl::add_to_vector3_entries(velocities));
+  mundy::direct_sum(space, num_points, num_points, skfie_contribution, ADD_TO_VECTOR3_ENTRIES(velocities));
 
   // The analytic target term (sigma / viscosity) f_t, added once per target node -- NOT inside the per-source sweep.
   const double target_coefficient = impl::interior_trace_coefficient(viscosity, outward_normal);
@@ -1781,7 +1782,7 @@ void apply_stokeslet_rotlet_kernel(const ExecutionSpace& space, const double vis
     const double dz = target_positions(3 * t + 2) - source_positions(3 * s + 2);
     const double r2 = dx * dx + dy * dy + dz * dz;
     const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
-    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
+    const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
 
     // Stokeslet: (I/r + r r / r^3) . F
@@ -1802,7 +1803,7 @@ void apply_stokeslet_rotlet_kernel(const ExecutionSpace& space, const double vis
     return stokeslet + rotlet;
   };
   mundy::direct_sum(space, num_target_points, num_source_points, contribution,
-                    impl::add_to_vector3_entries(target_velocities));
+                    ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
 /// \brief Body self-interaction LHS block: y = (-1/(2 viscosity) I + T_b)[q] - (U + Omega x (x - X)).
@@ -2607,6 +2608,8 @@ class MobilitySystem {
   mundy::BelosResult<double> last_result_;
   bool has_body_solve_ = false;  //!< whether last_result_ holds a body solve
 };
+
+#undef ADD_TO_VECTOR3_ENTRIES
 
 #endif  // HAVE_MUNDYMATH_BELOS && HAVE_MUNDYMATH_TPETRA
 

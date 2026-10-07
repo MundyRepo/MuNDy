@@ -18,16 +18,24 @@
 // **********************************************************************************************************************
 // @HEADER
 
+/// \file
+/// \brief Accuracy studies of the periphery and the bodies and spheres inside it, each written to a CSV.
+///
+/// Usage: PeripheryStudies <study> [<study> ...]; run it without arguments for the list of studies. Each study writes
+/// periphery_studies_<study>.csv to the working directory, for the analyze_*.py scripts beside this file.
+
 // External libs
 #include <openrand/philox.h>
 
 // C++ core
-#include <algorithm>         // for std::find, std::min, std::max
+#include <algorithm>         // for std::find, std::find_if, std::min, std::max
 #include <array>             // for std::array
 #include <chrono>            // for std::chrono::steady_clock
+#include <cmath>             // for std::abs, std::sqrt, std::acos, std::atan2, std::sin, std::cos
 #include <fstream>           // for std::ofstream
 #include <initializer_list>  // for std::initializer_list
 #include <iomanip>           // for std::setw, std::setprecision
+#include <iostream>          // for std::cout, std::cerr
 #include <limits>            // for std::numeric_limits
 #include <memory>            // for std::make_shared
 #include <sstream>           // for std::ostringstream
@@ -46,6 +54,7 @@
 #include <mundy_geom/randomize.hpp>             // for mundy::generate_random_unit_quaternion
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Vector3.hpp>              // for Vector3
+#include <mundy_math/cmath.hpp>                // for mundy::rsqrt
 #include <mundy_mbody/Periphery.hpp>           // for fill_skfie_matrix, apply_skfie, PeripheryT, ...
 #include <mundy_utils/rng.hpp>                 // for mundy::make_philox
 
@@ -64,8 +73,8 @@ const char* to_string(const SphereType type) {
 
 // ====================================================================================================================
 // Motile-body BIE mobility: resolved rigid bodies (each with its own surface quadrature) + RPY spheres + periphery,
-// solved as one block matrix-free GMRES system. Shared helpers (make_rpy_body, solve_cavity, sphere_mix,
-// wilson_three_sphere) followed by their asserting tests.
+// solved as one block matrix-free GMRES system. The studies' shared helpers (make_rpy_body, solve_cavity, sphere_mix,
+// wilson_three_sphere) come first, then the mobility studies built on them.
 // ====================================================================================================================
 
 // A single RPY body (center point-force)
@@ -790,8 +799,9 @@ std::pair<mundy::Vector3d, mundy::Vector3d> periphery_node_and_cell_dirs(const P
 }
 
 // One sphere of radius r inside the cavity `periphery` of radius R, its center at distance s*r from the wall (s = 1
-// touches it). Same measurement as PeripheryDiagnostic.SphereQuadPeripheryRPYC (F.V < 0 along a few directions), but
-// as the full 3x3 mobility. The approach direction depends on the sample: 0 = straight at a periphery node, 1 = at a
+// touches it). The full 3x3 mobility M, which is SPD exactly when F . (M F) > 0 for every force F (the deleted
+// SphereQuadPeripheryRPYC diagnostic checked F . V along a few directions). The approach direction depends on the
+// sample: 0 = straight at a periphery node, 1 = at a
 // grid-cell center (the two extremes of alignment with the periphery grid), k >= 2 = uniformly random (+x rotated by
 // sphere_orientations<1>(k)). The inclusion's own grid is oriented by sphere_orientations<1>(k) in every sample.
 // R_RPY and R_RPYC differ only once the sphere overlaps a periphery node.
@@ -815,6 +825,511 @@ void periphery_sphere_spd(std::ostream& csv, const int order,
   mobility_matrix_study(csv, key, order, r, pos_of_sample, configs, num_samples, periphery);
 }
 
+// ====================================================================================================================
+// The double layer on a sphere, apart from any mobility: the operators behind the periphery's second-kind equation.
+// ====================================================================================================================
+
+using StudyExecSpace = Kokkos::DefaultExecutionSpace;
+using StudyVector = Kokkos::View<double*, Kokkos::LayoutLeft, StudyExecSpace::memory_space>;
+using StudyMatrix = Kokkos::View<double**, Kokkos::LayoutLeft, StudyExecSpace::memory_space>;
+
+/// \brief The double-layer operators the double_layer study compares (see Periphery.hpp's header).
+enum class DoubleLayerOperator {
+  TDense,                   //!< The punctured double layer T, filled by fill_stokes_double_layer_matrix
+  TMatrixFree,              //!< T, applied by apply_stokes_double_layer_kernel
+  InteriorTraceDense,       //!< The interior trace J + T, by add_singularity_subtraction on T
+  ExteriorTraceMatrixFree,  //!< The singularity-subtracted exterior trace, by apply_stokes_double_layer_kernel_ss
+  SkfieDense,               //!< The second-kind operator M = J + T + N, filled by fill_skfie_matrix
+  SkfieMatrixFree           //!< M, applied by apply_skfie
+};
+
+constexpr std::array<DoubleLayerOperator, 6> kDoubleLayerOperators = {
+    DoubleLayerOperator::TDense,     DoubleLayerOperator::TMatrixFree,
+    DoubleLayerOperator::InteriorTraceDense, DoubleLayerOperator::ExteriorTraceMatrixFree,
+    DoubleLayerOperator::SkfieDense, DoubleLayerOperator::SkfieMatrixFree};
+
+const char* to_string(const DoubleLayerOperator op) {
+  switch (op) {
+    case DoubleLayerOperator::TDense:
+      return "T_dense";
+    case DoubleLayerOperator::TMatrixFree:
+      return "T_matrix_free";
+    case DoubleLayerOperator::InteriorTraceDense:
+      return "interior_trace_dense";
+    case DoubleLayerOperator::ExteriorTraceMatrixFree:
+      return "exterior_trace_matrix_free";
+    case DoubleLayerOperator::SkfieDense:
+      return "skfie_dense";
+    case DoubleLayerOperator::SkfieMatrixFree:
+      return "skfie_matrix_free";
+  }
+  return "unknown";
+}
+
+/// \brief The densities the double_layer study applies the operators to.
+enum class SurfaceField {
+  Constant,  //!< (1, 1, 1)
+  Normal,    //!< The outward unit normal x / |x|
+  Mixed      //!< See surface_field_value
+};
+
+constexpr std::array<SurfaceField, 3> kSurfaceFields = {SurfaceField::Constant, SurfaceField::Normal,
+                                                        SurfaceField::Mixed};
+
+const char* to_string(const SurfaceField field) {
+  switch (field) {
+    case SurfaceField::Constant:
+      return "constant";
+    case SurfaceField::Normal:
+      return "normal";
+    case SurfaceField::Mixed:
+      return "mixed";
+  }
+  return "unknown";
+}
+
+/// \brief The value of field at the sphere point (x, y, z).
+///
+/// Mixed is the field of the deleted StokesDoubleLayerSmoothForces diagnostic. With r = |x| and theta and phi the polar
+/// and azimuthal angles, it is
+///   (sin(theta) cos(theta) + cos(theta) cos(phi) / r, sin^2(theta) sin(phi) - cos(theta) sin(phi) / r,
+///    sin^2(theta) cos(phi)),
+/// which that diagnostic labeled sin(theta) n + cos(theta) t_theta + cos^2(theta) t_phi. Its cos(phi) / r and
+/// sin(phi) / r terms do not vanish at the poles, where phi is undefined, so it is not smooth there.
+Vector3d surface_field_value(const SurfaceField field, const double x, const double y, const double z) {
+  const double inv_radius = rsqrt(x * x + y * y + z * z);
+  switch (field) {
+    case SurfaceField::Constant:
+      return Vector3d(1.0, 1.0, 1.0);
+    case SurfaceField::Normal:
+      return Vector3d(x * inv_radius, y * inv_radius, z * inv_radius);
+    case SurfaceField::Mixed: {
+      const double theta = std::acos(z * inv_radius);
+      const double phi = std::atan2(y, x);
+      const double sin_theta = std::sin(theta);
+      const double cos_theta = std::cos(theta);
+      return Vector3d(sin_theta * z * inv_radius + cos_theta * std::cos(phi) * inv_radius,
+                      sin_theta * y * inv_radius - cos_theta * std::sin(phi) * inv_radius, sin_theta * x * inv_radius);
+    }
+  }
+  return Vector3d(0.0, 0.0, 0.0);
+}
+
+/// \brief A sphere quadrature with inward normals, the periphery's convention, on the host and in StudyExecSpace.
+struct DoubleLayerSurface {
+  size_t num_nodes;
+  std::vector<double> points;   //!< 3 N node positions, on the host
+  std::vector<double> weights;  //!< N weights, on the host
+  StudyVector d_points;         //!< points in StudyExecSpace's memory
+  StudyVector d_weights;        //!< weights in StudyExecSpace's memory
+  StudyVector d_normals;        //!< 3 N inward unit normals in StudyExecSpace's memory
+};
+
+/// \brief The (order + 1)-ring Gauss-Legendre rule on the sphere of the given radius, with inward normals.
+DoubleLayerSurface make_double_layer_surface(const int order, const double radius) {
+  std::vector<double> normals;  // the unit-sphere points, which are its outward unit normals
+  std::vector<double> weights;
+  gauss_legendre_sphere_rule(order + 1, normals, weights);
+  std::vector<double> points(normals.size());
+  for (size_t i = 0; i < normals.size(); ++i) {
+    points[i] = radius * normals[i];
+    normals[i] = -normals[i];
+  }
+  for (double& weight : weights) {
+    weight *= radius * radius;
+  }
+  return {weights.size(),
+          points,
+          weights,
+          to_device<StudyExecSpace>(points),
+          to_device<StudyExecSpace>(weights),
+          to_device<StudyExecSpace>(normals)};
+}
+
+/// \brief The field's values at the surface's nodes, in StudyExecSpace's memory.
+StudyVector make_surface_field(const SurfaceField field, const DoubleLayerSurface& surface) {
+  std::vector<double> values(3 * surface.num_nodes);
+  for (size_t s = 0; s < surface.num_nodes; ++s) {
+    const Vector3d value =
+        surface_field_value(field, surface.points[3 * s], surface.points[3 * s + 1], surface.points[3 * s + 2]);
+    for (size_t d = 0; d < 3; ++d) {
+      values[3 * s + d] = value[d];
+    }
+  }
+  return to_device<StudyExecSpace>(values);
+}
+
+/// \brief op q on the surface.
+StudyVector apply_double_layer_operator(const DoubleLayerOperator op, const double viscosity,
+                                        const DoubleLayerSurface& surface, const StudyVector& q) {
+  const StudyExecSpace space;
+  const size_t n = surface.num_nodes;
+  const bool outward_normal = false;
+  StudyVector u("u", 3 * n);
+  auto apply_dense = [&](const auto& fill) {
+    StudyMatrix A("A", 3 * n, 3 * n);
+    fill(A);
+    KokkosBlas::gemv(space, "N", 1.0, A, q, 0.0, u);
+  };
+  auto fill_t = [&](const StudyMatrix& A) {
+    fill_stokes_double_layer_matrix(space, viscosity, n, n, surface.d_points, surface.d_points, surface.d_normals,
+                                    surface.d_weights, A);
+  };
+  switch (op) {
+    case DoubleLayerOperator::TDense:
+      apply_dense(fill_t);
+      break;
+    case DoubleLayerOperator::TMatrixFree:
+      apply_stokes_double_layer_kernel(space, viscosity, n, n, surface.d_points, surface.d_points, surface.d_normals,
+                                       surface.d_weights, q, u);
+      break;
+    case DoubleLayerOperator::InteriorTraceDense:
+      apply_dense([&](const StudyMatrix& A) {
+        fill_t(A);
+        add_singularity_subtraction(space, viscosity, A, outward_normal);
+      });
+      break;
+    case DoubleLayerOperator::ExteriorTraceMatrixFree:
+      apply_stokes_double_layer_kernel_ss(space, viscosity, n, surface.d_points, surface.d_normals, surface.d_weights,
+                                          q, u);
+      break;
+    case DoubleLayerOperator::SkfieDense:
+      apply_dense([&](const StudyMatrix& A) {
+        fill_skfie_matrix(space, viscosity, n, surface.d_points, surface.d_normals, surface.d_weights, A,
+                          outward_normal);
+      });
+      break;
+    case DoubleLayerOperator::SkfieMatrixFree:
+      apply_skfie(space, viscosity, n, surface.d_points, surface.d_normals, surface.d_weights, q, u, outward_normal);
+      break;
+  }
+  return u;
+}
+
+/// \brief op q without forming a matrix: a dense operator's matrix-free twin, which equals it to roundoff.
+///
+/// The interior trace's twin is the exterior trace plus its analytic target term (sigma / viscosity) q, sigma = -1 for
+/// inward normals, as the SkfieDenseMatchesMatrixFree unit test asserts.
+StudyVector apply_matrix_free_twin(const DoubleLayerOperator op, const double viscosity,
+                                   const DoubleLayerSurface& surface, const StudyVector& q) {
+  switch (op) {
+    case DoubleLayerOperator::TDense:
+      return apply_double_layer_operator(DoubleLayerOperator::TMatrixFree, viscosity, surface, q);
+    case DoubleLayerOperator::InteriorTraceDense: {
+      StudyVector u =
+          apply_double_layer_operator(DoubleLayerOperator::ExteriorTraceMatrixFree, viscosity, surface, q);
+      KokkosBlas::axpy(StudyExecSpace{}, -1.0 / viscosity, q, u);
+      return u;
+    }
+    case DoubleLayerOperator::SkfieDense:
+      return apply_double_layer_operator(DoubleLayerOperator::SkfieMatrixFree, viscosity, surface, q);
+    default:
+      return apply_double_layer_operator(op, viscosity, surface, q);
+  }
+}
+
+/// \brief The exact c with op 1 = c 1 for a constant density on a sphere with inward normals (sigma = -1).
+///
+/// The constant makes the subtracted integrand vanish: the interior trace and M return their target term
+/// (sigma / viscosity) 1 (N 1 = 0 because sum_s w_s n_s = 0), and the exterior trace returns 0. The punctured sum T
+/// only approximates PV T[1] = sigma / (2 viscosity) 1, since its kernel is O(1/r) at the omitted node.
+double constant_density_coefficient(const DoubleLayerOperator op, const double viscosity) {
+  const double sigma = -1.0;
+  switch (op) {
+    case DoubleLayerOperator::TDense:
+    case DoubleLayerOperator::TMatrixFree:
+      return sigma / (2.0 * viscosity);
+    case DoubleLayerOperator::ExteriorTraceMatrixFree:
+      return 0.0;
+    default:
+      return sigma / viscosity;
+  }
+}
+
+/// \brief sqrt(sum_s w_s |u_s|^2), the surface L2 norm of a 3-vector field by the quadrature.
+double surface_l2_norm(const StudyVector& u, const std::vector<double>& weights) {
+  const auto h_u = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, u);
+  double sum = 0.0;
+  for (size_t s = 0; s < weights.size(); ++s) {
+    for (size_t d = 0; d < 3; ++d) {
+      sum += weights[s] * h_u(3 * s + d) * h_u(3 * s + d);
+    }
+  }
+  return std::sqrt(sum);
+}
+
+/// \brief The root-mean-square entry of u - c 1.
+double rms_difference(const StudyVector& u, const double c) {
+  const auto h_u = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, u);
+  double sum = 0.0;
+  for (size_t i = 0; i < h_u.extent(0); ++i) {
+    sum += (h_u(i) - c) * (h_u(i) - c);
+  }
+  return std::sqrt(sum / static_cast<double>(h_u.extent(0)));
+}
+
+/// The double_layer study: each double-layer operator applied to each field on a sphere of radius 12.34 with inward
+/// normals, at viscosity 0.5305, over quadrature orders 2 to 22. It writes two kinds of rows:
+///   - Reference "analytic", for the constant field: the RMS error against constant_density_coefficient, with that
+///     coefficient's magnitude as the reference norm. The singularity-subtracted operators are exact up to roundoff
+///     (and asserted so by the unit tests); the bare T converges slowly, since the constant excites its singular
+///     diagonal.
+///   - Reference "order_64", for every field: a self-convergence, | ||op q|| - ||op q||_64 | in the surface L2 norm,
+///     with the order-64 norm as the reference norm. The quadrature nodes of different orders do not nest, so only the
+///     norms are compared. The reference is computed matrix-free (by apply_matrix_free_twin), which spares the dense
+///     operators' 25350 x 25350 matrices at order 64. The normal field spans the interior trace's null space (the one
+///     N lifts), so the interior trace of it is 0 up to discretization error; its reference norm is that error, and
+///     only its absolute Error is meaningful. Likewise, the exterior trace of the constant field is 0.
+void double_layer_study(std::ostream& csv) {
+  const double radius = 12.34;
+  const double viscosity = 0.5305;
+  const int reference_order = 64;
+  const std::vector<int> orders = {2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22};
+
+  // The surface L2 norm of each operator applied to each field at the reference order.
+  const DoubleLayerSurface reference_surface = make_double_layer_surface(reference_order, radius);
+  std::array<std::array<double, kDoubleLayerOperators.size()>, kSurfaceFields.size()> reference_norms;
+  for (size_t f = 0; f < kSurfaceFields.size(); ++f) {
+    const StudyVector q = make_surface_field(kSurfaceFields[f], reference_surface);
+    for (size_t o = 0; o < kDoubleLayerOperators.size(); ++o) {
+      reference_norms[f][o] = surface_l2_norm(
+          apply_matrix_free_twin(kDoubleLayerOperators[o], viscosity, reference_surface, q), reference_surface.weights);
+    }
+  }
+
+  csv << std::setprecision(12) << "Operator,Field,Reference,Order,NumNodes,Error,ReferenceNorm\n";
+  for (const int order : orders) {
+    const DoubleLayerSurface surface = make_double_layer_surface(order, radius);
+    std::cout << "double_layer: order " << order << " (" << surface.num_nodes << " nodes)" << std::endl;
+    for (size_t f = 0; f < kSurfaceFields.size(); ++f) {
+      const StudyVector q = make_surface_field(kSurfaceFields[f], surface);
+      for (size_t o = 0; o < kDoubleLayerOperators.size(); ++o) {
+        const DoubleLayerOperator op = kDoubleLayerOperators[o];
+        const StudyVector u = apply_double_layer_operator(op, viscosity, surface, q);
+        const std::string row_key = std::string(to_string(op)) + ',' + to_string(kSurfaceFields[f]);
+        if (kSurfaceFields[f] == SurfaceField::Constant) {
+          const double c = constant_density_coefficient(op, viscosity);
+          csv << row_key << ",analytic," << order << ',' << surface.num_nodes << ',' << rms_difference(u, c) << ','
+              << std::abs(c) << '\n';
+        }
+        csv << row_key << ",order_" << reference_order << ',' << order << ',' << surface.num_nodes << ','
+            << std::abs(surface_l2_norm(u, surface.weights) - reference_norms[f][o]) << ',' << reference_norms[f][o]
+            << '\n';
+      }
+    }
+  }
+}
+
+// ====================================================================================================================
+// Overlapping spheres: the pair mobility of the sphere kernels as two spheres pass through each other.
+// ====================================================================================================================
+
+/// The overlapping_pair study: Fig. 1 of Zuk, Wajnryb, Mizerski, and Szymczak, Rotne-Prager-Yamakawa approximation for
+/// different-sized particles in application to macromolecular bead models, J. Fluid Mech. 741, R5 (2014).
+///
+/// Spheres of radii a1 = 1 and a2 = a1 / 2 start coincident and move apart along a random unit direction r_hat. A unit
+/// force on sphere 2 along r_hat, or along a unit vector perpendicular to it, moves sphere 1 along the same direction;
+/// the parallel and perpendicular coefficients are that velocity's component for the RPY, RPYC, and Stokes kernels.
+/// As in the paper, the coefficients are in units of 1 / (6 pi viscosity (a1 + a2)) and the distance is
+/// d / (a1 + a2). The kernels exclude a sphere's self-interaction, so sphere 1's velocity is the pair term alone.
+void overlapping_pair_study(std::ostream& csv) {
+  const double viscosity = 0.1;
+  const double a1 = 1.0;
+  const double a2 = a1 / 2.0;
+  const double dr = 0.001;
+  const size_t num_distances = 2000;
+  const double coefficient_unit = 6.0 * Kokkos::numbers::pi_v<double> * viscosity * (a1 + a2);
+
+  // A random position for sphere 1 and a random direction, from a seeded stream.
+  openrand::Philox rng = make_philox(1234, 0);
+  const Vector3d x1(rng.uniform(0.0, 1.0), rng.uniform(0.0, 1.0), rng.uniform(0.0, 1.0));
+  Vector3d r_hat(rng.uniform(0.0, 1.0), rng.uniform(0.0, 1.0), rng.uniform(0.0, 1.0));
+  r_hat = r_hat / norm(r_hat);
+  Vector3d r_perp(r_hat[1], -r_hat[0], 0.0);  // perpendicular to r_hat, which is never along z here
+  r_perp = r_perp / norm(r_perp);
+
+  const StudyExecSpace space;
+  const StudyVector radii = to_device<StudyExecSpace>({a1, a2});
+  csv << std::setprecision(12)
+      << "Distance,ParallelRPY,PerpendicularRPY,ParallelRPYC,PerpendicularRPYC,ParallelStokes,PerpendicularStokes\n";
+  for (size_t p = 0; p < num_distances; ++p) {
+    const Vector3d x2 = x1 + (dr * static_cast<double>(p)) * r_hat;
+    const StudyVector positions = to_device<StudyExecSpace>({x1[0], x1[1], x1[2], x2[0], x2[1], x2[2]});
+
+    // The coefficients (RPY, RPYC, Stokes) along one direction.
+    auto coefficients = [&](const Vector3d& direction) {
+      const StudyVector forces =
+          to_device<StudyExecSpace>({0.0, 0.0, 0.0, direction[0], direction[1], direction[2]});
+      std::array<StudyVector, 3> velocities = {StudyVector("v_rpy", 6), StudyVector("v_rpyc", 6),
+                                               StudyVector("v_stokes", 6)};
+      apply_rpy_kernel(space, viscosity, positions, positions, radii, radii, forces, velocities[0]);
+      apply_rpyc_kernel(space, viscosity, positions, positions, radii, radii, forces, velocities[1]);
+      apply_stokes_kernel(space, viscosity, positions, positions, forces, velocities[2]);
+      std::array<double, 3> result;
+      for (size_t k = 0; k < 3; ++k) {
+        const auto v = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, velocities[k]);
+        result[k] = coefficient_unit * (v(0) * direction[0] + v(1) * direction[1] + v(2) * direction[2]);
+      }
+      return result;
+    };
+    const std::array<double, 3> parallel = coefficients(r_hat);
+    const std::array<double, 3> perpendicular = coefficients(r_perp);
+    csv << dr * static_cast<double>(p) / (a1 + a2) << ',' << parallel[0] << ',' << perpendicular[0] << ','
+        << parallel[1] << ',' << perpendicular[1] << ',' << parallel[2] << ',' << perpendicular[2] << '\n';
+  }
+}
+
+// ====================================================================================================================
+// The studies PeripheryStudies runs, each writing periphery_studies_<name>.csv.
+// ====================================================================================================================
+
+// Quadrature-grid orientation samples per inclusion config (sample 0 is the unrotated grid).
+constexpr int kNumOrientationSamples = 16;
+
+/// \brief cavity: a sphere, point or resolved, at the center of a spherical cavity, against Happel & Brenner.
+void run_cavity_study() {
+  const std::vector<std::pair<double, double>> radii = {{1.0, 1.0}, {0.95, 1.0}, {0.99, 1.0}, {1.0, 2.0}, {1.0, 2.5},
+                                                        {1.0, 4.0}, {1.0, 5.0},  {1.0, 10.0}, {2.0, 10.0}};
+  const std::vector<int> body_orders = {4, 8, 12, 16, 20, 24};
+  const std::vector<int> periphery_orders = {4, 6, 8, 10, 12, 16, 20, 24};
+
+  std::ofstream csv("periphery_studies_cavity.csv");
+  csv << "Study,Type,BodyRadius,CavityRadius,Lambda,BodyOrder,PeripheryOrder,NumPeripheryNodes,ValueUnbounded,"
+         "ValueConfined,ValueExact,RelErrUnbounded,RelErrConfined\n";
+  for (const auto& [a, b] : radii) {
+    motile_body_in_spherical_cavity_drag(csv, SphereType::RPY, a, b, body_orders, periphery_orders);
+    motile_body_in_spherical_cavity_drag(csv, SphereType::Inclusion, a, b, body_orders, periphery_orders);
+    motile_body_in_spherical_cavity_rotation(csv, SphereType::Inclusion, a, b, body_orders, periphery_orders);
+  }
+}
+
+/// \brief two_sphere: the symmetry, positive definiteness, and accuracy of the 6x6 mobility of two spheres.
+void run_two_sphere_study() {
+  const std::vector<int> body_orders = {8, 12, 16, 20, 24 /*, 28, 32 */};
+  // Uncorrected RPY loses SPD near s ~ 1.137 (perpendicular relative mode, 3/(4s) + 1/(2s^3) = 1).
+  const std::vector<double> svals = {1.0, 1.13, 1.14, 1.2, 1.5, 2.0, 2.0001, 2.001, 2.01, 2.05,
+                                     2.1, 2.15, 2.2,  2.3, 2.4, 2.5, 3.0,    4.0,   6.0};
+  const double r = 12.34;
+  std::ofstream csv("periphery_studies_two_sphere.csv");
+  csv << std::setprecision(12);
+  csv << "Order,S,R,Config,Sample,NumIters";
+  for (int i = 0; i < 6; ++i) {
+    for (int j = 0; j < 6; ++j) {
+      csv << ",M" << i << j;
+    }
+  }
+  csv << "\n";
+  for (const auto& order : body_orders) {
+    for (const auto& sval : svals) {
+      two_sphere_spd(csv, order, sval, r, kNumOrientationSamples);
+    }
+  }
+}
+
+/// \brief wilson: the accuracy of three spheres against Wilson (2013).
+void run_wilson_study() {
+  const std::vector<int> body_orders = {8, 12, 16, 20, 24 /*, 28, 32 */};
+  std::ofstream csv("periphery_studies_wilson.csv");
+  csv << std::setprecision(12) << "Order,S,Config,Sample,U1,U2,U3\n";
+  for (const auto& order : body_orders) {
+    wilson_three_sphere(csv, order, kNumOrientationSamples);
+  }
+}
+
+/// \brief three_sphere: the symmetry, positive definiteness, and accuracy of the 9x9 mobility of the Wilson triangle.
+void run_three_sphere_study() {
+  const std::vector<int> body_orders = {8, 12, 16, 20, 24 /*, 28, 32 */};
+
+  // Wilson's s values are included for the accuracy check. Uncorrected RPY loses SPD near s ~ 1.218 for the triangle.
+  const std::vector<double> svals = {1.0, 1.2,  1.25, 1.5, 2.0, 2.0001, 2.001, 2.01, 2.05,
+                                     2.1, 2.15, 2.2,  2.3, 2.4, 2.5,    3.0,   4.0,  6.0};
+  const double r = 12.34;
+  std::ofstream csv("periphery_studies_three_sphere.csv");
+  csv << std::setprecision(12);
+  csv << "Order,S,R,Config,Sample,NumIters";
+  for (int i = 0; i < 9; ++i) {
+    for (int j = 0; j < 9; ++j) {
+      csv << ",M" << i << j;
+    }
+  }
+  csv << "\n";
+  for (const auto& order : body_orders) {
+    for (const auto& sval : svals) {
+      three_sphere_spd(csv, order, sval, r, kNumOrientationSamples);
+    }
+  }
+}
+
+/// \brief periphery_sphere: the symmetry and positive definiteness of the 3x3 mobility of a sphere near the periphery.
+///
+/// A sphere of radius 0.1 inside a periphery of radius 13.5 (the radius of HP1's R135 quadrature files); HP1's default
+/// periphery order is 32. s = center-to-wall distance / r: s = 1 touches the wall, and s = 135 is the center.
+void run_periphery_sphere_study() {
+  using ExecSpace = Tpetra::Map<>::node_type::execution_space;
+  const std::vector<int> periphery_orders = {8, 12, 16, 20, 24, 32};
+  const std::vector<int> body_orders = {8, 12, 16};
+  const std::vector<double> svals = {1.0,  1.01, 1.1,  1.25, 1.5,  2.0,  2.5,  3.0,  4.0,  5.0,   6.0,  8.0,
+                                     10.0, 12.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 75.0, 100.0, 135.0};
+  const double r = 0.1;
+  const double periphery_radius = 13.5;
+  std::ofstream csv("periphery_studies_periphery_sphere.csv");
+  csv << std::setprecision(12);
+  csv << "Order,PeripheryOrder,NumPeripheryNodes,PeripheryRadius,S,R,Config,Sample,NumIters";
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      csv << ",M" << i << j;
+    }
+  }
+  csv << "\n";
+  for (const auto& periphery_order : periphery_orders) {
+    const auto periphery = make_cavity_periphery<ExecSpace>(periphery_order, periphery_radius, 1.0);
+    for (const auto& order : body_orders) {
+      for (const auto& sval : svals) {
+        periphery_sphere_spd(csv, order, periphery, periphery_order, periphery_radius, sval, r,
+                             kNumOrientationSamples);
+      }
+    }
+  }
+}
+
+/// \brief double_layer: the double-layer operators' accuracy on a sphere (see double_layer_study).
+void run_double_layer_study() {
+  std::ofstream csv("periphery_studies_double_layer.csv");
+  double_layer_study(csv);
+}
+
+/// \brief overlapping_pair: the pair mobility of two overlapping spheres (see overlapping_pair_study).
+void run_overlapping_pair_study() {
+  std::ofstream csv("periphery_studies_overlapping_pair.csv");
+  overlapping_pair_study(csv);
+}
+
+/// \brief A study PeripheryStudies can run: its command-line name, the function that runs it, and a summary.
+struct Study {
+  const char* name;
+  void (*run)();
+  const char* summary;
+};
+
+constexpr std::array<Study, 7> kStudies = {{
+    {"cavity", run_cavity_study, "a sphere at the center of a spherical cavity, against Happel & Brenner"},
+    {"two_sphere", run_two_sphere_study, "the 6x6 mobility of two spheres: symmetry, SPD, and accuracy"},
+    {"wilson", run_wilson_study, "three spheres against Wilson (2013)"},
+    {"three_sphere", run_three_sphere_study, "the 9x9 mobility of the Wilson triangle: symmetry, SPD, and accuracy"},
+    {"periphery_sphere", run_periphery_sphere_study, "the 3x3 mobility of a sphere near the periphery: symmetry, SPD"},
+    {"double_layer", run_double_layer_study, "the double-layer operators' accuracy on a sphere"},
+    {"overlapping_pair", run_overlapping_pair_study, "the pair mobility of overlapping spheres (Zuk et al. 2014)"},
+}};
+
+/// \brief The usage message, listing every study.
+void print_usage(std::ostream& os) {
+  os << "Usage: PeripheryStudies <study> [<study> ...]\n"
+     << "Each study writes periphery_studies_<study>.csv to the working directory. The studies:\n";
+  for (const Study& study : kStudies) {
+    os << "  " << std::left << std::setw(18) << study.name << study.summary << "\n";
+  }
+}
+
 }  // namespace
 
 }  // namespace mbody
@@ -822,133 +1337,35 @@ void periphery_sphere_spd(std::ostream& csv, const int order,
 }  // namespace mundy
 
 int main(int argc, char** argv) {
-  // Initialize MPI
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
-  Kokkos::print_configuration(std::cout);
 
-  bool do_body_cavity = false;
-  bool do_two_sphere = false;
-  bool do_wilson = false;
-  bool do_three_sphere = false;
-  bool do_periphery_sphere = true;
-
-  // Quadrature-grid orientation samples per inclusion config (sample 0 is the unrotated grid).
-  const int num_orientation_samples = 16;
-
-  if (do_body_cavity) {
-    // Comparison of accuracy of a mobility solve inside of a cavity
-    using ::mundy::mbody::SphereType;
-    const std::vector<std::pair<double, double>> radii = {{1.0, 1.0}, {0.95, 1.0}, {0.99, 1.0}, {1.0, 2.0}, {1.0, 2.5},
-                                                          {1.0, 4.0}, {1.0, 5.0},  {1.0, 10.0}, {2.0, 10.0}};
-    const std::vector<int> body_orders = {4, 8, 12, 16, 20, 24};
-    const std::vector<int> periphery_orders = {4, 6, 8, 10, 12, 16, 20, 24};
-
-    std::ofstream csv("hydro_studies_cavity.csv");
-    csv << "Study,Type,BodyRadius,CavityRadius,Lambda,BodyOrder,PeripheryOrder,NumPeripheryNodes,ValueUnbounded,"
-           "ValueConfined,ValueExact,RelErrUnbounded,RelErrConfined\n";
-    for (const auto& [a, b] : radii) {
-      ::mundy::mbody::motile_body_in_spherical_cavity_drag(csv, SphereType::RPY, a, b, body_orders, periphery_orders);
-      ::mundy::mbody::motile_body_in_spherical_cavity_drag(csv, SphereType::Inclusion, a, b, body_orders,
-                                                           periphery_orders);
-      ::mundy::mbody::motile_body_in_spherical_cavity_rotation(csv, SphereType::Inclusion, a, b, body_orders,
-                                                               periphery_orders);
+  using mundy::mbody::kStudies;
+  std::vector<const mundy::mbody::Study*> selected;
+  bool valid = argc > 1;
+  for (int i = 1; i < argc; ++i) {
+    const std::string name = argv[i];
+    const auto study =
+        std::find_if(kStudies.begin(), kStudies.end(), [&](const mundy::mbody::Study& s) { return name == s.name; });
+    if (study == kStudies.end()) {
+      std::cerr << "PeripheryStudies: unknown study '" << name << "'\n";
+      valid = false;
+    } else {
+      selected.push_back(&*study);
     }
   }
 
-  if (do_two_sphere) {
-    // Symmetric positive definiteness and accuracy of two sphere comparisons
-    const std::vector<int> body_orders = {8, 12, 16, 20, 24 /*, 28, 32 */};
-    // Uncorrected RPY loses SPD near s ~ 1.137 (perpendicular relative mode, 3/(4s) + 1/(2s^3) = 1).
-    const std::vector<double> svals = {1.0, 1.13, 1.14, 1.2, 1.5, 2.0, 2.0001, 2.001, 2.01, 2.05,
-                                       2.1, 2.15, 2.2,  2.3, 2.4, 2.5, 3.0,    4.0,   6.0};
-    const double r = 12.34;
-    std::ofstream csv("hydro_studies_twosphere.csv");
-    csv << std::setprecision(12);
-    csv << "Order,S,R,Config,Sample,NumIters";
-    for (int i = 0; i < 6; ++i) {
-      for (int j = 0; j < 6; ++j) {
-        csv << ",M" << i << j;
-      }
+  if (valid) {
+    Kokkos::print_configuration(std::cout);
+    for (const mundy::mbody::Study* study : selected) {
+      std::cout << "PeripheryStudies: running " << study->name << std::endl;
+      study->run();
     }
-    csv << "\n";
-    for (const auto& order : body_orders) {
-      for (const auto& sval : svals) {
-        ::mundy::mbody::two_sphere_spd(csv, order, sval, r, num_orientation_samples);
-      }
-    }
+  } else {
+    mundy::mbody::print_usage(std::cerr);
   }
 
-  if (do_wilson) {
-    // Accuracy of Wilson's three spheres
-    const std::vector<int> body_orders = {8, 12, 16, 20, 24 /*, 28, 32 */};
-    std::ofstream wilson_csv("hydro_studies_wilson.csv");
-    wilson_csv << std::setprecision(12) << "Order,S,Config,Sample,U1,U2,U3\n";
-    for (const auto& order : body_orders) {
-      ::mundy::mbody::wilson_three_sphere(wilson_csv, order, num_orientation_samples);
-    }
-  }
-
-  if (do_three_sphere) {
-    // Symmetric positive definiteness and accuracy of two/three sphere comparisons
-    const std::vector<int> body_orders = {8, 12, 16, 20, 24 /*, 28, 32 */};
-
-    // Full 9x9 mobility of the Wilson triangle, including Wilson's s values for the accuracy check. Uncorrected RPY
-    // loses SPD near s ~ 1.218 for the triangle.
-    const std::vector<double> svals = {1.0, 1.2,  1.25, 1.5, 2.0, 2.0001, 2.001, 2.01, 2.05,
-                                       2.1, 2.15, 2.2,  2.3, 2.4, 2.5,    3.0,   4.0,  6.0};
-    const double r = 12.34;
-    std::ofstream csv("hydro_studies_threesphere.csv");
-    csv << std::setprecision(12);
-    csv << "Order,S,R,Config,Sample,NumIters";
-    for (int i = 0; i < 9; ++i) {
-      for (int j = 0; j < 9; ++j) {
-        csv << ",M" << i << j;
-      }
-    }
-    csv << "\n";
-    for (const auto& order : body_orders) {
-      for (const auto& sval : svals) {
-        ::mundy::mbody::three_sphere_spd(csv, order, sval, r, num_orientation_samples);
-      }
-    }
-  }
-
-  if (do_periphery_sphere) {
-    // Symmetric positive definiteness of one sphere approaching the periphery. Geometry of
-    // PeripheryDiagnostic.SphereQuadPeripheryRPYC (sphere radius 0.1, periphery radius 13.5 = HP1's R135 files);
-    // HP1's default periphery order is 32. s = center-to-wall distance / r, s = 1 touches the wall, s = 135 is the
-    // center.
-    using ExecSpace = Tpetra::Map<>::node_type::execution_space;
-    const std::vector<int> periphery_orders = {8, 12, 16, 20, 24, 32};
-    const std::vector<int> body_orders = {8, 12, 16};
-    const std::vector<double> svals = {1.0,  1.01, 1.1,  1.25, 1.5,  2.0,  2.5,  3.0,  4.0,  5.0,   6.0,  8.0,
-                                       10.0, 12.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 75.0, 100.0, 135.0};
-    const double r = 0.1;
-    const double periphery_radius = 13.5;
-    std::ofstream csv("hydro_studies_periphery.csv");
-    csv << std::setprecision(12);
-    csv << "Order,PeripheryOrder,NumPeripheryNodes,PeripheryRadius,S,R,Config,Sample,NumIters";
-    for (int i = 0; i < 3; ++i) {
-      for (int j = 0; j < 3; ++j) {
-        csv << ",M" << i << j;
-      }
-    }
-    csv << "\n";
-    for (const auto& periphery_order : periphery_orders) {
-      const auto periphery = ::mundy::mbody::make_cavity_periphery<ExecSpace>(periphery_order, periphery_radius, 1.0);
-      for (const auto& order : body_orders) {
-        for (const auto& sval : svals) {
-          ::mundy::mbody::periphery_sphere_spd(csv, order, periphery, periphery_order, periphery_radius, sval, r,
-                                               num_orientation_samples);
-        }
-      }
-    }
-  }
-
-  // Finalize MPI
   Kokkos::finalize();
   stk::parallel_machine_finalize();
-
-  return 0;
+  return valid ? 0 : 1;
 }

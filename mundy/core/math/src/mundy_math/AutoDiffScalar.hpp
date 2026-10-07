@@ -302,7 +302,7 @@ KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> cos(const AutoDiffScalar<T
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> acos(const AutoDiffScalar<T, N>& x) {
-  return {acos(x.value()), x.derivatives() * (T(-1) / sqrt(T(1) - x.value() * x.value()))};
+  return {acos(x.value()), x.derivatives() * (-rsqrt(T(1) - x.value() * x.value()))};
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> abs(const AutoDiffScalar<T, N>& x) {
@@ -315,7 +315,7 @@ KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> tan(const AutoDiffScalar<T
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> asin(const AutoDiffScalar<T, N>& x) {
-  return {asin(x.value()), x.derivatives() * (T(1) / sqrt(T(1) - x.value() * x.value()))};
+  return {asin(x.value()), x.derivatives() * rsqrt(T(1) - x.value() * x.value())};
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> atan(const AutoDiffScalar<T, N>& x) {

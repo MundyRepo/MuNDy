@@ -68,6 +68,10 @@ DeviceView make_points(const size_t n, const double phase) {
 }
 
 /// \brief The separation x_t - y_s and 1 / |x_t - y_s|, which is 0 for coincident points (branch-free).
+///
+/// 1 / sqrt rather than rsqrt: both operations are correctly rounded everywhere, so the serial host reference
+/// reproduces each device pair bit for bit, which the double-double sum's 1e-30 tolerance needs. A GPU's rsqrt can
+/// differ in the last bit.
 template <class View>
 KOKKOS_INLINE_FUNCTION Vector<double, 3> separation(const View& targets, const View& sources, const size_t t,
                                                     const size_t s, double& rinv) {

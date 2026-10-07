@@ -35,7 +35,7 @@
 /// default panel is 4 targets on the host and 1 on a device.
 ///
 /// To vectorize on the host, keep interaction free of branches: select with ?: rather than branch around a division
-/// or a sqrt, e.g. near ? 0 : 1 / sqrt(near ? 1 : r2) instead of if (near) return 0. MundyMath builds with
+/// or a square root, e.g. near ? 0 : rsqrt(near ? 1 : r2) instead of if (near) return 0. MundyMath builds with
 /// -fno-math-errno, without which every sqrt keeps a branch that blocks vectorization.
 
 // External
