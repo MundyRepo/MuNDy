@@ -855,6 +855,17 @@ void compute_geometry(const RodViews<ExecSpace>& rods, const AngularSpringViews<
       });
 }
 
+/// \brief The number of pins that join a rod to itself.
+template <typename ExecSpace>
+int num_self_pins(const PinViews<ExecSpace>& pins) {
+  auto pins_l = pins;
+  int count = 0;
+  Kokkos::parallel_reduce(
+      "num_self_pins", Kokkos::RangePolicy<ExecSpace>(0, pins.size()),
+      KOKKOS_LAMBDA(const int a, int& self_pins) { self_pins += (pins_l.rod_i(a) == pins_l.rod_j(a)) ? 1 : 0; }, count);
+  return count;
+}
+
 /// \brief Pin Jacobian and initial offset, via rod poses.
 ///
 /// Row c of a pin constrains the world component c of p_i - p_j, where p = center + R(q) body_offset moves at
@@ -872,19 +883,18 @@ void compute_geometry(const RodViews<ExecSpace>& rods, const PinViews<ExecSpace>
     return;
   }
 
+  MUNDY_THROW_ASSERT(num_self_pins(pins) == 0, std::invalid_argument, "compute_geometry: a pin joins a rod to itself.");
+
   auto rods_l = rods;
   auto geo_l = geo;
   auto pins_l = pins;
   auto owner_i_l = geo.owner_i_view();
   auto owner_j_l = geo.owner_j_view();
   auto b0_l = b0;
-  int num_self_pins = 0;
-  Kokkos::parallel_reduce(
-      "compute_pin_geometry", Kokkos::RangePolicy<ExecSpace>(0, num_pins),
-      KOKKOS_LAMBDA(const int a, int& self_pins) {
+  Kokkos::parallel_for(
+      "compute_pin_geometry", Kokkos::RangePolicy<ExecSpace>(0, num_pins), KOKKOS_LAMBDA(const int a) {
         const int i = pins_l.rod_i(a);
         const int j = pins_l.rod_j(a);
-        self_pins += (i == j) ? 1 : 0;
 
         const Vector3d r_i = rods_l.orientation(i) * pins_l.body_offset_i(a);
         const Vector3d r_j = rods_l.orientation(j) * pins_l.body_offset_j(a);
@@ -903,9 +913,27 @@ void compute_geometry(const RodViews<ExecSpace>& rods, const PinViews<ExecSpace>
           geo_l.torque_j(row) = -cross(r_j, axis);
           b0_l(row) = offset[c];
         }
+      });
+}
+
+/// \brief The number of fixed lengths that join a rod to itself, have a rest length that is not positive, or have
+/// endpoints within 1e-12 of each other at rods' configuration.
+template <typename ExecSpace>
+int num_degenerate_fixed_lengths(const RodViews<ExecSpace>& rods, const FixedLengthViews<ExecSpace>& lengths) {
+  auto rods_l = rods;
+  auto lengths_l = lengths;
+  int count = 0;
+  Kokkos::parallel_reduce(
+      "num_degenerate_fixed_lengths", Kokkos::RangePolicy<ExecSpace>(0, lengths.size()),
+      KOKKOS_LAMBDA(const int k, int& degenerate) {
+        const int i = lengths_l.rod_i(k);
+        const int j = lengths_l.rod_j(k);
+        const Vector3d p_i = rods_l.center(i) + rods_l.orientation(i) * lengths_l.body_offset_i(k);
+        const Vector3d p_j = rods_l.center(j) + rods_l.orientation(j) * lengths_l.body_offset_j(k);
+        degenerate += (i == j || lengths_l.rest_length(k) <= 0.0 || norm(p_j - p_i) <= 1e-12) ? 1 : 0;
       },
-      num_self_pins);
-  MUNDY_THROW_REQUIRE(num_self_pins == 0, std::invalid_argument, "compute_geometry: a pin joins a rod to itself.");
+      count);
+  return count;
 }
 
 /// \brief Fixed-length Jacobian and initial stretch, via rod poses.
@@ -925,19 +953,19 @@ void compute_geometry(const RodViews<ExecSpace>& rods, const FixedLengthViews<Ex
     return;
   }
 
-  constexpr int self_join = 1;
-  constexpr int nonpositive_rest_length = 2;
-  constexpr int coincident_points = 4;
+  MUNDY_THROW_ASSERT(
+      num_degenerate_fixed_lengths(rods, lengths) == 0, std::invalid_argument,
+      "compute_geometry: a fixed length joins a rod to itself, has a rest length that is not positive, or "
+      "has nearly coincident endpoints.");
+
   auto rods_l = rods;
   auto geo_l = geo;
   auto owner_i_l = geo.owner_i_view();
   auto owner_j_l = geo.owner_j_view();
   auto lengths_l = lengths;
   auto b0_l = b0;
-  int defects = 0;
-  Kokkos::parallel_reduce(
-      "compute_fixed_length_geometry", Kokkos::RangePolicy<ExecSpace>(0, n),
-      KOKKOS_LAMBDA(const int k, int& defect) {
+  Kokkos::parallel_for(
+      "compute_fixed_length_geometry", Kokkos::RangePolicy<ExecSpace>(0, n), KOKKOS_LAMBDA(const int k) {
         const int i = lengths_l.rod_i(k);
         const int j = lengths_l.rod_j(k);
         owner_i_l(k) = i;
@@ -947,9 +975,6 @@ void compute_geometry(const RodViews<ExecSpace>& rods, const FixedLengthViews<Ex
         const Vector3d sep = (rods_l.center(j) + r_j) - (rods_l.center(i) + r_i);
         const double dist = norm(sep);
         const double rest_length = lengths_l.rest_length(k);
-        defect |= (i == j) ? self_join : 0;
-        defect |= (rest_length <= 0.0) ? nonpositive_rest_length : 0;
-        defect |= (dist <= 1e-12) ? coincident_points : 0;
         const Vector3d dir = sep / dist;
 
         geo_l.force_i(k) = -dir;
@@ -957,14 +982,7 @@ void compute_geometry(const RodViews<ExecSpace>& rods, const FixedLengthViews<Ex
         geo_l.force_j(k) = dir;
         geo_l.torque_j(k) = cross(r_j, dir);
         b0_l(k) = dist - rest_length;
-      },
-      Kokkos::BOr<int>(defects));
-  MUNDY_THROW_REQUIRE((defects & self_join) == 0, std::invalid_argument,
-                      "compute_geometry: a fixed length joins a rod to itself.");
-  MUNDY_THROW_REQUIRE((defects & nonpositive_rest_length) == 0, std::invalid_argument,
-                      "compute_geometry: a rest length is not positive.");
-  MUNDY_THROW_REQUIRE((defects & coincident_points) == 0, std::runtime_error,
-                      "compute_geometry: the endpoints of a fixed length are nearly coincident.");
+      });
 }
 
 /// \brief Three-point bend spring Jacobian and initial angle, via rod centers.
@@ -1950,7 +1968,7 @@ class LinearizationWorkspace {
   using mixed_cqpp_workspace_t = decltype(make_mixed_cqpp_workspace<backend_t>(
       std::declval<const dt_t&>(), std::declval<const m_dt_t&>(), std::declval<const d_t&>(),
       std::declval<const view_t&>(), std::declval<const b_t&>(), std::declval<const schur_complement_t&>(),
-      std::declval<const bt_t&>()));
+      std::declval<const bt_t&>(), std::declval<const apply_workspace_t<schur_complement_t>&>()));
 
  public:
   /// \brief Storage for steps of size dt of num_rods rods under index_map's constraints, whose mobility is mobility,
@@ -1985,16 +2003,21 @@ class LinearizationWorkspace {
     const CGConfig<double> cg_cfg{};
     const step_t step{index_map, num_rods, dt, unilateral_geo, q, kinv, mobility, u_free, PGDConfig<double>{}, cg_cfg};
     if (has_bilateral()) {
+      // One scratch for every apply of S, which never overlap: S b, S within the unilateral solve's operator, the y
+      // solve, and the preconditioner's view of S's operator.
+      const schur_operator_t schur_operator = make_schur_operator(step, geometry_);
+      auto schur_operator_workspace = backend_t::make_workspace(schur_operator);
       if constexpr (is_preconditioned) {
         static_assert(SchurPreconditionerPolicy<Policy, linearization_t>,
                       "mbody: the preconditioner policy must be a SchurPreconditionerPolicy.");
-        const schur_operator_t schur_operator = make_schur_operator(step, geometry_);
-        schur_operator_workspace.emplace(backend_t::make_workspace(schur_operator));
-        preconditioner.emplace(policy.make_preconditioner(schur_linearization(step, schur_operator)));
+        preconditioner.emplace(policy.make_preconditioner(linearization_t(
+            step.dt, step.mobility, step.kinv, jacobian_t(geometry_), schur_operator, schur_operator_workspace)));
       } else {
         preconditioner.emplace();
       }
-      s_workspace.emplace(backend_t::make_workspace(make_schur_complement(step, geometry_, cg_cfg, *preconditioner)));
+      const auto S = make_schur_complement(step, geometry_, cg_cfg, *preconditioner);
+      s_workspace.emplace(S.make_workspace(backend_t::make_range_vector(S), backend_t::make_range_vector(S),
+                                           backend_t::make_range_vector(S), std::move(schur_operator_workspace)));
     }
     if (has_unilateral()) {
       const auto D = make_block_force_op<ExecSpace>(unilateral_geo, num_rods);
@@ -2004,10 +2027,7 @@ class LinearizationWorkspace {
         const auto B = make_block_force_op<ExecSpace>(geometry_, num_rods);
         const auto BT = make_block_rate_op<ExecSpace>(geometry_, num_rods);
         const auto S = make_schur_complement(step, geometry_, cg_cfg, *preconditioner);
-        mixed_cqpp_workspace.emplace(make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, q, B, S, BT));
-        // S solves from the guess held in its output: S b and S B^T M D x start from zero, then from their last values.
-        Kokkos::deep_copy(mixed_cqpp_workspace->s_b, 0.0);
-        Kokkos::deep_copy(mixed_cqpp_workspace->l_workspace.u(), 0.0);
+        mixed_cqpp_workspace.emplace(make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, q, B, S, BT, *s_workspace));
       } else {
         lcp_workspace.emplace(make_quadratic_form<backend_t>(DT, M_dt, D).make_workspace());
       }
@@ -2023,7 +2043,7 @@ class LinearizationWorkspace {
   /// complement's operator is schur_operator.
   linearization_t schur_linearization(const step_t& step, const schur_operator_t& schur_operator) {
     return linearization_t(step.dt, step.mobility, step.kinv, jacobian_t(geometry_), schur_operator,
-                           *schur_operator_workspace);
+                           s_workspace->op_workspace());
   }
 
   /// \brief The constraints' layout it is sized for.
@@ -2081,7 +2101,6 @@ class LinearizationWorkspace {
   apply_workspace_t<bt_t> bt_workspace;
   apply_workspace_t<m_dt_t> m_dt_workspace;
   apply_workspace_t<mobility_t> mobility_workspace;
-  std::optional<apply_workspace_t<schur_operator_t>> schur_operator_workspace;
   std::optional<preconditioner_t> preconditioner;
   std::optional<apply_workspace_t<schur_complement_t>> s_workspace;
   std::optional<lcp_workspace_t> lcp_workspace;
@@ -2238,7 +2257,7 @@ struct MixedLCPWorkspace {
   }
 
   LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...> linearization;
-  view_t x_start;  // zero: the unilateral solve's start
+  view_t x_start;  // the multipliers the unilateral solve starts from
   LinearizedStep<ExecSpace> linearized;
 };
 
@@ -2346,6 +2365,22 @@ class IntegratorData {
   Policy preconditioner_policy_;
   mutable Workspace workspace_;
 };
+
+/// \brief x := every unilateral family's lambda, packed in the index map's order: the multipliers a step's unilateral
+/// solve starts from.
+template <typename ExecSpace, typename... Families>
+void read_unilateral_multipliers(const ConstraintSet<Families...>& constraints,
+                                 const ConstraintIndexMap<Families...>& index_map,
+                                 const Kokkos::View<double*, typename ExecSpace::memory_space>& x) {
+  (
+      [&] {
+        if constexpr (Families::constraint_type == ConstraintType::UNILATERAL) {
+          Kokkos::deep_copy(subrange(x, index_map.template range<Families>()),
+                            get<Families>(constraints).lambda_view());
+        }
+      }(),
+      ...);
+}
 
 /// \brief Apply a linearization to rods and constraints.
 ///

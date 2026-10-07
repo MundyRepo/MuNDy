@@ -110,8 +110,8 @@ struct BBStepStrategy {
 
     const value_type ss = Backend::template diff_dot<value_type>(x, x_old);                  // s^T s
     const value_type sy = Backend::template diff_dot<value_type>(x, x_old, grad, grad_old);  // s^T y = s^T A s
-    MUNDY_THROW_ASSERT(sy >= static_cast<value_type>(0), std::invalid_argument,
-                       "BBStepStrategy: s^T A s < 0, so A is not positive semi-definite.");
+    MUNDY_THROW_ASSERT(sy >= -get_zero_tolerance<value_type>(), std::invalid_argument,
+                       "BBStepStrategy: s^T A s < -tolerance, so A is not positive semi-definite.");
     return sy > static_cast<value_type>(0) ? ss / sy : current_step;
   }
 };  // BBStepStrategy
@@ -177,6 +177,16 @@ class PGDState {
   value_type step_size_{1};
 };
 
+namespace impl {
+/// \brief 1 where v is nonzero and 0 where it is zero.
+template <class Scalar>
+struct NonzeroIndicator {
+  KOKKOS_INLINE_FUNCTION constexpr Scalar operator()(const Scalar& v) const {
+    return v != Scalar(0) ? Scalar(1) : Scalar(0);
+  }
+};
+}  // namespace impl
+
 /// \brief The PGD strategy: initialize/iterate/done/result over (Problem, State). ResidualPolicy is a
 /// ProjectedResidualPolicy.
 template <class StepPolicy, class ResidualPolicy, class Config>
@@ -199,6 +209,7 @@ class PGDStrategy {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
 
+    constexpr value_type zero = static_cast<value_type>(0);
     constexpr value_type one = static_cast<value_type>(1);
     auto& workspace = prob.workspace();
 
@@ -220,6 +231,27 @@ class PGDStrategy {
       // If already converged, copy grad_tmp to grad
       backend_t::deep_copy(state.grad(), state.grad_tmp());
       impl::workspace_commit(workspace);
+    } else if (backend_t::template dot<value_type>(state.x_tmp(), state.x_tmp()) > zero) {
+      // First step from a warm start: the exact minimizer along the projected gradient g_p, g_p^T g_p / g_p^T A g_p.
+      // From x = 0, Dai & Fletcher's 1 / residual instead: an exact step there can pin every later Barzilai-Borwein step
+      // at 1 / diag(A) wherever the entries with a descent direction do not couple through A.
+      //
+      // grad = g_p: g where a trial step x - g / residual leaves the projection, 0 where it projects back onto x
+      backend_t::wrapped_axpbyz(one, state.x_tmp(), -one / state.residual(), state.grad_tmp(), state.grad(),
+                                prob.space());
+      backend_t::axpby(-one, state.x_tmp(), one, state.grad());
+      backend_t::wrapped_axpbyz(one, state.grad(), zero, state.grad(), state.grad(),
+                                impl::NonzeroIndicator<value_type>{});
+      backend_t::elementwise_mul(state.grad(), state.grad_tmp(), state.grad());
+
+      // x = A g_p, then restored
+      backend_t::apply(prob.A(), state.grad(), state.x(), workspace);
+      const value_type gp_gp = backend_t::template dot<value_type>(state.grad(), state.grad());
+      const value_type gp_A_gp = backend_t::template dot<value_type>(state.grad(), state.x());
+      MUNDY_THROW_ASSERT(gp_A_gp >= -get_zero_tolerance<value_type>(), std::invalid_argument,
+                         "PGDStrategy: g_p^T A g_p < -tolerance, so A is not positive semi-definite.");
+      state.step_size() = gp_A_gp > zero ? gp_gp / gp_A_gp : one / state.residual();
+      backend_t::deep_copy(state.x(), state.x_tmp());
     } else {
       state.step_size() = one / state.residual();
     }

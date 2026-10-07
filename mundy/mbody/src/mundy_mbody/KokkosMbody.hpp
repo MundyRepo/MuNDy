@@ -48,10 +48,10 @@ namespace mbody {
 /// outer_tol is a length. At the end of the step (to first order in dt), no two bodies overlap by more than outer_tol,
 /// and no two bodies that push on each other are more than outer_tol apart.
 ///
-/// Keep cg_tol <= outer_tol: cg_tol bounds the solve for the bilateral constraint forces y: at the end of the step (to
-/// first order in dt), the bilateral constraints' residuals psi + K^{-1} y, each a length or an angle in radians, have
-/// L2 norm at most cg_tol. The contacts see that error through the bodies' motion and cannot be resolved more finely
-/// than it, so an outer_tol below cg_tol may stall the outer solve.
+/// outer_tol must be at least cg_tol in a step with both contacts and bilateral constraints. cg_tol bounds the solve
+/// for the bilateral constraint forces y: at the end of the step (to first order in dt), the bilateral constraints'
+/// residuals psi + K^{-1} y, each a length or an angle in radians, have L2 norm at most cg_tol. The contacts see that
+/// error through the bodies' motion and cannot be resolved more finely than it.
 struct MixedLCPConfig {
   unsigned max_outer_iters = 1000;
   double outer_tol = 1e-6;
@@ -80,7 +80,7 @@ inline std::ostream& operator<<(std::ostream& os, const MixedLCPResult& result) 
 /// An iterate is accepted once, at the configuration it moves the rods to, every bilateral row's residual
 /// psi + K^-1 y and the displacement its constraint force directions would change by are within length_tol (rows and
 /// displacements measured in length) and angle_tol (in radians). Neither can be met below its floor: the inner
-/// cg_tol, and about 1e-8 rad for angles measured near 0 or pi.
+/// cg_tol, which each must therefore be at least, and about 1e-8 rad for angles measured near 0 or pi.
 struct MixedSLCPConfig {
   MixedLCPConfig inner_lcp_config;
   unsigned max_iters = 20;
@@ -156,7 +156,9 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 /// written through them; a different set of views (a resized family, a new contact list, other rods) needs a new
 /// integrator. It holds copies of the mobility model and the preconditioner policy, and the storage its steps write.
 /// Reusing the integrator reuses that storage, and each step's solves start from the previous step's solutions, so its
-/// steps agree with a fresh integrator's to within cg_tol. Copies of an integrator share its storage.
+/// steps agree with a fresh integrator's to within cg_tol. Copies of an integrator share its storage, so an integrator
+/// and its copies must not be used by more than one in-flight solve_step concurrently; make an integrator per
+/// concurrent solve.
 template <typename ExecSpace, typename Model, typename Policy, typename... Families>
 class MixedLCPIntegrator
     : public impl::IntegratorData<
@@ -187,7 +189,9 @@ class MixedLCPIntegrator
 /// iterate 0. The iteration contracts at a rate of about dt times the mobility times the constraints' curvature
 /// weighted by their multipliers, so it converges only where that is below one.
 ///
-/// It holds its rods, constraints, mobility model, preconditioner policy and storage as MixedLCPIntegrator does.
+/// It holds its rods, constraints, mobility model, preconditioner policy and storage as MixedLCPIntegrator does. Copies
+/// of an integrator share its storage, so an integrator and its copies must not be used by more than one in-flight
+/// solve_step concurrently; make an integrator per concurrent solve.
 template <typename ExecSpace, typename Model, typename Policy, typename... Families>
 class MixedSLCPIntegrator
     : public impl::IntegratorData<
@@ -248,10 +252,12 @@ MixedSLCPIntegrator<ExecSpace, Model, Policy, Families...> make_mixed_slcp_integ
 
 /// \brief One step of integrator at its rods' current configuration C^k.
 ///
-/// On entry the rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext. On exit
-/// force/torque is F_ext + D x* + B y*, velocity/omega is U_free + M (D x* + B y*), every family's lambda holds its
-/// multipliers, and the rods have not moved. advance_rods(rods, dt) performs the consistent time integration, after
-/// which each constraint holds to first order in dt.
+/// On entry the rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext, and every
+/// unilateral family's lambda holds the multipliers the step's unilateral solve starts from: the last step's, which
+/// each step writes there, or zero for a cold start. On exit force/torque is F_ext + D x* + B y*, velocity/omega is
+/// U_free + M (D x* + B y*), every family's lambda holds its multipliers, and the rods have not moved.
+/// advance_rods(rods, dt) performs the consistent time integration, after which each constraint holds to first order in
+/// dt.
 template <typename ExecSpace, typename Model, typename Policy, typename... Families>
 MixedLCPResult solve_step(const MixedLCPIntegrator<ExecSpace, Model, Policy, Families...>& integrator,
                           const MixedLCPConfig& cfg) {
@@ -268,8 +274,12 @@ MixedLCPResult solve_step(const MixedLCPIntegrator<ExecSpace, Model, Policy, Fam
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedLCPResult{0, 0.0, 0.0 <= cfg.outer_tol};
   }
+  MUNDY_THROW_ASSERT(
+      step.index_map.num_unilateral == 0 || step.index_map.num_bilateral == 0 || cfg.outer_tol >= cfg.cg_tol,
+      std::invalid_argument, "mbody::solve_step: outer_tol must be at least cg_tol.");
 
   impl::linearize(step, workspace.linearization, rods, constraints);
+  impl::read_unilateral_multipliers<ExecSpace>(constraints, step.index_map, workspace.x_start);
   impl::solve_linearization(step, workspace.linearization, impl::Displacement<ExecSpace>{step.u_free, dt},
                             workspace.x_start, workspace.linearized);
   impl::write_step(rods, constraints, step.index_map, workspace.linearized);
@@ -279,10 +289,11 @@ MixedLCPResult solve_step(const MixedLCPIntegrator<ExecSpace, Model, Policy, Fam
 
 /// \brief One step of integrator at its rods' current configuration C^k.
 ///
-/// On entry the rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext. On exit
-/// force/torque is F_ext + W, velocity/omega is U_free + M W, every family's lambda holds its multipliers, all of the
-/// returned iterate, and the rods have not moved. advance_rods(rods, dt) performs the consistent time integration,
-/// which for a converged iterate reaches the configuration at which it was accepted.
+/// On entry the rods' force/torque is the external load F_ext and velocity/omega the imposed velocity V_ext, and every
+/// unilateral family's lambda holds the multipliers the first iterate's unilateral solve starts from, as for a mixed
+/// LCP step. On exit force/torque is F_ext + W, velocity/omega is U_free + M W, every family's lambda holds its
+/// multipliers, all of the returned iterate, and the rods have not moved. advance_rods(rods, dt) performs the
+/// consistent time integration, which for a converged iterate reaches the configuration at which it was accepted.
 template <typename ExecSpace, typename Model, typename Policy, typename... Families>
 MixedSLCPResult solve_step(const MixedSLCPIntegrator<ExecSpace, Model, Policy, Families...>& integrator,
                            const MixedSLCPConfig& cfg) {
@@ -305,8 +316,15 @@ MixedSLCPResult solve_step(const MixedSLCPIntegrator<ExecSpace, Model, Policy, F
     Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
     return MixedSLCPResult{1, 0.0, true, MixedLCPResult{0, 0.0, 0.0 <= lcp_cfg.outer_tol}};
   }
+  MUNDY_THROW_ASSERT(
+      index_map.num_unilateral == 0 || index_map.num_bilateral == 0 || lcp_cfg.outer_tol >= lcp_cfg.cg_tol,
+      std::invalid_argument, "mbody::solve_step: outer_tol must be at least cg_tol.");
+  MUNDY_THROW_ASSERT(
+      index_map.num_bilateral == 0 || (cfg.length_tol >= lcp_cfg.cg_tol && cfg.angle_tol >= lcp_cfg.cg_tol),
+      std::invalid_argument, "mbody::solve_step: length_tol and angle_tol must be at least cg_tol.");
 
   impl::linearize(step, linearization, rods, constraints);
+  impl::read_unilateral_multipliers<ExecSpace>(constraints, index_map, workspace.lcp.x_start);
   impl::LinearizedStep<ExecSpace>& first = workspace.lcp.linearized;
   impl::solve_linearization(step, linearization, impl::Displacement<ExecSpace>{step.u_free, dt}, workspace.lcp.x_start,
                             first);

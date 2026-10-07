@@ -29,19 +29,19 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   )
 
   tribits_add_executable(
-    HydroStudies
-    SOURCES HydroStudies.cpp
+    PeripheryStudies
+    SOURCES PeripheryStudies.cpp
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
   tribits_copy_files_to_binary_dir(
-    HydroStudiesCopyFiles
+    PeripheryStudiesCopyFiles
     SOURCE_FILES
       analyze_cavity.py
       analyze_periphery_spd.py
       analyze_sphere_spd.py
       analyze_sphere_wilson.py
-    EXEDEPS HydroStudies
+    EXEDEPS PeripheryStudies
     CATEGORIES PERFORMANCE
   )
 
