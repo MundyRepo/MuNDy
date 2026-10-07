@@ -56,8 +56,9 @@
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy
-#include <MundyMath_config.hpp>       // for HAVE_MUNDYMATH_{BELOS,TPETRA,KOKKOSKERNELS}
-#include <mundy_mbody/Periphery.hpp>  // for gen_sphere_quadrature, PeripheryT, InverseMethod
+#include <MundyMath_config.hpp>                 // for HAVE_MUNDYMATH_{BELOS,TPETRA,KOKKOSKERNELS}
+#include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
+#include <mundy_mbody/Periphery.hpp>           // for PeripheryT, InverseMethod
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
 #include <mundy_math/belos_solver.hpp>  // for mundy::{BelosConfig, BelosSolver}
@@ -100,8 +101,16 @@ struct SphereGeometry {
 };
 
 SphereGeometry make_sphere_geometry(int order) {
-  std::vector<double> points_vec, weights_vec, normals_vec;
-  gen_sphere_quadrature(order, kSphereRadius, &points_vec, &weights_vec, &normals_vec);
+  // The (order + 1)-ring sphere rule scaled to the sphere, with outward unit normals.
+  std::vector<double> normals_vec, weights_vec;
+  mundy::gauss_legendre_sphere_rule(order + 1, normals_vec, weights_vec);
+  std::vector<double> points_vec(normals_vec.size());
+  for (size_t i = 0; i < normals_vec.size(); ++i) {
+    points_vec[i] = kSphereRadius * normals_vec[i];
+  }
+  for (double& w : weights_vec) {
+    w *= kSphereRadius * kSphereRadius;
+  }
   SphereGeometry g;
   g.num_nodes = weights_vec.size();
   g.points = host_view_t("points", 3 * g.num_nodes);
@@ -154,7 +163,7 @@ void bench_size(int order, const Options& opts, RowMap& rows) {
   const SphereGeometry g = make_sphere_geometry(order);
   const size_t num_nodes = g.num_nodes;
 
-  // make_sphere_geometry uses gen_sphere_quadrature's default (outward) normals.
+  // make_sphere_geometry builds outward normals.
   Periphery periphery(num_nodes, kViscosity);
   periphery.set_surface_positions(g.points)
       .set_surface_normals(g.normals, /*outward_normal=*/true)
@@ -286,8 +295,7 @@ int main(int argc, char** argv) {
     }
 
     mundy::mbody::RowMap rows;
-    // gen_sphere_quadrature uses order+1 Gauss-Legendre points; the table supports up to 128 points, so every
-    // order here (up to ~126) is available. Order p gives 2(p+1)^2 nodes, i.e. 6(p+1)^2 dof.
+    // Order p is the (p + 1)-ring Gauss-Legendre sphere rule: 2(p+1)^2 nodes, i.e. 6(p+1)^2 dof.
     for (int order : {4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24}) {
       bench_size(order, opts, rows);
     }

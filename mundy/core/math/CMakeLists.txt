@@ -24,17 +24,21 @@ set(NOINSTALLHEADERS
   src/mundy_math/DoubleDouble.hpp
   src/mundy_math/eigenvalues.hpp
   src/mundy_math/GaussLegendre.hpp
+  src/mundy_math/GaussLegendreSphere.hpp
   src/mundy_math/Hilbert.hpp
   src/mundy_math/impl/AccessorImpl.hpp
   src/mundy_math/impl/ArrayImpl.hpp
   src/mundy_math/impl/belos_solver_impl.hpp
+  src/mundy_math/impl/cmath_impl.hpp
   src/mundy_math/impl/DoubleDoubleImpl.hpp
   src/mundy_math/impl/GaussLegendreImpl.hpp
+  src/mundy_math/impl/GaussLegendreSphereImpl.hpp
   src/mundy_math/impl/linear_ops_impl.hpp
   src/mundy_math/impl/MatrixImpl.hpp
   src/mundy_math/impl/minimize_impl.hpp
   src/mundy_math/impl/QuaternionImpl.hpp
   src/mundy_math/impl/solver_backends_impl.hpp
+  src/mundy_math/impl/TrapezoidalTorusImpl.hpp
   src/mundy_math/impl/VectorImpl.hpp
   src/mundy_math/lcp.hpp
   src/mundy_math/linear_ops.hpp
@@ -54,6 +58,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/StridedAccessor.hpp
   src/mundy_math/Tolerance.hpp
   src/mundy_math/TransposedAccessor.hpp
+  src/mundy_math/TrapezoidalTorus.hpp
   src/mundy_math/Vector3.hpp
   src/mundy_math/Vector.hpp
   src/mundy_math/zmort.hpp

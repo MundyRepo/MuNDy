@@ -38,7 +38,7 @@
 /// The algorithms follow Hida, Li & Bailey's QD library.
 
 // External
-#include <Kokkos_Core.hpp>  // for KOKKOS_INLINE_FUNCTION, Kokkos::sqrt, Kokkos::reduction_identity, ...
+#include <Kokkos_Core.hpp>  // for KOKKOS_INLINE_FUNCTION, Kokkos::cbrt, Kokkos::reduction_identity, ...
 
 // C++ core
 #include <concepts>     // for std::integral
@@ -48,7 +48,7 @@
 // Mundy
 #include <mundy_math/NumTraits.hpp>              // for mundy::NumTraits, mundy::is_passive_scalar
 #include <mundy_math/ScalarBinaryOpTraits.hpp>   // for mundy::ScalarBinaryOpTraits
-#include <mundy_math/cmath.hpp>                  // for mundy::abs
+#include <mundy_math/cmath.hpp>                  // for mundy::abs, mundy::sqrt
 #include <mundy_math/impl/DoubleDoubleImpl.hpp>  // for the error-free transformations and math kernels
 
 namespace mundy {
@@ -275,9 +275,9 @@ KOKKOS_INLINE_FUNCTION DoubleDouble round(const DoubleDouble& a) {
 //! \name Roots
 //@{
 
-/// \brief Square root: one Newton step x + (a - x^2) / (2x) from the double root x.
-KOKKOS_INLINE_FUNCTION DoubleDouble sqrt(const DoubleDouble& a) {
-  const double x = Kokkos::sqrt(a.hi());
+/// \brief Constexpr square root: one Newton step x + (a - x^2) / (2x) from the double root x.
+KOKKOS_INLINE_FUNCTION constexpr DoubleDouble sqrt(const DoubleDouble& a) {
+  const double x = mundy::sqrt(a.hi());
   if (a.hi() <= 0.0 || !impl::is_finite_double(x)) {
     return x;  // +-0, negative (NaN), infinity, NaN
   }

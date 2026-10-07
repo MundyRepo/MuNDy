@@ -25,8 +25,11 @@
 /// \brief Math-function dispatch and scalar utilities compatible with custom scalar types.
 ///
 /// For arithmetic types the dispatch routes through Kokkos (device-compatible).
+///
 /// For all other types (autodiff duals and other custom scalars) it uses `using std::func; func(x)` so that ADL
 /// finds whatever overload the scalar type provides in its own namespace.
+///
+/// abs and sqrt of float and double are also usable in constant expressions, with the same results as at run time.
 
 // External
 #include <Kokkos_Core.hpp>
@@ -37,7 +40,8 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_math/NumTraits.hpp>  // for mundy::NumTraits, mundy::is_autodiff_scalar_v
+#include <mundy_math/NumTraits.hpp>         // for mundy::NumTraits, mundy::is_autodiff_scalar_v
+#include <mundy_math/impl/cmath_impl.hpp>  // for mundy::impl::constexpr_sqrt
 
 namespace mundy {
 
@@ -103,7 +107,6 @@ inline constexpr auto mundy_norm_min_v = NumTraits<passive_scalar_t<T>>::norm_mi
     }                                                                  \
   }
 
-MUNDY_MATH_DISPATCH_UNARY(sqrt)
 MUNDY_MATH_DISPATCH_UNARY(cbrt)
 MUNDY_MATH_DISPATCH_UNARY(sin)
 MUNDY_MATH_DISPATCH_UNARY(cos)
@@ -173,6 +176,29 @@ KOKKOS_INLINE_FUNCTION constexpr auto abs(const T& x) {
 template <typename T>
 KOKKOS_INLINE_FUNCTION constexpr auto fabs(const T& x) {
   return abs(x);
+}
+
+/// \brief Square root (constexpr-compatible for float and double, ADL for non-arithmetic types).
+///
+/// Kokkos::sqrt is not constexpr. In a constant expression, float and double use impl::constexpr_sqrt; at run time
+/// they use the hardware square root through Kokkos::sqrt. IEEE 754 requires both to be correctly rounded, so they
+/// agree bit for bit. Other arithmetic types use Kokkos::sqrt; non-arithmetic types use ADL, matching the dispatch
+/// above.
+///
+/// \param[in] x Value to take the square root of.
+template <typename T>
+KOKKOS_INLINE_FUNCTION constexpr auto sqrt(const T& x) {
+  if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+    if (std::is_constant_evaluated()) {
+      return impl::constexpr_sqrt(x);
+    }
+    return Kokkos::sqrt(x);
+  } else if constexpr (std::is_arithmetic_v<T>) {
+    return Kokkos::sqrt(x);
+  } else {
+    using std::sqrt;
+    return sqrt(x);
+  }
 }
 
 namespace impl {
