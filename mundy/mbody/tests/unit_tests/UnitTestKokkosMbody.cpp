@@ -19,7 +19,7 @@
 // @HEADER
 
 /// \file
-/// \brief Unit tests for mbody::solve_mixed_lcp, solve_mixed_slcp, and the operators and geometry kernels behind them.
+/// \brief Unit tests for mbody's multibody time integrators and the operators and geometry kernels behind them.
 
 // External
 #include <gtest/gtest.h>  // for TEST, EXPECT_NEAR, etc
@@ -44,7 +44,7 @@
 #include <mundy_math/Matrix.hpp>           // for mundy::Matrix
 #include <mundy_math/eigenvalues.hpp>      // for mundy::make_eigen_problem, mundy::solve_eigen_problem
 #include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, JacobiPreconditioner}
-#include <mundy_mbody/KokkosMbody.hpp>     // for mundy::mbody::{solve_mixed_lcp, solve_mixed_slcp, advance_rods}
+#include <mundy_mbody/KokkosMbody.hpp>     // for mundy::mbody::{make_mixed_lcp_integrator, solve_step, advance_rods}
 
 namespace mundy {
 
@@ -60,13 +60,13 @@ using TestExecSpace = Kokkos::DefaultExecutionSpace;
 using TestMemSpace = TestExecSpace::memory_space;
 using HostExecSpace = Kokkos::DefaultHostExecutionSpace;
 
-/// \brief solve_mixed_lcp() on TestExecSpace for host inputs, which are updated in place.
+/// \brief One mixed LCP step of size dt on TestExecSpace for host inputs, which are updated in place.
 template <typename Model, typename... Families>
 MixedLCPResult solve_on_device(const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints,
-                               const Model& mobility_model, const MixedLCPConfig& cfg) {
+                               const Model& mobility_model, double dt, const MixedLCPConfig& cfg) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
-  const MixedLCPResult result = solve_mixed_lcp(rods_d, constraints_d, mobility_model, cfg);
+  const MixedLCPResult result = solve_step(make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt), cfg);
   deep_copy(rods, rods_d);
   deep_copy(constraints, constraints_d);
   return result;
@@ -371,7 +371,7 @@ void set_fixed_pose(const FixedPoseViews<HostExecSpace>& anchors, int a, int rod
 
 // Time loops stage once, step on TestExecSpace, and copy back only what they check.
 
-/// \brief A copy of rods' force/torque, kept apart because solve_mixed_lcp() adds the constraint forces into rods'.
+/// \brief A copy of rods' force/torque, kept apart because a step adds the constraint forces into rods'.
 template <typename Space>
 Kokkos::View<double*, typename Space::memory_space> copy_load(const RodViews<Space>& rods) {
   Kokkos::View<double*, typename Space::memory_space> load("load", rods.force_torque_view().extent(0));
@@ -379,34 +379,20 @@ Kokkos::View<double*, typename Space::memory_space> copy_load(const RodViews<Spa
   return load;
 }
 
-/// \brief force/torque := load and velocity/omega := 0, the state solve_mixed_lcp() expects at the start of a step.
+/// \brief force/torque := load and velocity/omega := 0, the state a step expects at its start.
 template <typename Space>
 void reset_rod_state(const RodViews<Space>& rods, const Kokkos::View<double*, typename Space::memory_space>& load) {
   Kokkos::deep_copy(rods.force_torque_view(), load);
   Kokkos::deep_copy(rods.velocity_omega_view(), 0.0);
 }
 
-/// \brief One backward-Euler step under a constant external load.
-template <typename Space, typename Model, typename Policy = NoPreconditioner, typename... Families>
-MixedLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
-                         const Model& mobility_model, const MixedLCPConfig& cfg,
-                         const Kokkos::View<double*, typename Space::memory_space>& load,
-                         const Policy& preconditioner_policy = Policy{}) {
-  reset_rod_state(rods, load);
-  const MixedLCPResult result = solve_mixed_lcp(rods, constraints, mobility_model, cfg, preconditioner_policy);
-  advance_rods(rods, cfg.dt);
-  return result;
-}
-
-/// \brief One step under a constant external load with its bilateral rows held at its end.
-template <typename Space, typename Model, typename Policy = NoPreconditioner, typename... Families>
-MixedSLCPResult step_rods(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
-                          const Model& mobility_model, const MixedSLCPConfig& cfg,
-                          const Kokkos::View<double*, typename Space::memory_space>& load,
-                          const Policy& preconditioner_policy = Policy{}) {
-  reset_rod_state(rods, load);
-  const MixedSLCPResult result = solve_mixed_slcp(rods, constraints, mobility_model, cfg, preconditioner_policy);
-  advance_rods(rods, cfg.inner_lcp_config.dt);
+/// \brief One step of integrator under a constant external load, after which its rods move.
+template <typename Integrator, typename Config>
+auto step_rods(const Integrator& integrator, const Config& cfg,
+               const Kokkos::View<double*, typename Integrator::execution_space::memory_space>& load) {
+  reset_rod_state(integrator.rods(), load);
+  const auto result = solve_step(integrator, cfg);
+  advance_rods(integrator.rods(), integrator.dt());
   return result;
 }
 
@@ -423,16 +409,6 @@ double max_step_displacement(const RodViews<Space>& rods, double dt) {
   return dt * max_speed;
 }
 
-/// \brief The step size of a mixed LCP step.
-double step_size(const MixedLCPConfig& cfg) {
-  return cfg.dt;
-}
-
-/// \brief The step size of a mixed SLCP step.
-double step_size(const MixedSLCPConfig& cfg) {
-  return cfg.inner_lcp_config.dt;
-}
-
 /// \brief Whether a mixed LCP step's solve converged.
 bool lcp_converged(const MixedLCPResult& result) {
   return result.converged;
@@ -443,18 +419,28 @@ bool lcp_converged(const MixedSLCPResult& result) {
   return result.accepted_lcp_result.converged;
 }
 
-/// \brief Step until no rod moves farther than settled_step, or turns through a larger angle, in one step.
+/// \brief An integrator over integrator's rods, constraints, mobility model, step size and preconditioner policy, with
+/// storage of its own: its steps start from zero.
+template <typename Integrator>
+Integrator with_fresh_storage(const Integrator& integrator) {
+  return Integrator(integrator.rods(), integrator.constraints(), integrator.mobility_model(), integrator.dt(),
+                    integrator.preconditioner_policy());
+}
+
+/// \brief Step integrator until no rod moves farther than settled_step, or turns through a larger angle, in one step,
+/// each step through integrator's storage if held_storage and through storage of its own otherwise.
 ///
 /// Returns whether that happened within max_steps.
-template <typename Space, typename Model, typename Config, typename Policy = NoPreconditioner, typename... Families>
-bool step_until_settled(const RodViews<Space>& rods, const ConstraintSet<Families...>& constraints,
-                        const Model& mobility_model, const Config& cfg,
-                        const Kokkos::View<double*, typename Space::memory_space>& load, double settled_step,
-                        int max_steps, const Policy& preconditioner_policy = Policy{}) {
+template <typename Integrator, typename Config>
+bool step_until_settled(const Integrator& integrator, const Config& cfg,
+                        const Kokkos::View<double*, typename Integrator::execution_space::memory_space>& load,
+                        double settled_step, int max_steps, bool held_storage = true) {
   for (int step = 0; step < max_steps; ++step) {
-    MUNDY_THROW_REQUIRE(lcp_converged(step_rods(rods, constraints, mobility_model, cfg, load, preconditioner_policy)),
-                        std::runtime_error, "step_until_settled: a step's mixed LCP solve failed to converge.");
-    if (max_step_displacement(rods, step_size(cfg)) <= settled_step) {
+    const auto result =
+        held_storage ? step_rods(integrator, cfg, load) : step_rods(with_fresh_storage(integrator), cfg, load);
+    MUNDY_THROW_REQUIRE(lcp_converged(result), std::runtime_error,
+                        "step_until_settled: a step's mixed LCP solve failed to converge.");
+    if (max_step_displacement(integrator.rods(), integrator.dt()) <= settled_step) {
       return true;
     }
   }
@@ -619,12 +605,13 @@ double dense_inverse_frobenius_norm(const DenseMat& A) {
 
 constexpr size_t kChainNumRods = 6;
 
-/// \brief The inputs to one solve_mixed_lcp().
+/// \brief The inputs to one mixed LCP step of size dt.
 template <typename... Families>
 struct SolveInput {
   RodViews<HostExecSpace> rods;
   ConstraintSet<Families...> constraints;
   LocalDragMobility mobility_model;
+  double dt;
   MixedLCPConfig cfg;
 };
 
@@ -665,12 +652,11 @@ SolveInput<LinearSpringViews<HostExecSpace>, AngularSpringViews<HostExecSpace>> 
   }
 
   MixedLCPConfig cfg;
-  cfg.dt = 0.5;
   cfg.max_cg_iters = 500;
   cfg.cg_tol = 1e-10;
   cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
   cfg.outer_tol = 1e-10;
-  return {rods, make_constraint_set(linear_springs, angular_springs), LocalDragMobility{.viscosity = 1.0}, cfg};
+  return {rods, make_constraint_set(linear_springs, angular_springs), LocalDragMobility{.viscosity = 1.0}, 0.5, cfg};
 }
 
 /// \brief Sum over every spring of 0.5 k (stretch or bend)^2, from rod poses.
@@ -760,9 +746,8 @@ SolveInput<ContactViews<HostExecSpace>> make_sphere_row_problem() {
   }
 
   MixedLCPConfig cfg;
-  cfg.dt = 0.3;
   cfg.outer_tol = 1e-10;
-  return {rods, make_constraint_set(contacts), LocalDragMobility{.viscosity = 1.0}, cfg};
+  return {rods, make_constraint_set(contacts), LocalDragMobility{.viscosity = 1.0}, 0.3, cfg};
 }
 
 //@}
@@ -1352,9 +1337,9 @@ TEST(Mbody, ConstraintIndexMapPacksEveryFamily) {
 //! \name Single-family solves
 //@{
 
-// One constraint through the full solve_mixed_lcp(). A single spring reduces the Schur complement to the scalar
+// One constraint through a full mixed LCP step. A single spring reduces the Schur complement to the scalar
 // equation (B^T M B + 1/k) y = -b0, and a single contact to the scalar LCP lambda = max(0, -sep0 / A). The scalars come
-// from the same operators solve_mixed_lcp() uses, so these check its assembly of the operators, not the operators.
+// from the same operators the step uses, so these check its assembly of the operators, not the operators.
 // The spring solves run CG to cg_tol = 1e-14, and B^T M B + 1/k >= 1/k bounds the multiplier's error by k cg_tol.
 
 /// \brief The quadratic form B^T M B of a single constraint, as a scalar.
@@ -1387,8 +1372,8 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   const auto constraints = make_constraint_set(lin_springs);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 1.0;
   MixedLCPConfig cfg;
-  cfg.dt = 1.0;
   cfg.cg_tol = 1e-14;
 
   // Scalar B^T M B
@@ -1403,7 +1388,7 @@ TEST(Mbody, LinearSpringOnlyMatchesScalarSchurComplement) {
   const double b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d)(0);
 
   // Solve
-  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, dt, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
@@ -1433,16 +1418,16 @@ TEST(Mbody, CallerMobilityMatchesClosedFormSpring) {
   const auto constraints = make_constraint_set(lin_springs);
 
   const IsotropicMobility mobility_model{.m = 0.7, .m_rot = 1.3};
+  const double dt = 0.5;
   MixedLCPConfig cfg;
-  cfg.dt = 0.5;
   cfg.cg_tol = 1e-14;
 
   // Solve
-  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, dt, cfg);
   EXPECT_TRUE(result.converged);
 
   // y to k cg_tol plus rounding; velocity = M W bit for bit
-  const double y_expected = -(1.6 - 1.0) / (2.0 * mobility_model.m * cfg.dt + 1.0 / lin_springs.spring_constant(0));
+  const double y_expected = -(1.6 - 1.0) / (2.0 * mobility_model.m * dt + 1.0 / lin_springs.spring_constant(0));
   EXPECT_NEAR(lin_springs.lambda(0), y_expected, 1e-13);
   for (int i = 0; i < 2; ++i) {
     for (int k = 0; k < 3; ++k) {
@@ -1468,8 +1453,8 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   const auto constraints = make_constraint_set(ang_springs);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 1.0;
   MixedLCPConfig cfg;
-  cfg.dt = 1.0;
   cfg.cg_tol = 1e-14;
 
   // Scalar B^T M B
@@ -1484,7 +1469,7 @@ TEST(Mbody, AngularSpringOnlyMatchesScalarSchurComplement) {
   const double b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d)(0);
 
   // Solve
-  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, dt, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
@@ -1521,8 +1506,8 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   const auto constraints = make_constraint_set(triple_springs);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 1.0;
   MixedLCPConfig cfg;
-  cfg.dt = 1.0;
   cfg.cg_tol = 1e-14;
 
   // Scalar B^T M B
@@ -1537,7 +1522,7 @@ TEST(Mbody, TriplePointAngularSpringOnlyMatchesScalarSchurComplement) {
   const double b0 = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, b0_d)(0);
 
   // Solve
-  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, dt, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
@@ -1573,8 +1558,8 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   const auto constraints = make_constraint_set(contacts);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 1.0;
   MixedLCPConfig cfg;
-  cfg.dt = 1.0;
   cfg.outer_tol = 1e-12;
 
   // Scalar A := D^T M D
@@ -1589,7 +1574,7 @@ ContactOnlyCaseResult run_contact_only_case(double gap_x, double radius) {
   const double sep0_value = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sep0)(0);
 
   // Solve
-  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, dt, cfg);
   return ContactOnlyCaseResult{contacts.lambda(0), sep0_value, A_value, result.converged};
 }
 
@@ -1632,7 +1617,7 @@ TEST(Mbody, OuterTolBoundsEndOfStepSeparations) {
     const auto constraints = copy_to<HostExecSpace>(p.constraints);
     MixedLCPConfig cfg = p.cfg;
     cfg.outer_tol = outer_tol;
-    const MixedLCPResult result = solve_on_device(rods, constraints, p.mobility_model, cfg);
+    const MixedLCPResult result = solve_on_device(rods, constraints, p.mobility_model, p.dt, cfg);
     ASSERT_TRUE(result.converged) << "outer_tol " << outer_tol << ": " << result;
 
     // End-of-step separations
@@ -1642,7 +1627,7 @@ TEST(Mbody, OuterTolBoundsEndOfStepSeparations) {
     const auto& solved_contacts = get<ContactViews<HostExecSpace>>(constraints);
     size_t num_pushing = 0;
     for (size_t k = 0; k < contacts.size(); ++k) {
-      const double separation = sep0(k) + cfg.dt * rate(k);
+      const double separation = sep0(k) + p.dt * rate(k);
       if (solved_contacts.lambda(k) > 0.0) {
         ++num_pushing;
         EXPECT_LE(std::abs(separation), outer_tol + 1e-15) << "outer_tol " << outer_tol << ", contact " << k;
@@ -1669,8 +1654,8 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   const ConstraintSet<> constraints;
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 1.0;
   MixedLCPConfig cfg;
-  cfg.dt = 1.0;
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const LocalDragMobilityOp<TestExecSpace> M = mobility_model.make_mobility(rods_d);
@@ -1679,7 +1664,7 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   const auto vel_omega_expected = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, vel_omega_expected_d);
 
   const auto slcp_rods_d = copy_to<TestExecSpace>(rods);
-  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, cfg);
+  const MixedLCPResult result = solve_on_device(rods, constraints, mobility_model, dt, cfg);
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(result.num_iters, 0u) << "empty (0-dim) contact block should need zero PGD iterations";
 
@@ -1691,8 +1676,8 @@ TEST(Mbody, ZeroSpringsZeroContactsMatchesRawMobility) {
   }
 
   // Mixed SLCP: the same free motion, accepted at its first linearization
-  const MixedSLCPResult slcp =
-      solve_mixed_slcp(slcp_rods_d, constraints, mobility_model, MixedSLCPConfig{cfg, 50, 1e-9, 1e-9});
+  const MixedSLCPResult slcp = solve_step(make_mixed_slcp_integrator(slcp_rods_d, constraints, mobility_model, dt),
+                                          MixedSLCPConfig{cfg, 50, 1e-9, 1e-9});
   EXPECT_TRUE(slcp.converged) << slcp;
   EXPECT_EQ(slcp.num_iters, 1u);
   EXPECT_EQ(slcp.accepted_lcp_result.num_iters, result.num_iters);
@@ -1788,7 +1773,7 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   const auto& lin_springs = get<LinearSpringViews<HostExecSpace>>(p.constraints);
   const auto& ang_springs = get<AngularSpringViews<HostExecSpace>>(p.constraints);
 
-  // Dense reference, built before solve_mixed_lcp() updates the inputs; B's columns follow the y-block order
+  // Dense reference, built before the step updates the inputs; B's columns follow the y-block order
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
   const auto ang_springs_d = create_mirror_view_and_copy(TestExecSpace{}, ang_springs);
@@ -1812,10 +1797,10 @@ TEST(Mbody, ChainMatchesIndependentDenseSolve) {
   const auto force_torque_ext = p.rods.force_torque_view();
   const DenseStep expected = dense_schur_step(
       dense_hcat(materialize_dense(B_lin), materialize_dense(B_ang)), materialize_dense(M), b0, kinv,
-      std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()), p.cfg.dt);
+      std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()), p.dt);
 
   // Solve
-  const MixedLCPResult result = solve_on_device(p.rods, p.constraints, p.mobility_model, p.cfg);
+  const MixedLCPResult result = solve_on_device(p.rods, p.constraints, p.mobility_model, p.dt, p.cfg);
   EXPECT_TRUE(result.converged);
 
   // CG stops at a residual of cg_tol = 1e-10, and K^-1 = I/3 bounds the error in y, and so in v, by about 3e-10.
@@ -1849,10 +1834,12 @@ TEST(Mbody, AbsentFamiliesMatchEmptyFamilies) {
     const auto rods_full = copy_to<Kokkos::Serial>(p.rods);
 
     // Solve
-    const MixedSLCPResult reduced = solve_mixed_slcp(rods_reduced, springs_only, p.mobility_model, cfg);
+    const MixedSLCPResult reduced =
+        solve_step(make_mixed_slcp_integrator(rods_reduced, springs_only, p.mobility_model, p.dt), cfg);
     const auto lin_lambda_reduced = copy_to<Kokkos::Serial>(lin_springs).lambda_view();
     const auto ang_lambda_reduced = copy_to<Kokkos::Serial>(ang_springs).lambda_view();
-    const MixedSLCPResult full = solve_mixed_slcp(rods_full, every_family, p.mobility_model, cfg);
+    const MixedSLCPResult full =
+        solve_step(make_mixed_slcp_integrator(rods_full, every_family, p.mobility_model, p.dt), cfg);
     ASSERT_TRUE(lcp_converged(reduced)) << reduced;
     if (max_iters > 1) {
       ASSERT_TRUE(reduced.converged) << reduced;
@@ -1911,14 +1898,13 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
 
     const LocalDragMobility mobility_model{.viscosity = 1.0};
     MixedLCPConfig cfg;
-    cfg.dt = dt;
     cfg.max_cg_iters = 1000;
     cfg.cg_tol = 1e-12;
     cfg.max_outer_iters = 1;
 
     rods.force(num_spheres / 2) = Vector3d{0.0, -load, 0.0};
 
-    // Dense reference, built before solve_mixed_lcp() updates the inputs; B's columns follow the y-block order
+    // Dense reference, built before the step updates the inputs; B's columns follow the y-block order
     const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
     const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
     const auto triple_springs_d = create_mirror_view_and_copy(TestExecSpace{}, chain.springs);
@@ -1957,7 +1943,7 @@ TEST(Mbody, ChainHeldAtBothEndsKeepsBothAnchors) {
         std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()), dt);
 
     // Solve
-    ASSERT_TRUE(solve_on_device(rods, constraints, mobility_model, cfg).converged) << "dt=" << dt;
+    ASSERT_TRUE(solve_on_device(rods, constraints, mobility_model, dt, cfg).converged) << "dt=" << dt;
 
     std::vector<double> y;
     for (size_t k = 0; k < lin_springs.size(); ++k) {
@@ -2025,13 +2011,13 @@ TEST(Mbody, HolonomicDenseStep) {
   const auto constraints = make_constraint_set(lin_springs, pins, lengths, anchors);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 0.3;
   MixedLCPConfig cfg;
-  cfg.dt = 0.3;
   cfg.max_cg_iters = 1000;
   cfg.cg_tol = 1e-10;
   cfg.max_outer_iters = 1;
 
-  // Dense reference, built before solve_mixed_lcp() updates the inputs; B's columns follow the y-block order
+  // Dense reference, built before the step updates the inputs; B's columns follow the y-block order
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto lin_springs_d = create_mirror_view_and_copy(TestExecSpace{}, lin_springs);
   const auto pins_d = create_mirror_view_and_copy(TestExecSpace{}, pins);
@@ -2067,12 +2053,12 @@ TEST(Mbody, HolonomicDenseStep) {
   const auto force_torque_ext = rods.force_torque_view();
   const DenseStep expected = dense_schur_step(
       B, M, b0, kinv, std::vector<double>(force_torque_ext.data(), force_torque_ext.data() + force_torque_ext.size()),
-      cfg.dt);
-  const double y_bound = cfg.cg_tol * dense_inverse_frobenius_norm(dense_schur_matrix(B, M, kinv, cfg.dt));
+      dt);
+  const double y_bound = cfg.cg_tol * dense_inverse_frobenius_norm(dense_schur_matrix(B, M, kinv, dt));
   const double v_bound = dense_frobenius_norm(dense_matmul(M, B)) * y_bound;
 
   // Solve
-  ASSERT_TRUE(solve_on_device(rods, constraints, mobility_model, cfg).converged);
+  ASSERT_TRUE(solve_on_device(rods, constraints, mobility_model, dt, cfg).converged);
 
   std::vector<double> y{lin_springs.lambda(0)};
   for (int c = 0; c < 3; ++c) {
@@ -2130,7 +2116,6 @@ TEST(Mbody, RigidAnchorsReachTheirTargets) {
 
       const LocalDragMobility mobility_model{.viscosity = 1.0};
       MixedSLCPConfig cfg;
-      cfg.inner_lcp_config.dt = dt;
       cfg.inner_lcp_config.max_cg_iters = 500;
       cfg.inner_lcp_config.cg_tol = 1e-14;
       cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
@@ -2144,9 +2129,10 @@ TEST(Mbody, RigidAnchorsReachTheirTargets) {
       const auto rods_d = copy_to<TestExecSpace>(rods);
       const auto constraints_d = copy_to<TestExecSpace>(constraints);
       const auto load_d = copy_load(rods_d);
+      const auto integrator = make_mixed_slcp_integrator(rods_d, constraints_d, mobility_model, dt);
 
       // One step
-      const MixedSLCPResult first = step_rods(rods_d, constraints_d, mobility_model, cfg, load_d);
+      const MixedSLCPResult first = step_rods(integrator, cfg, load_d);
       ASSERT_TRUE(lcp_converged(first)) << first << " at dt=" << dt;
       deep_copy(rods, rods_d);
       const Vector3d step_rotation_error =
@@ -2160,12 +2146,10 @@ TEST(Mbody, RigidAnchorsReachTheirTargets) {
       }
 
       // At rest
-      ASSERT_TRUE(step_until_settled(rods_d, constraints_d, mobility_model, cfg, load_d, /*settled_step=*/1e-12,
-                                     /*max_steps=*/1000))
+      ASSERT_TRUE(step_until_settled(integrator, cfg, load_d, /*settled_step=*/1e-12, /*max_steps=*/1000))
           << "not settled at dt=" << dt << " max_iters=" << max_iters;
       reset_rod_state(rods_d, load_d);
-      ASSERT_TRUE(solve_mixed_slcp(rods_d, constraints_d, mobility_model, cfg).converged)
-          << "dt=" << dt << " max_iters=" << max_iters;
+      ASSERT_TRUE(solve_step(integrator, cfg).converged) << "dt=" << dt << " max_iters=" << max_iters;
       deep_copy(rods, rods_d);
       deep_copy(constraints, constraints_d);
       const Vector3d r_world = rods.orientation(1) * body_offset;
@@ -2225,7 +2209,6 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
 
       const LocalDragMobility mobility_model{.viscosity = 1.0};
       MixedLCPConfig cfg;
-      cfg.dt = dt;
       cfg.max_cg_iters = 500;
       cfg.cg_tol = 1e-14;
       cfg.max_outer_iters = 1;
@@ -2236,8 +2219,8 @@ TEST(Mbody, CompliantAnchorsSettleAtComplianceTimesLoad) {
       const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
       const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
       const auto load_d = copy_load(rods_d);
-      ASSERT_TRUE(step_until_settled(rods_d, constraints_d, mobility_model, cfg, load_d, /*settled_step=*/1e-12,
-                                     /*max_steps=*/1000))
+      ASSERT_TRUE(step_until_settled(make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt), cfg, load_d,
+                                     /*settled_step=*/1e-12, /*max_steps=*/1000))
           << "not settled about axis " << torque_axis << " at dt=" << dt;
       deep_copy(rods, rods_d);
 
@@ -2281,8 +2264,8 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   const auto constraints = make_constraint_set(contacts, anchors);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 0.5;
   MixedLCPConfig cfg;
-  cfg.dt = 0.5;
   cfg.max_cg_iters = 500;
   cfg.cg_tol = 1e-12;
   cfg.outer_tol = 1e-12;
@@ -2291,8 +2274,8 @@ TEST(Mbody, ContactAgainstAnchoredRodBalancesItsReaction) {
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
-  ASSERT_TRUE(step_until_settled(rods_d, constraints_d, mobility_model, cfg, load_d, /*settled_step=*/1e-12,
-                                 /*max_steps=*/1000));
+  ASSERT_TRUE(step_until_settled(make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt), cfg, load_d,
+                                 /*settled_step=*/1e-12, /*max_steps=*/1000));
   deep_copy(rods, rods_d);
   deep_copy(constraints, constraints_d);
 
@@ -2381,7 +2364,6 @@ Relaxation run_relaxation(double spring_constant, double dt, int num_steps, unsi
 
   const LocalDragMobility mobility_model{.viscosity = viscosity};
   MixedSLCPConfig cfg;
-  cfg.inner_lcp_config.dt = dt;
   cfg.inner_lcp_config.max_cg_iters = 500;
   cfg.inner_lcp_config.cg_tol = 1e-12;
   cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
@@ -2394,10 +2376,11 @@ Relaxation run_relaxation(double spring_constant, double dt, int num_steps, unsi
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
   const auto load_d = copy_load(rods_d);
+  const auto integrator = make_mixed_slcp_integrator(rods_d, constraints_d, mobility_model, dt);
 
   Relaxation relaxation{{summed_stretch(rods_d, lin_springs_d)}, {}};
   for (int step = 0; step < num_steps; ++step) {
-    relaxation.results.push_back(step_rods(rods_d, constraints_d, mobility_model, cfg, load_d));
+    relaxation.results.push_back(step_rods(integrator, cfg, load_d));
     EXPECT_TRUE(lcp_converged(relaxation.results.back())) << relaxation.results.back() << " at step " << step;
     relaxation.stretch.push_back(summed_stretch(rods_d, lin_springs_d));
   }
@@ -2521,7 +2504,7 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
   for (const double cfl : {0.5, 0.9, 1.1, 2.0, 10.0, 100.0}) {
     for (const unsigned max_iters : {1u, 50u}) {
       auto p = make_chain_problem(/*spring_constant=*/3.0);
-      p.cfg.dt = cfl * dt_crit;
+      p.dt = cfl * dt_crit;
       p.cfg.cg_tol = 1e-13;
       const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
 
@@ -2531,10 +2514,11 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
       const auto& lin_springs_d = get<LinearSpringViews<TestExecSpace>>(constraints_d);
       const auto& ang_springs_d = get<AngularSpringViews<TestExecSpace>>(constraints_d);
       const auto load_d = copy_load(rods_d);
+      const auto integrator = make_mixed_slcp_integrator(rods_d, constraints_d, p.mobility_model, p.dt);
 
       std::vector<double> energy{elastic_energy(rods_d, lin_springs_d, ang_springs_d)};
       for (int step = 0; step < 40; ++step) {
-        const MixedSLCPResult result = step_rods(rods_d, constraints_d, p.mobility_model, cfg, load_d);
+        const MixedSLCPResult result = step_rods(integrator, cfg, load_d);
         ASSERT_TRUE(lcp_converged(result))
             << result << " at cfl=" << cfl << " max_iters=" << max_iters << " step " << step;
         energy.push_back(elastic_energy(rods_d, lin_springs_d, ang_springs_d));
@@ -2556,7 +2540,7 @@ TEST(Mbody, ChainStableAcrossExplicitStabilityLimit) {
 //! \name Sequential linearization
 //@{
 
-// solve_mixed_slcp: the bilateral rows re-linearized at the configurations its iterates move the rods to.
+// MixedSLCPIntegrator: the bilateral rows re-linearized at the configurations its iterates move the rods to.
 
 /// \brief Five rods under every bilateral family and one pressing contact, all force directions turning with the rods.
 ///
@@ -2609,13 +2593,13 @@ auto make_fallback_problem() {
   contacts.rod_i(0) = 3;
   contacts.rod_j(0) = 4;
 
+  const double dt = 0.3;
   MixedLCPConfig cfg;
-  cfg.dt = 0.3;
   cfg.max_cg_iters = 1000;
   cfg.cg_tol = 1e-10;
   cfg.outer_tol = 1e-10;
   return SolveInput{rods, make_constraint_set(lin_springs, pins, lengths, pose_anchors, position_anchors, contacts),
-                    LocalDragMobility{.viscosity = 1.0}, cfg};
+                    LocalDragMobility{.viscosity = 1.0}, dt, cfg};
 }
 
 // A sequence that cannot converge returns its first linearization, which is the mixed LCP step, bit for bit. Serial
@@ -2628,9 +2612,11 @@ TEST(Mbody, SlcpFallsBackToFirstLinearization) {
   const auto constraints_slcp = copy_to<Kokkos::Serial>(p.constraints);
 
   // Solve
-  const MixedLCPResult lcp = solve_mixed_lcp(rods_lcp, constraints_lcp, p.mobility_model, p.cfg);
+  const MixedLCPResult lcp =
+      solve_step(make_mixed_lcp_integrator(rods_lcp, constraints_lcp, p.mobility_model, p.dt), p.cfg);
   const MixedSLCPResult slcp =
-      solve_mixed_slcp(rods_slcp, constraints_slcp, p.mobility_model, MixedSLCPConfig{p.cfg, 3, 1e-300, 1e-300});
+      solve_step(make_mixed_slcp_integrator(rods_slcp, constraints_slcp, p.mobility_model, p.dt),
+                 MixedSLCPConfig{p.cfg, 3, 1e-300, 1e-300});
   ASSERT_FALSE(slcp.converged) << slcp;
   EXPECT_GE(slcp.num_iters, 2u);
   ASSERT_GT(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{},
@@ -2682,29 +2668,33 @@ std::map<std::pair<std::string, uint64_t>, size_t> record_allocations(F&& f) {
   return allocations;
 }
 
-/// \brief solve_mixed_slcp() on TestExecSpace copies of rods and constraints, and the allocations it makes.
+/// \brief A mixed SLCP step of size dt through an integrator of its own on TestExecSpace copies of rods and
+/// constraints, and the allocations it makes.
 template <typename Model, typename Policy = NoPreconditioner, typename... Families>
 std::pair<MixedSLCPResult, std::map<std::pair<std::string, uint64_t>, size_t>> slcp_allocations(
     const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints, const Model& mobility_model,
-    const MixedSLCPConfig& cfg, const Policy& preconditioner_policy = Policy{}) {
+    double dt, const MixedSLCPConfig& cfg, const Policy& preconditioner_policy = Policy{}) {
   const auto rods_d = copy_to<TestExecSpace>(rods);
   const auto constraints_d = copy_to<TestExecSpace>(constraints);
   MixedSLCPResult result;
-  const auto allocations = record_allocations(
-      [&] { result = solve_mixed_slcp(rods_d, constraints_d, mobility_model, cfg, preconditioner_policy); });
+  const auto allocations = record_allocations([&] {
+    result =
+        solve_step(make_mixed_slcp_integrator(rods_d, constraints_d, mobility_model, dt, preconditioner_policy), cfg);
+  });
   return {result, allocations};
 }
 
-/// \brief solve_mixed_lcp() on TestExecSpace copies of rods and constraints, and the allocations it makes.
+/// \brief A mixed LCP step of size dt through an integrator of its own on TestExecSpace copies of rods and
+/// constraints, and the allocations it makes.
 template <typename Model, typename... Families>
 std::pair<MixedLCPResult, std::map<std::pair<std::string, uint64_t>, size_t>> lcp_allocations(
     const RodViews<HostExecSpace>& rods, const ConstraintSet<Families...>& constraints, const Model& mobility_model,
-    const MixedLCPConfig& cfg) {
+    double dt, const MixedLCPConfig& cfg) {
   const auto rods_d = copy_to<TestExecSpace>(rods);
   const auto constraints_d = copy_to<TestExecSpace>(constraints);
   MixedLCPResult result;
-  const auto allocations =
-      record_allocations([&] { result = solve_mixed_lcp(rods_d, constraints_d, mobility_model, cfg); });
+  const auto allocations = record_allocations(
+      [&] { result = solve_step(make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt), cfg); });
   return {result, allocations};
 }
 
@@ -2718,41 +2708,41 @@ TEST(Mbody, IterationsDoNotAllocate) {
       make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
                           get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
                           get<FixedPositionViews<HostExecSpace>>(c));
-  slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   const auto [both_short, both_short_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
   const auto [both_long, both_long_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   ASSERT_TRUE(both_short.converged && both_long.converged) << both_short << "\n" << both_long;
   ASSERT_LT(both_short.num_iters, both_long.num_iters);
   EXPECT_EQ(both_short_allocations, both_long_allocations);
 
   // Both blocks, with the Schur complement preconditioned by its self-mobility Jacobi
-  slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
+  slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
   const auto [jacobi_short, jacobi_short_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5}, SelfMobilityJacobi{});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5}, SelfMobilityJacobi{});
   const auto [jacobi_long, jacobi_long_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
   ASSERT_TRUE(jacobi_short.converged && jacobi_long.converged) << jacobi_short << "\n" << jacobi_long;
   ASSERT_LT(jacobi_short.num_iters, jacobi_long.num_iters);
   EXPECT_EQ(jacobi_short_allocations, jacobi_long_allocations);
 
-  slcp_allocations(p.rods, bilateral_only, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   const auto [bilateral_short, bilateral_short_allocations] =
-      slcp_allocations(p.rods, bilateral_only, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+      slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
   const auto [bilateral_long, bilateral_long_allocations] =
-      slcp_allocations(p.rods, bilateral_only, p.mobility_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+      slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   ASSERT_TRUE(bilateral_short.converged && bilateral_long.converged) << bilateral_short << "\n" << bilateral_long;
   ASSERT_LT(bilateral_short.num_iters, bilateral_long.num_iters);
   EXPECT_EQ(bilateral_short_allocations, bilateral_long_allocations);
 
   // The bilateral block alone under a caller's mobility, which has only a plain apply
   const IsotropicMobility isotropic_model{.m = 0.25, .m_rot = 1.0};
-  slcp_allocations(p.rods, bilateral_only, isotropic_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   const auto [isotropic_short, isotropic_short_allocations] =
-      slcp_allocations(p.rods, bilateral_only, isotropic_model, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+      slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
   const auto [isotropic_long, isotropic_long_allocations] =
-      slcp_allocations(p.rods, bilateral_only, isotropic_model, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+      slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
   ASSERT_TRUE(isotropic_short.converged && isotropic_long.converged) << isotropic_short << "\n" << isotropic_long;
   ASSERT_LT(isotropic_short.num_iters, isotropic_long.num_iters);
   EXPECT_EQ(isotropic_short_allocations, isotropic_long_allocations);
@@ -2763,11 +2753,11 @@ TEST(Mbody, IterationsDoNotAllocate) {
   loose.outer_tol = 1e-4;
   MixedLCPConfig tight = row.cfg;
   tight.outer_tol = 1e-12;
-  lcp_allocations(row.rods, row.constraints, row.mobility_model, tight);
+  lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, tight);
   const auto [unilateral_loose, unilateral_loose_allocations] =
-      lcp_allocations(row.rods, row.constraints, row.mobility_model, loose);
+      lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, loose);
   const auto [unilateral_tight, unilateral_tight_allocations] =
-      lcp_allocations(row.rods, row.constraints, row.mobility_model, tight);
+      lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, tight);
   ASSERT_TRUE(unilateral_loose.converged && unilateral_tight.converged) << unilateral_loose << "\n" << unilateral_tight;
   ASSERT_LT(unilateral_loose.num_iters, unilateral_tight.num_iters);
   EXPECT_EQ(unilateral_loose_allocations, unilateral_tight_allocations);
@@ -2785,10 +2775,9 @@ constexpr double kPendulumArm = 1.0;  // pivot to loaded point
 constexpr double kPendulumCgTol = 1e-14;
 constexpr LocalDragMobility kPendulumMobilityModel{.viscosity = 1.0};
 
-/// \brief A pendulum step of size dt by a sequence of at most max_iters linearizations.
-MixedSLCPConfig make_pendulum_config(double dt, unsigned max_iters, double length_tol) {
+/// \brief A pendulum step by a sequence of at most max_iters linearizations.
+MixedSLCPConfig make_pendulum_config(unsigned max_iters, double length_tol) {
   MixedSLCPConfig cfg;
-  cfg.inner_lcp_config.dt = dt;
   cfg.inner_lcp_config.max_cg_iters = 200;
   cfg.inner_lcp_config.cg_tol = kPendulumCgTol;
   cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
@@ -2799,11 +2788,13 @@ MixedSLCPConfig make_pendulum_config(double dt, unsigned max_iters, double lengt
 }
 
 /// \brief A sphere held by a fixed length from an anchored sphere, stepped num_steps times at dt = h tau, with the
-/// Schur complement preconditioned by its self-mobility Jacobi if preconditioned.
+/// Schur complement preconditioned by its self-mobility Jacobi if preconditioned, through one integrator's storage held
+/// across the steps if held_storage and through storage of each step's own otherwise.
 ///
 /// The bob, at L = kPendulumArm under a constant force f, turns in the plane normal to its axis, where its mobility is
 /// m I, so tau = L / (m f). Its constraint error is |r| - L.
-PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double length_tol, bool preconditioned) {
+PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double length_tol, bool preconditioned,
+                             bool held_storage) {
   const double radius = 0.2, f = 0.5, L = kPendulumArm;
   const double tau = L / (expected_inv_drag_perp(radius, 0.0, kPendulumMobilityModel.viscosity) * f);
 
@@ -2825,20 +2816,28 @@ PendulumRun run_bob_pendulum(double h, int num_steps, unsigned max_iters, double
   lengths.rod_j(0) = 1;
   lengths.rest_length(0) = L;
 
-  const MixedSLCPConfig cfg = make_pendulum_config(h * tau, max_iters, length_tol);
+  const double dt = h * tau;
+  const MixedSLCPConfig cfg = make_pendulum_config(max_iters, length_tol);
   const auto rods_d = copy_to<TestExecSpace>(rods);
   const auto constraints_d = copy_to<TestExecSpace>(make_constraint_set(anchors, lengths));
   const auto load_d = copy_load(rods_d);
 
   PendulumRun run{{kPendulumTheta0}, {}, {}};
-  for (int step = 0; step < num_steps; ++step) {
-    run.results.push_back(
-        preconditioned ? step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d, SelfMobilityJacobi{})
-                       : step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d));
-    deep_copy(rods, rods_d);
-    const Vector3d r = rods.center(1) - rods.center(0);
-    run.theta.push_back(std::atan2(r[0], -r[1]));
-    run.constraint_error.push_back(norm(r) - L);
+  const auto run_steps = [&](const auto& policy) {
+    const auto integrator = make_mixed_slcp_integrator(rods_d, constraints_d, kPendulumMobilityModel, dt, policy);
+    for (int step = 0; step < num_steps; ++step) {
+      run.results.push_back(held_storage ? step_rods(integrator, cfg, load_d)
+                                         : step_rods(with_fresh_storage(integrator), cfg, load_d));
+      deep_copy(rods, rods_d);
+      const Vector3d r = rods.center(1) - rods.center(0);
+      run.theta.push_back(std::atan2(r[0], -r[1]));
+      run.constraint_error.push_back(norm(r) - L);
+    }
+  };
+  if (preconditioned) {
+    run_steps(SelfMobilityJacobi{});
+  } else {
+    run_steps(NoPreconditioner{});
   }
   return run;
 }
@@ -2877,7 +2876,8 @@ PendulumRun run_rod_pendulum(double h, int num_steps, unsigned max_iters, double
   pins.body_offset_i(0) = Vector3d{0.0, 0.0, 0.0};
   pins.body_offset_j(0) = -a * axis_body;
 
-  const MixedSLCPConfig cfg = make_pendulum_config(h * tau, max_iters, length_tol);
+  const double dt = h * tau;
+  const MixedSLCPConfig cfg = make_pendulum_config(max_iters, length_tol);
   const auto rods_d = copy_to<TestExecSpace>(rods);
   const auto constraints_d = copy_to<TestExecSpace>(make_constraint_set(anchors, pins));
   const auto load_d = copy_load(rods_d);
@@ -2885,8 +2885,11 @@ PendulumRun run_rod_pendulum(double h, int num_steps, unsigned max_iters, double
   PendulumRun run{{kPendulumTheta0}, {}, {}};
   for (int step = 0; step < num_steps; ++step) {
     run.results.push_back(
-        preconditioned ? step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d, SelfMobilityJacobi{})
-                       : step_rods(rods_d, constraints_d, kPendulumMobilityModel, cfg, load_d));
+        preconditioned
+            ? step_rods(
+                  make_mixed_slcp_integrator(rods_d, constraints_d, kPendulumMobilityModel, dt, SelfMobilityJacobi{}),
+                  cfg, load_d)
+            : step_rods(make_mixed_slcp_integrator(rods_d, constraints_d, kPendulumMobilityModel, dt), cfg, load_d));
     deep_copy(rods, rods_d);
     const Vector3d t = rods.orientation(1) * axis_body;
     run.theta.push_back(std::atan2(t[0], -t[1]));
@@ -2907,8 +2910,9 @@ const char* pendulum_name(Pendulum pendulum) {
 /// preconditioned by its self-mobility Jacobi if preconditioned.
 PendulumRun run_pendulum(Pendulum pendulum, double h, int num_steps, unsigned max_iters, double length_tol,
                          bool preconditioned) {
-  return pendulum == Pendulum::BOB ? run_bob_pendulum(h, num_steps, max_iters, length_tol, preconditioned)
-                                   : run_rod_pendulum(h, num_steps, max_iters, length_tol, preconditioned);
+  return pendulum == Pendulum::BOB
+             ? run_bob_pendulum(h, num_steps, max_iters, length_tol, preconditioned, /*held_storage=*/false)
+             : run_rod_pendulum(h, num_steps, max_iters, length_tol, preconditioned);
 }
 
 // For the bob, with h = dt / tau, both step maps are exact. A single linearization moves it along the tangent at the
@@ -2922,50 +2926,59 @@ PendulumRun run_pendulum(Pendulum pendulum, double h, int num_steps, unsigned ma
 // At h = 5, |r + dt m F| >= (h - 1) L, so the sequence would contract at a rate |L - |r + dt m F|| / L >= 3: it stops
 // early, and the step is the single linearization.
 //
-// Preconditioning the Schur complement changes how CG reaches cg_tol, not the bound, so every map holds with and
-// without it.
+// Preconditioning the Schur complement, or starting its solves from the previous step's through an integrator's held
+// storage, changes how CG reaches cg_tol, not the bound, so every map holds with and without either.
 TEST(Mbody, PendulumBobStepsFollowExactMaps) {
   const double h = 0.1, L = kPendulumArm, length_tol = 1e-11;
   const int num_steps = 10;
 
   for (const bool preconditioned : {false, true}) {
-    // Single linearization
-    const PendulumRun single = run_bob_pendulum(h, num_steps, /*max_iters=*/1, length_tol, preconditioned);
-    for (int k = 0; k < num_steps; ++k) {
-      const double theta = single.theta[k];
-      EXPECT_TRUE(lcp_converged(single.results[k]))
-          << single.results[k] << " at step " << k << " preconditioned=" << preconditioned;
-      EXPECT_NEAR(single.theta[k + 1], theta - std::atan(h * std::sin(theta)), 2.0 * kPendulumCgTol / L)
-          << "step " << k << " preconditioned=" << preconditioned;
-      EXPECT_NEAR(single.constraint_error[k], L * std::sqrt(1.0 + h * h * std::sin(theta) * std::sin(theta)) - L,
-                  2.0 * kPendulumCgTol)
-          << "step " << k << " preconditioned=" << preconditioned;
-    }
+    for (const bool held_storage : {false, true}) {
+      // Single linearization
+      const PendulumRun single =
+          run_bob_pendulum(h, num_steps, /*max_iters=*/1, length_tol, preconditioned, held_storage);
+      for (int k = 0; k < num_steps; ++k) {
+        const double theta = single.theta[k];
+        EXPECT_TRUE(lcp_converged(single.results[k]))
+            << single.results[k] << " at step " << k << " preconditioned=" << preconditioned
+            << " held_storage=" << held_storage;
+        EXPECT_NEAR(single.theta[k + 1], theta - std::atan(h * std::sin(theta)), 2.0 * kPendulumCgTol / L)
+            << "step " << k << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+        EXPECT_NEAR(single.constraint_error[k], L * std::sqrt(1.0 + h * h * std::sin(theta) * std::sin(theta)) - L,
+                    2.0 * kPendulumCgTol)
+            << "step " << k << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+      }
 
-    // Sequence
-    const PendulumRun sequence = run_bob_pendulum(h, num_steps, /*max_iters=*/50, length_tol, preconditioned);
-    for (int k = 0; k < num_steps; ++k) {
-      const double theta = sequence.theta[k];
-      const double p_norm = L * std::sqrt(1.0 + 2.0 * h * std::cos(theta) + h * h);
-      ASSERT_TRUE(sequence.results[k].converged)
-          << sequence.results[k] << " at step " << k << " preconditioned=" << preconditioned;
-      EXPECT_GE(sequence.results[k].num_iters, 2u) << "step " << k << " preconditioned=" << preconditioned;
-      EXPECT_LE(std::abs(sequence.constraint_error[k]), length_tol)
-          << "step " << k << " preconditioned=" << preconditioned;
-      EXPECT_NEAR(sequence.theta[k + 1], std::atan2(std::sin(theta), std::cos(theta) + h),
-                  std::sqrt(2.0) * length_tol / p_norm)
-          << "step " << k << " preconditioned=" << preconditioned;
-    }
+      // Sequence
+      const PendulumRun sequence =
+          run_bob_pendulum(h, num_steps, /*max_iters=*/50, length_tol, preconditioned, held_storage);
+      for (int k = 0; k < num_steps; ++k) {
+        const double theta = sequence.theta[k];
+        const double p_norm = L * std::sqrt(1.0 + 2.0 * h * std::cos(theta) + h * h);
+        ASSERT_TRUE(sequence.results[k].converged)
+            << sequence.results[k] << " at step " << k << " preconditioned=" << preconditioned
+            << " held_storage=" << held_storage;
+        EXPECT_GE(sequence.results[k].num_iters, 2u)
+            << "step " << k << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+        EXPECT_LE(std::abs(sequence.constraint_error[k]), length_tol)
+            << "step " << k << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+        EXPECT_NEAR(sequence.theta[k + 1], std::atan2(std::sin(theta), std::cos(theta) + h),
+                    std::sqrt(2.0) * length_tol / p_norm)
+            << "step " << k << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+      }
 
-    // Beyond the convergence regime
-    const double h_beyond = 5.0;
-    const PendulumRun beyond = run_bob_pendulum(h_beyond, 12, /*max_iters=*/50, length_tol, preconditioned);
-    for (size_t k = 0; k < beyond.results.size(); ++k) {
-      const double theta = beyond.theta[k];
-      EXPECT_TRUE(lcp_converged(beyond.results[k]))
-          << beyond.results[k] << " at step " << k << " preconditioned=" << preconditioned;
-      EXPECT_NEAR(beyond.theta[k + 1], theta - std::atan(h_beyond * std::sin(theta)), 2.0 * kPendulumCgTol / L)
-          << "step " << k << " preconditioned=" << preconditioned;
+      // Beyond the convergence regime
+      const double h_beyond = 5.0;
+      const PendulumRun beyond =
+          run_bob_pendulum(h_beyond, 12, /*max_iters=*/50, length_tol, preconditioned, held_storage);
+      for (size_t k = 0; k < beyond.results.size(); ++k) {
+        const double theta = beyond.theta[k];
+        EXPECT_TRUE(lcp_converged(beyond.results[k]))
+            << beyond.results[k] << " at step " << k << " preconditioned=" << preconditioned
+            << " held_storage=" << held_storage;
+        EXPECT_NEAR(beyond.theta[k + 1], theta - std::atan(h_beyond * std::sin(theta)), 2.0 * kPendulumCgTol / L)
+            << "step " << k << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+      }
     }
   }
 }
@@ -3158,8 +3171,8 @@ TEST(Mbody, SlcpHoldsBilateralRowsAtStepEnd) {
       make_constraint_set(pose_anchors, triple_springs, pins, lin_springs, position_anchors, lengths, ang_springs);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 0.5;
   MixedSLCPConfig cfg;
-  cfg.inner_lcp_config.dt = 0.5;
   cfg.inner_lcp_config.max_cg_iters = 500;
   cfg.inner_lcp_config.cg_tol = 1e-13;
   cfg.inner_lcp_config.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
@@ -3172,7 +3185,8 @@ TEST(Mbody, SlcpHoldsBilateralRowsAtStepEnd) {
     // Step
     const auto rods_d = copy_to<TestExecSpace>(rods);
     const auto constraints_d = copy_to<TestExecSpace>(constraints);
-    const MixedSLCPResult result = step_rods(rods_d, constraints_d, mobility_model, cfg, copy_load(rods_d));
+    const MixedSLCPResult result =
+        step_rods(make_mixed_slcp_integrator(rods_d, constraints_d, mobility_model, dt), cfg, copy_load(rods_d));
     ASSERT_TRUE(lcp_converged(result)) << result << " at max_iters=" << max_iters;
 
     // Every row at the end of the step
@@ -3210,6 +3224,237 @@ TEST(Mbody, SlcpHoldsBilateralRowsAtStepEnd) {
 
 //@}
 
+//! \name Integrator storage
+//@{
+
+// An integrator holds the storage its steps write, and a new integrator can take another's: steps through it carry
+// their solutions to the next step.
+
+/// \brief The allocations of two steps through a mixed SLCP integrator of size-dt steps that has stepped once,
+/// unrecorded, on TestExecSpace copies of rods and constraints.
+template <typename Model, typename Policy, typename... Families>
+std::map<std::pair<std::string, uint64_t>, size_t> held_slcp_allocations(const RodViews<HostExecSpace>& rods,
+                                                                         const ConstraintSet<Families...>& constraints,
+                                                                         const Model& mobility_model, double dt,
+                                                                         const MixedSLCPConfig& cfg,
+                                                                         const Policy& preconditioner_policy) {
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  const auto load_d = copy_load(rods_d);
+  const auto integrator = make_mixed_slcp_integrator(rods_d, constraints_d, mobility_model, dt, preconditioner_policy);
+  reset_rod_state(rods_d, load_d);
+  solve_step(integrator, cfg);
+  return record_allocations([&] {
+    for (int step = 0; step < 2; ++step) {
+      reset_rod_state(rods_d, load_d);
+      solve_step(integrator, cfg);
+    }
+  });
+}
+
+/// \brief The allocations of two steps through a mixed LCP integrator of size-dt steps that has stepped once,
+/// unrecorded, on TestExecSpace copies of rods and constraints.
+template <typename Model, typename... Families>
+std::map<std::pair<std::string, uint64_t>, size_t> held_lcp_allocations(const RodViews<HostExecSpace>& rods,
+                                                                        const ConstraintSet<Families...>& constraints,
+                                                                        const Model& mobility_model, double dt,
+                                                                        const MixedLCPConfig& cfg) {
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  const auto load_d = copy_load(rods_d);
+  const auto integrator = make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt);
+  reset_rod_state(rods_d, load_d);
+  solve_step(integrator, cfg);
+  return record_allocations([&] {
+    for (int step = 0; step < 2; ++step) {
+      reset_rod_state(rods_d, load_d);
+      solve_step(integrator, cfg);
+    }
+  });
+}
+
+/// \brief The label and size of each allocation, for failure messages.
+std::string allocation_labels(const std::map<std::pair<std::string, uint64_t>, size_t>& allocations) {
+  std::string labels;
+  for (const auto& [allocation, count] : allocations) {
+    labels += allocation.first + " (" + std::to_string(allocation.second) + " B) x" + std::to_string(count) + "\n";
+  }
+  return labels;
+}
+
+// A step through an integrator allocates nothing once a first step has sized its storage: both blocks,
+// unpreconditioned and preconditioned; the bilateral block alone under a caller's mobility, which has only a plain
+// apply; and the unilateral block alone.
+TEST(Mbody, IntegratorStepsDoNotAllocate) {
+  const auto p = make_fallback_problem();
+  const auto& c = p.constraints;
+  const auto bilateral_only =
+      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
+                          get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
+                          get<FixedPositionViews<HostExecSpace>>(c));
+  const MixedSLCPConfig cfg{p.cfg, 50, 1e-9, 1e-9};
+  const auto row = make_sphere_row_problem();
+
+  // Step
+  const auto both = held_slcp_allocations(p.rods, c, p.mobility_model, p.dt, cfg, NoPreconditioner{});
+  const auto both_jacobi = held_slcp_allocations(p.rods, c, p.mobility_model, p.dt, cfg, SelfMobilityJacobi{});
+  const auto bilateral_isotropic = held_slcp_allocations(
+      p.rods, bilateral_only, IsotropicMobility{.m = 0.25, .m_rot = 1.0}, p.dt, cfg, NoPreconditioner{});
+  const auto unilateral = held_lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, row.cfg);
+
+  // No allocation
+  EXPECT_TRUE(both.empty()) << allocation_labels(both);
+  EXPECT_TRUE(both_jacobi.empty()) << allocation_labels(both_jacobi);
+  EXPECT_TRUE(bilateral_isotropic.empty()) << allocation_labels(bilateral_isotropic);
+  EXPECT_TRUE(unilateral.empty()) << allocation_labels(unilateral);
+}
+
+// An integrator given storage sized for another layout of rods and constraints makes storage of its own. Integrators
+// alternating between the fallback problem and the same problem without its contact, each taking the last one's
+// storage, step exactly as integrators with storage of their own, bit for bit. Serial execution fixes the order of
+// every atomic sum.
+TEST(Mbody, IntegratorRebuildsStorageOfAnotherLayout) {
+  const auto p = make_fallback_problem();
+  const auto& c = p.constraints;
+  const auto contact_free =
+      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
+                          get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
+                          get<FixedPositionViews<HostExecSpace>>(c), ContactViews<HostExecSpace>(0));
+  const MixedSLCPConfig cfg{p.cfg, 50, 1e-9, 1e-9};
+  auto storage =
+      make_mixed_slcp_integrator(copy_to<Kokkos::Serial>(p.rods), copy_to<Kokkos::Serial>(c), p.mobility_model, p.dt)
+          .workspace();
+
+  for (int step = 0; step < 3; ++step) {
+    const auto& constraints = step == 1 ? contact_free : c;
+    const auto rods_passed = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_passed = copy_to<Kokkos::Serial>(constraints);
+    const auto rods_own = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_own = copy_to<Kokkos::Serial>(constraints);
+
+    // Step
+    const auto passed = make_mixed_slcp_integrator(rods_passed, constraints_passed, p.mobility_model, p.dt,
+                                                   NoPreconditioner{}, storage);
+    storage = passed.workspace();
+    const MixedSLCPResult through_passed = solve_step(passed, cfg);
+    const MixedSLCPResult through_own =
+        solve_step(make_mixed_slcp_integrator(rods_own, constraints_own, p.mobility_model, p.dt), cfg);
+    ASSERT_TRUE(through_own.converged) << through_own << " at step " << step;
+
+    // The step
+    EXPECT_EQ(through_passed.num_iters, through_own.num_iters) << "step " << step;
+    EXPECT_EQ(std::bit_cast<uint64_t>(through_passed.residual), std::bit_cast<uint64_t>(through_own.residual))
+        << "step " << step;
+    EXPECT_EQ(through_passed.accepted_lcp_result.num_iters, through_own.accepted_lcp_result.num_iters)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(rods_passed.force_torque_view(), rods_own.force_torque_view()), 0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(rods_passed.velocity_omega_view(), rods_own.velocity_omega_view()), 0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(get<ContactViews<Kokkos::Serial>>(constraints_passed).lambda_view(),
+                                    get<ContactViews<Kokkos::Serial>>(constraints_own).lambda_view()),
+              0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(get<LinearSpringViews<Kokkos::Serial>>(constraints_passed).lambda_view(),
+                                    get<LinearSpringViews<Kokkos::Serial>>(constraints_own).lambda_view()),
+              0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(get<PinViews<Kokkos::Serial>>(constraints_passed).lambda_view(),
+                                    get<PinViews<Kokkos::Serial>>(constraints_own).lambda_view()),
+              0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(get<FixedLengthViews<Kokkos::Serial>>(constraints_passed).lambda_view(),
+                                    get<FixedLengthViews<Kokkos::Serial>>(constraints_own).lambda_view()),
+              0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(get<FixedPoseViews<Kokkos::Serial>>(constraints_passed).lambda_view(),
+                                    get<FixedPoseViews<Kokkos::Serial>>(constraints_own).lambda_view()),
+              0u)
+        << "step " << step;
+    EXPECT_EQ(count_bit_differences(get<FixedPositionViews<Kokkos::Serial>>(constraints_passed).lambda_view(),
+                                    get<FixedPositionViews<Kokkos::Serial>>(constraints_own).lambda_view()),
+              0u)
+        << "step " << step;
+  }
+}
+
+// Storage passed to a new integrator serves that integrator's step size and rods, not those it was made with:
+//   - integrators of two step sizes in turn, each taking the last one's storage, meet the closed form of a spring
+//   between
+//     isotropic spheres, the force y = -(|r| - L) / (2 m dt + 1/k);
+//   - integrators over rods copied into new views for every step, each taking the last one's storage, step exactly as
+//     one integrator over rods kept in one set of views, bit for bit, on Serial.
+TEST(Mbody, IntegratorStorageServesTheNextIntegrator) {
+  // Two step sizes
+  {
+    RodViews<HostExecSpace> rods = make_two_rod_system(Vector3d{0.0, 0.0, 0.0}, Quaterniond{1.0, 0.0, 0.0, 0.0},
+                                                       Vector3d{0.0, 0.0, 1.6}, Quaterniond{1.0, 0.0, 0.0, 0.0});
+    zero_rod_state(rods);
+    LinearSpringViews<HostExecSpace> lin_springs(1);
+    lin_springs.rod_i(0) = 0;
+    lin_springs.rod_j(0) = 1;
+    lin_springs.rest_length(0) = 1.0;
+    lin_springs.spring_constant(0) = 2.0;
+    const IsotropicMobility mobility_model{.m = 0.7, .m_rot = 1.3};
+    MixedLCPConfig cfg;
+    cfg.cg_tol = 1e-14;
+
+    const auto rods_d = copy_to<TestExecSpace>(rods);
+    const auto constraints_d = copy_to<TestExecSpace>(make_constraint_set(lin_springs));
+    const auto load_d = copy_load(rods_d);
+    auto storage = make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, 0.5).workspace();
+    for (const double dt : {0.5, 2.0}) {
+      const auto integrator =
+          make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt, NoPreconditioner{}, storage);
+      storage = integrator.workspace();
+      reset_rod_state(rods_d, load_d);
+      const MixedLCPResult result = solve_step(integrator, cfg);
+      EXPECT_TRUE(result.converged) << result << " at dt=" << dt;
+      const double y = Kokkos::create_mirror_view_and_copy(
+          Kokkos::HostSpace{}, get<LinearSpringViews<TestExecSpace>>(constraints_d).lambda_view())(0);
+      EXPECT_NEAR(y, -(1.6 - 1.0) / (2.0 * mobility_model.m * dt + 1.0 / lin_springs.spring_constant(0)), 1e-13)
+          << "dt=" << dt;
+    }
+  }
+
+  // New views for every step
+  {
+    const auto p = make_fallback_problem();
+    const MixedSLCPConfig cfg{p.cfg, 50, 1e-9, 1e-9};
+    const auto rods_kept = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_kept = copy_to<Kokkos::Serial>(p.constraints);
+    const auto load_kept = copy_load(rods_kept);
+    const auto kept = make_mixed_slcp_integrator(rods_kept, constraints_kept, p.mobility_model, p.dt);
+    const auto rods_copied = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_copied = copy_to<Kokkos::Serial>(p.constraints);
+    const auto load_copied = copy_load(rods_copied);
+    auto storage = make_mixed_slcp_integrator(rods_copied, constraints_copied, p.mobility_model, p.dt).workspace();
+
+    for (int step = 0; step < 4; ++step) {
+      ASSERT_TRUE(lcp_converged(step_rods(kept, cfg, load_kept))) << "step " << step;
+      const auto rods_new = copy_to<Kokkos::Serial>(rods_copied);
+      const auto copied =
+          make_mixed_slcp_integrator(rods_new, constraints_copied, p.mobility_model, p.dt, NoPreconditioner{}, storage);
+      storage = copied.workspace();
+      ASSERT_TRUE(lcp_converged(step_rods(copied, cfg, load_copied))) << "step " << step;
+      deep_copy(rods_copied, rods_new);
+    }
+
+    EXPECT_EQ(count_bit_differences(rods_copied.center_view(), rods_kept.center_view()), 0u);
+    EXPECT_EQ(count_bit_differences(rods_copied.orientation_view(), rods_kept.orientation_view()), 0u);
+    EXPECT_EQ(count_bit_differences(rods_copied.force_torque_view(), rods_kept.force_torque_view()), 0u);
+    EXPECT_EQ(count_bit_differences(rods_copied.velocity_omega_view(), rods_kept.velocity_omega_view()), 0u);
+    EXPECT_EQ(count_bit_differences(get<PinViews<Kokkos::Serial>>(constraints_copied).lambda_view(),
+                                    get<PinViews<Kokkos::Serial>>(constraints_kept).lambda_view()),
+              0u);
+    EXPECT_EQ(count_bit_differences(get<ContactViews<Kokkos::Serial>>(constraints_copied).lambda_view(),
+                                    get<ContactViews<Kokkos::Serial>>(constraints_kept).lambda_view()),
+              0u);
+  }
+}
+
+//@}
+
 //! \name Chain mechanics
 //@{
 
@@ -3241,8 +3486,8 @@ double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double ti
   const auto constraints = make_constraint_set(lin_springs);
 
   const LocalDragMobility mobility_model{.viscosity = 1.0};
+  const double dt = 2.0;
   MixedLCPConfig cfg;
-  cfg.dt = 2.0;
   cfg.max_cg_iters = 500;
   cfg.cg_tol = 1e-12;
   cfg.max_outer_iters = 1;  // no contacts, so PGD has nothing to iterate
@@ -3252,11 +3497,11 @@ double run_axial_chain_EA(size_t num_segments, double L, double k_lin, double ti
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
+  const auto integrator = make_mixed_lcp_integrator(rods_d, constraints_d, mobility_model, dt);
 
   const int num_steps = 150;
   for (int step = 0; step < num_steps; ++step) {
-    EXPECT_TRUE(step_rods(rods_d, constraints_d, mobility_model, cfg, load_d).converged)
-        << "num_segments=" << num_segments << " step " << step;
+    EXPECT_TRUE(step_rods(integrator, cfg, load_d).converged) << "num_segments=" << num_segments << " step " << step;
   }
   deep_copy(rods, rods_d);
 
@@ -3395,7 +3640,7 @@ TEST(Mbody, SimplySupportedBendingMatchesHenckyBarChain) {
 /// has a gradient on the first step, and the settled state does not depend on it.
 template <typename Link>
 SolveInput<Link, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(size_t num_segments, double L, double EI,
-                                                                               size_t num_rods) {
+                                                                               size_t num_rods, double dt) {
   const double spacing = L / static_cast<double>(num_segments);
   const size_t num_chain = num_segments + 2;
   MUNDY_THROW_REQUIRE(num_rods >= num_chain, std::invalid_argument, "make_cantilever: num_rods must hold the chain.");
@@ -3427,7 +3672,7 @@ SolveInput<Link, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(s
   // Tight enough that solver error sits far below the settled chain's geometric nonlinearity.
   cfg.cg_tol = 1e-14;
   cfg.outer_tol = 1e-12;
-  return {rods, make_constraint_set(links, chain.springs), LocalDragMobility{.viscosity = 1.0}, cfg};
+  return {rods, make_constraint_set(links, chain.springs), LocalDragMobility{.viscosity = 1.0}, dt, cfg};
 }
 
 /// \brief The settled state of a cantilever under a tip load.
@@ -3444,7 +3689,7 @@ SettledCantilever run_settled_cantilever(size_t num_segments, double L, double E
                                          unsigned max_iters) {
   const size_t num_chain = num_segments + 2;
   const int tip = static_cast<int>(num_chain - 1);
-  auto p = make_cantilever<Link>(num_segments, L, EI, num_chain);
+  auto p = make_cantilever<Link>(num_segments, L, EI, num_chain, dt);
   p.rods.force(tip) = Vector3d{0.0, tip_force, 0.0};
 
   FixedPositionViews<HostExecSpace> wall(2);
@@ -3452,15 +3697,14 @@ SettledCantilever run_settled_cantilever(size_t num_segments, double L, double E
   set_fixed_position(wall, 1, /*rod=*/1, Vector3d(p.rods.center(1)));
   const auto constraints = make_constraint_set(get<Link>(p.constraints),
                                                get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), wall);
-  p.cfg.dt = dt;
   const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
   SettledCantilever result;
-  result.settled = step_until_settled(rods_d, constraints_d, p.mobility_model, cfg, load_d, /*settled_step=*/1e-12,
-                                      /*max_steps=*/1000);
+  result.settled = step_until_settled(make_mixed_slcp_integrator(rods_d, constraints_d, p.mobility_model, p.dt), cfg,
+                                      load_d, /*settled_step=*/1e-12, /*max_steps=*/1000);
   deep_copy(p.rods, rods_d);
 
   for (size_t k = 2; k < num_chain; ++k) {
@@ -3510,15 +3754,15 @@ struct ProppedCantilever {
 /// \brief A cantilever with links of family Link whose tip rests on an anchored sphere, settled under a midspan load.
 ///
 /// Each step is a sequence of at most max_iters linearizations, with the Schur complement preconditioned by its
-/// self-mobility Jacobi if preconditioned.
+/// self-mobility Jacobi if preconditioned, through one workspace held across the steps if held_storage.
 template <typename Link>
 ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double EI, double load, double dt,
-                                         unsigned max_iters, bool preconditioned) {
+                                         unsigned max_iters, bool preconditioned, bool held_storage) {
   const size_t num_chain = num_segments + 2;
   const int midspan = static_cast<int>(num_segments / 2 + 1);
   const int tip = static_cast<int>(num_chain - 1);
   const int obstacle = static_cast<int>(num_chain);
-  auto p = make_cantilever<Link>(num_segments, L, EI, num_chain + 1);
+  auto p = make_cantilever<Link>(num_segments, L, EI, num_chain + 1, dt);
 
   const double radius = p.rods.radius(0);
   p.rods.center(obstacle) = Vector3d{0.0, -2.0 * radius, p.rods.center(tip)[2]};  // touches the straight tip
@@ -3536,17 +3780,16 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
   contacts.rod_j(0) = obstacle;
   const auto constraints = make_constraint_set(
       get<Link>(p.constraints), get<TriplePointAngularSpringViews<HostExecSpace>>(p.constraints), anchors, contacts);
-  p.cfg.dt = dt;
   const MixedSLCPConfig cfg{p.cfg, max_iters, 1e-9, 1e-9};
 
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
-  const bool settled =
-      preconditioned ? step_until_settled(rods_d, constraints_d, p.mobility_model, cfg, load_d, /*settled_step=*/1e-12,
-                                          /*max_steps=*/1000, SelfMobilityJacobi{})
-                     : step_until_settled(rods_d, constraints_d, p.mobility_model, cfg, load_d, /*settled_step=*/1e-12,
-                                          /*max_steps=*/1000);
+  const auto settle = [&](const auto& policy) {
+    return step_until_settled(make_mixed_slcp_integrator(rods_d, constraints_d, p.mobility_model, p.dt, policy), cfg,
+                              load_d, /*settled_step=*/1e-12, /*max_steps=*/1000, held_storage);
+  };
+  const bool settled = preconditioned ? settle(SelfMobilityJacobi{}) : settle(NoPreconditioner{});
   deep_copy(p.rods, rods_d);
   deep_copy(constraints, constraints_d);
 
@@ -3560,42 +3803,48 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
 //   R_N = P (N+2)(5N+2) / (8 (N+1)(2N+1)),
 //
 // first order in the spacing toward Euler-Bernoulli's 5P/16, with stiff-spring or rigid links and for either sequence
-// length, and with and without the Schur complement preconditioned by its self-mobility Jacobi. The steps keep the
-// chain's geometry nonlinear, which at this load moves the reaction by at most about 1e-6 of itself, shrinking as P^2.
+// length, with and without the Schur complement preconditioned by its self-mobility Jacobi, and with a workspace per
+// step or one held across the steps. The steps keep the chain's geometry nonlinear, which at this load moves the
+// reaction by at most about 1e-6 of itself, shrinking as P^2.
 TEST(Mbody, ProppedCantileverMatchesHenckyBarChain) {
   const double L = 8.0, EI = 5.0, load = 0.01;
   const double continuum = 5.0 * load / 16.0;
   const char* const link_names[2] = {"stiff springs", "fixed lengths"};
 
   for (const bool preconditioned : {false, true}) {
-    for (const unsigned max_iters : {1u, 50u}) {
-      for (int link = 0; link < 2; ++link) {
-        double finest_scaled_error = 0.0;
-        double finest_scaled_error_expected = 0.0;
-        for (const size_t num_segments : {4, 8, 16, 32}) {
-          const double n = static_cast<double>(num_segments);
-          const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
-          const ProppedCantilever r =
-              link == 0
-                  ? run_propped_cantilever<LinearSpringViews<HostExecSpace>>(num_segments, L, EI, load,
-                                                                             /*dt=*/100.0, max_iters, preconditioned)
-                  : run_propped_cantilever<FixedLengthViews<HostExecSpace>>(num_segments, L, EI, load,
-                                                                            /*dt=*/100.0, max_iters, preconditioned);
+    for (const bool held_storage : {false, true}) {
+      for (const unsigned max_iters : {1u, 50u}) {
+        for (int link = 0; link < 2; ++link) {
+          double finest_scaled_error = 0.0;
+          double finest_scaled_error_expected = 0.0;
+          for (const size_t num_segments : {4, 8, 16, 32}) {
+            const double n = static_cast<double>(num_segments);
+            const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
+            const ProppedCantilever r = link == 0 ? run_propped_cantilever<LinearSpringViews<HostExecSpace>>(
+                                                        num_segments, L, EI, load,
+                                                        /*dt=*/100.0, max_iters, preconditioned, held_storage)
+                                                  : run_propped_cantilever<FixedLengthViews<HostExecSpace>>(
+                                                        num_segments, L, EI, load,
+                                                        /*dt=*/100.0, max_iters, preconditioned, held_storage);
 
-          ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments
-                                 << " max_iters=" << max_iters << " preconditioned=" << preconditioned;
-          EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky)
-              << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters
-              << " preconditioned=" << preconditioned;
-          EXPECT_NEAR(r.tip_gap, 0.0, 1e-12) << link_names[link] << " at num_segments=" << num_segments
-                                             << " max_iters=" << max_iters << " preconditioned=" << preconditioned;
-          finest_scaled_error = n * (r.contact_force - continuum) / continuum;
-          finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+            ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments
+                                   << " max_iters=" << max_iters << " preconditioned=" << preconditioned
+                                   << " held_storage=" << held_storage;
+            EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky)
+                << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters
+                << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+            EXPECT_NEAR(r.tip_gap, 0.0, 1e-12)
+                << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters
+                << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+            finest_scaled_error = n * (r.contact_force - continuum) / continuum;
+            finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
+          }
+
+          // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
+          EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4)
+              << link_names[link] << " at max_iters=" << max_iters << " preconditioned=" << preconditioned
+              << " held_storage=" << held_storage;
         }
-
-        // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
-        EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4)
-            << link_names[link] << " at max_iters=" << max_iters << " preconditioned=" << preconditioned;
       }
     }
   }
@@ -3692,9 +3941,9 @@ TEST(Mbody, SelfMobilityJacobiIsTheDiagonal) {
   std::vector<ProbedDiagonal> records;
   const auto rods_d = copy_to<TestExecSpace>(p.rods);
   const auto constraints_d = copy_to<TestExecSpace>(constraints);
-  const MixedSLCPResult result =
-      solve_mixed_slcp(rods_d, constraints_d, p.mobility_model, MixedSLCPConfig{p.cfg, 3, 1e-300, 1e-300},
-                       ProbingSelfMobilityJacobi{&records});
+  const MixedSLCPResult result = solve_step(
+      make_mixed_slcp_integrator(rods_d, constraints_d, p.mobility_model, p.dt, ProbingSelfMobilityJacobi{&records}),
+      MixedSLCPConfig{p.cfg, 3, 1e-300, 1e-300});
   ASSERT_GE(result.num_iters, 2u) << result;
   ASSERT_EQ(records.size(), result.num_iters) << "one update per solve";
 
@@ -3721,8 +3970,10 @@ TEST(Mbody, UnitJacobiIsUnpreconditioned) {
   const auto constraints_unit = copy_to<Kokkos::Serial>(p.constraints);
 
   // Solve
-  const MixedSLCPResult plain = solve_mixed_slcp(rods_plain, constraints_plain, p.mobility_model, cfg);
-  const MixedSLCPResult unit = solve_mixed_slcp(rods_unit, constraints_unit, p.mobility_model, cfg, UnitJacobi{});
+  const MixedSLCPResult plain =
+      solve_step(make_mixed_slcp_integrator(rods_plain, constraints_plain, p.mobility_model, p.dt), cfg);
+  const MixedSLCPResult unit =
+      solve_step(make_mixed_slcp_integrator(rods_unit, constraints_unit, p.mobility_model, p.dt, UnitJacobi{}), cfg);
   ASSERT_TRUE(plain.converged) << plain;
   ASSERT_GE(plain.num_iters, 2u);
 
