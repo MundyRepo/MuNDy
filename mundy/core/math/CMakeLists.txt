@@ -21,6 +21,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/belos_solver.hpp
   src/mundy_math/convex_spaces.hpp
   src/mundy_math/cqpp.hpp
+  src/mundy_math/direct_sum.hpp
   src/mundy_math/DoubleDouble.hpp
   src/mundy_math/eigenvalues.hpp
   src/mundy_math/GaussLegendre.hpp
@@ -30,6 +31,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/ArrayImpl.hpp
   src/mundy_math/impl/belos_solver_impl.hpp
   src/mundy_math/impl/cmath_impl.hpp
+  src/mundy_math/impl/direct_sum_impl.hpp
   src/mundy_math/impl/DoubleDoubleImpl.hpp
   src/mundy_math/impl/GaussLegendreImpl.hpp
   src/mundy_math/impl/GaussLegendreSphereImpl.hpp
@@ -86,7 +88,14 @@ mundy_tribits_add_library(
   FILES_MATCHING
   PATTERN "*.hpp"
   SOURCES ${SOURCES}
+  ADDED_LIB_TARGET_NAME_OUT mundy_math_target
 )
+
+# Let sqrt vectorize: under the default -fmath-errno, GCC and Clang keep a branch in every sqrt to set errno for a
+# negative argument, which blocks SIMD in dense kernels such as direct_sum. No numerical result changes.
+if(mundy_math_target)  # empty in TriBITS installation-testing mode, which builds no library
+  target_compile_options(${mundy_math_target} PUBLIC $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-fno-math-errno>)
+endif()
 
 tribits_add_test_directories(tests)
 

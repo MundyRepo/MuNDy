@@ -175,7 +175,7 @@ if [ "$ENABLE_COVERAGE" -eq 1 ]; then
   echo "Coverage build: -O0 -g --coverage, CMAKE_BUILD_TYPE=Debug, ccache disabled"
 else
   CMAKE_BUILD_TYPE_VAL=${BUILD_TYPE:-RELEASE}
-  CXX_FLAGS_VAL="-O3 -march=native"
+  CXX_FLAGS_VAL="-O3 -march=native -fno-math-errno"
   EXE_LINKER_FLAGS_VAL=""
   SHARED_LINKER_FLAGS_VAL=""
   coverage_args=""

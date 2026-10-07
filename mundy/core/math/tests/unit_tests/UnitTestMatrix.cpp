@@ -588,6 +588,36 @@ TYPED_TEST(MatrixPairwiseTypeTest, NonSquareMatrixVectorAndMatrixMatrixMixedType
 
 //@}
 
+
+//! \name Kokkos reductions
+//@{
+
+/// \brief The sum over i < n of [[i, 2 i], [3 i, 4 i]], reduced with Kokkos::Sum on the default execution space.
+///
+/// A free function, since CUDA forbids KOKKOS_LAMBDA in a test body (a private member function).
+Matrix<double, 2, 2> sum_matrices_on_device(const int n) {
+  Matrix<double, 2, 2> sum;
+  Kokkos::parallel_reduce(
+      "SumReducesMatrices", n,
+      KOKKOS_LAMBDA(const int i, Matrix<double, 2, 2>& partial) {
+        partial += Matrix<double, 2, 2>{1.0 * i, 2.0 * i, 3.0 * i, 4.0 * i};
+      },
+      Kokkos::Sum<Matrix<double, 2, 2>>(sum));
+  return sum;
+}
+
+TEST(MatrixKokkos, SumReducesMatricesInParallelReduce) {
+  // sum over i < n of [[i, 2 i], [3 i, 4 i]] is [[1, 2], [3, 4]] n (n - 1) / 2.
+  const int n = 1000;
+  const Matrix<double, 2, 2> sum = sum_matrices_on_device(n);
+  const double triangle = 0.5 * n * (n - 1);
+  EXPECT_EQ(sum(0, 0), triangle);
+  EXPECT_EQ(sum(0, 1), 2.0 * triangle);
+  EXPECT_EQ(sum(1, 0), 3.0 * triangle);
+  EXPECT_EQ(sum(1, 1), 4.0 * triangle);
+}
+//@}
+
 }  // namespace
 
 }  // namespace mundy

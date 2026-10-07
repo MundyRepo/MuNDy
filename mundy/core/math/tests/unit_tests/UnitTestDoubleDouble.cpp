@@ -275,31 +275,49 @@ TEST(DoubleDoubleInMundyMath, AutoDiffOverDoubleDouble) {
   EXPECT_EQ(impl::passive_value(f), f.value());
 }
 
-TEST(DoubleDoubleInKokkos, ReductionsAndAtomics) {
-  // sum_{i=1}^{n} 1/(i (i + 1)) telescopes to n / (n + 1). Each addition rounds at 2^-104 relative, so the total
-  // error stays below n * 2^-103; in double it would be about 1e-16.
-  constexpr int n = 1000;
+//! \name Device kernels, as free functions: CUDA forbids KOKKOS_LAMBDA in a test body (a private member function)
+//@{
+
+/// \brief sum_{i=1}^{n} 1/(i (i + 1)), reduced with Kokkos::Sum on the default execution space.
+DD telescoping_sum_on_device(const int n) {
   DD sum = 0.0;
   Kokkos::parallel_reduce(
       "DoubleDouble::sum", Kokkos::RangePolicy<>(1, n + 1),
       KOKKOS_LAMBDA(const int i, DD& local) { local += DD(1.0) / (DD(i) * DD(i + 1)); }, sum);
-  expect_dd_near(sum, DD(n) / DD(n + 1), 1e-27, "telescoping sum");
+  return sum;
+}
 
+/// \brief max_{i < n} (1 + 2^-80) i, reduced with Kokkos::Max on the default execution space.
+DD largest_on_device(const int n) {
   DD largest = 0.0;
   Kokkos::parallel_reduce(
       "DoubleDouble::max", Kokkos::RangePolicy<>(0, n),
       KOKKOS_LAMBDA(const int i, DD& local) { local = max(local, DD(1.0, 0x1p-80) * DD(i)); },
       Kokkos::Max<DD>(largest));
-  EXPECT_EQ(largest, DD(1.0, 0x1p-80) * DD(n - 1));
+  return largest;
+}
 
-  // Every thread adds 1 + 2^-80; the exact total n + n 2^-80 needs the low part.
+/// \brief n atomic additions of 1 + 2^-80 to one value on the default execution space.
+DD atomic_total_on_device(const int n) {
   Kokkos::View<DD> total("total");
   Kokkos::parallel_for(
       "DoubleDouble::atomic_add", Kokkos::RangePolicy<>(0, n),
       KOKKOS_LAMBDA(const int) { mundy::atomic_add(&total(), DD(1.0, 0x1p-80)); });
   DD host_total;
   Kokkos::deep_copy(host_total, total);
-  EXPECT_EQ(host_total, DD(static_cast<double>(n), n * 0x1p-80));
+  return host_total;
+}
+//@}
+
+TEST(DoubleDoubleInKokkos, ReductionsAndAtomics) {
+  // sum_{i=1}^{n} 1/(i (i + 1)) telescopes to n / (n + 1). Each addition rounds at 2^-104 relative, so the total
+  // error stays below n * 2^-103; in double it would be about 1e-16.
+  constexpr int n = 1000;
+  expect_dd_near(telescoping_sum_on_device(n), DD(n) / DD(n + 1), 1e-27, "telescoping sum");
+  EXPECT_EQ(largest_on_device(n), DD(1.0, 0x1p-80) * DD(n - 1));
+
+  // Every thread adds 1 + 2^-80; the exact total n + n 2^-80 needs the low part.
+  EXPECT_EQ(atomic_total_on_device(n), DD(static_cast<double>(n), n * 0x1p-80));
 }
 
 }  // namespace

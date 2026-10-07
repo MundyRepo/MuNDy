@@ -1259,4 +1259,15 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AVector<T, N, Accessor1>& 
 
 }  // namespace mundy
 
+/// \brief The identity of Kokkos::Sum over mundy::Vector, so Vector-valued sums work in any Kokkos::parallel_reduce.
+///
+/// Only Sum is supported: Prod, Max, and Min would need an elementwise product and an ordering, which Vector does not
+/// define.
+template <typename T, size_t N>
+struct Kokkos::reduction_identity<mundy::Vector<T, N>> {
+  KOKKOS_FORCEINLINE_FUNCTION constexpr static mundy::Vector<T, N> sum() {
+    return mundy::Vector<T, N>::zeros();
+  }
+};
+
 #endif  // MUNDY_MATH_VECTOR_HPP_

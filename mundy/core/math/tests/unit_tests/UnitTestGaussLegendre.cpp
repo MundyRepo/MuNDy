@@ -170,10 +170,10 @@ TEST(GaussLegendre, IsSymmetricAndAscending) {
   expect_symmetric_and_ascending<61>();
 }
 
-TEST(GaussLegendre, IntegratesOnTheDevice) {
-  // int_{-1}^{1} (x + c)^5 dx = ((1 + c)^6 - (c - 1)^6) / 6, a degree-5 polynomial that the 3-point rule integrates
-  // exactly, summed over c = 0, 0.01, ..., 0.99.
-  constexpr int num_shifts = 100;
+/// \brief Sum over c = 0.01 s, s < num_shifts, of the 3-point rule for int_{-1}^{1} (x + c)^5 dx, on the device.
+///
+/// A free function, since CUDA forbids KOKKOS_LAMBDA in a test body (a private member function).
+double integrate_shifted_quintics_on_device(const int num_shifts) {
   double sum = 0.0;
   Kokkos::parallel_reduce(
       "GaussLegendre::integrate", Kokkos::RangePolicy<>(0, num_shifts),
@@ -185,6 +185,14 @@ TEST(GaussLegendre, IntegratesOnTheDevice) {
         });
       },
       sum);
+  return sum;
+}
+
+TEST(GaussLegendre, IntegratesOnTheDevice) {
+  // int_{-1}^{1} (x + c)^5 dx = ((1 + c)^6 - (c - 1)^6) / 6, a degree-5 polynomial that the 3-point rule integrates
+  // exactly, summed over c = 0, 0.01, ..., 0.99.
+  constexpr int num_shifts = 100;
+  const double sum = integrate_shifted_quintics_on_device(num_shifts);
 
   double expected = 0.0;
   for (int s = 0; s < num_shifts; ++s) {
