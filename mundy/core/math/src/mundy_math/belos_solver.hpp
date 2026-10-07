@@ -202,8 +202,8 @@ auto belos_solve(const Problem& prob, XVector& x, const BelosConfig<typename Pro
 /// \brief Wraps a square operator as its inverse: apply(rhs, out) solves op * out = rhs via matrix-free Belos.
 ///
 /// The Belos solve (Map, vectors, problem, and solver) is built once at construction and reused across apply()
-/// calls, which only swap the right-hand side. The solution buffer starts zeroed, so the first apply is a cold
-/// start even when \p warm_start is set; thereafter warm_start reuses the previous solution as the initial guess.
+/// calls, which only swap the right-hand side. Each solve starts from the guess held in out, which must be finite
+/// (zero is a cold start).
 /// \p Precond, when not NoPreconditioner, is applied as a right preconditioner (its apply() computes the
 /// approximate-inverse action). apply() throws std::runtime_error if the inner solve does not converge. Host-only.
 template <typename Backend, typename Op, typename Precond = NoPreconditioner>
@@ -214,15 +214,12 @@ class BelosInvOp {
   using value_type = impl::vector_value_type<x_vector_t>;
   using config_t = BelosConfig<value_type>;
 
-  BelosInvOp(Backend, Op&& op, const config_t& cfg, Precond&& precond, bool warm_start = false)
+  BelosInvOp(Backend, Op&& op, const config_t& cfg, Precond&& precond)
       : op_storage_(std::forward<Op>(op)),
-        warm_start_(warm_start),
-        x_(Backend::make_domain_vector(op_storage_.get())),
         session_(op_storage_.get(), Backend::domain_size(op_storage_.get()), impl::solver_name_string(cfg.solver),
                  impl::make_parameter_list(cfg), std::forward<Precond>(precond)) {
     MUNDY_THROW_ASSERT(Backend::domain_size(op_storage_.get()) == Backend::range_size(op_storage_.get()),
                        std::invalid_argument, "BelosInvOp: operator must be square.");
-    Backend::deep_copy(x_, value_type(0));  // defined initial guess, so a warm first apply is a cold start
   }
 
   // clang-format off
@@ -233,23 +230,16 @@ class BelosInvOp {
   auto make_range_vector() const { return Backend::make_range_vector(op_storage_.get()); }
   // clang-format on
 
-  /// out := op^{-1} rhs, via Belos.
+  /// out := op^{-1} rhs, via Belos from the guess held in out.
   template <class RhsVector, class OutVector>
   void apply(const RhsVector& rhs, OutVector& out) const {
-    constexpr value_type zero = static_cast<value_type>(0);
-    if (!warm_start_) {
-      Backend::axpby(zero, x_, zero, x_);  // cold start: x0 = 0
-    }
-    // else: leave x_ at whatever the previous solve left (warm start).
-
-    const impl::BelosSolveStats stats = session_.solve(rhs, x_);
+    const impl::BelosSolveStats stats = session_.solve(rhs, out);
     last_result_ = BelosResult<value_type>{static_cast<unsigned>(stats.num_iters),
                                            static_cast<value_type>(stats.achieved_tol), stats.converged};
 
     // A non-converged solve would silently return a wrong answer, so throw instead of returning it.
     MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error,
                         "BelosInvOp: inner Belos solve failed to converge.");
-    Backend::deep_copy(out, x_);
   }
 
   const BelosResult<value_type>& last_result() const {
@@ -260,21 +250,19 @@ class BelosInvOp {
   using session_t = impl::BelosSolveSession<Backend, std::remove_cvref_t<Op>, value_type, std::remove_cvref_t<Precond>>;
 
   ::mundy::storage<Op> op_storage_;
-  bool warm_start_;
-  mutable x_vector_t x_;
   mutable session_t session_;
   mutable BelosResult<value_type> last_result_{};
 };
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <class Backend, class Op, class Scalar, class Precond>
-BelosInvOp(Backend, Op&&, const BelosConfig<Scalar>&, Precond&&, bool) -> BelosInvOp<Backend, Op, Precond>;
+BelosInvOp(Backend, Op&&, const BelosConfig<Scalar>&, Precond&&) -> BelosInvOp<Backend, Op, Precond>;
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 /// \brief Build a BelosInvOp. \p precond defaults to no preconditioner.
 template <class Backend, class Op, class Scalar, class Precond = NoPreconditioner>
-auto make_belos_inv_op(Op&& op, const BelosConfig<Scalar>& cfg, Precond&& precond = {}, bool warm_start = false) {
-  return BelosInvOp(Backend{}, std::forward<Op>(op), cfg, std::forward<Precond>(precond), warm_start);
+auto make_belos_inv_op(Op&& op, const BelosConfig<Scalar>& cfg, Precond&& precond = {}) {
+  return BelosInvOp(Backend{}, std::forward<Op>(op), cfg, std::forward<Precond>(precond));
 }
 //@}
 

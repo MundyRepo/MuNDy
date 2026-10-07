@@ -32,6 +32,7 @@
 
 // Mundy
 #include <mundy_math/cmath.hpp>            // for mundy::sqrt
+#include <mundy_math/linear_ops.hpp>       // for MUNDY_OP_WORKSPACE, MUNDY_OP_WORKSPACE_CHILD, mundy::impl::CommitGroup
 #include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, Preconditioner}
 #include <mundy_math/residuals.hpp>        // for the residual policies (L2Residual, RelativeL2Residual, ...)
 #include <mundy_math/solver_backends.hpp>  // for mundy::{Backend, Workspace, concepts, ...}
@@ -212,6 +213,7 @@ class CGStrategy {
     // x0 = alpha x.
     backend_t::apply(prob.A(), state.x(), state.Ap(), workspace);
     const value_type x_A_x = backend_t::template dot<value_type>(state.x(), state.Ap());
+    MUNDY_THROW_ASSERT(x_A_x >= zero, std::invalid_argument, "CGStrategy: the initial guess must be finite.");
     if (x_A_x > zero) {
       const value_type alpha = backend_t::template dot<value_type>(state.x(), prob.b()) / x_A_x;
       backend_t::axpby(alpha, state.x(), zero, state.x());
@@ -396,44 +398,55 @@ KOKKOS_FUNCTION auto solve_linear_system(const Problem& prob, const Strategy& st
 
 /// \brief Wraps an SPD operator as its inverse: apply(rhs, out) solves op * out = rhs via matrix-free CG.
 ///
-/// x/r/p/Ap and the operator's own workspace are allocated once at construction and reused; only the lightweight
-/// per-call CGState/LinearSystem wrappers are rebuilt in apply(). 
-///
-/// The first apply is always a cold start; thereafter \p warm_start starts each solve from the previous solution.
+/// Each solve iterates in out, starting from the guess it holds: out must be finite (zero is a cold start) and must
+/// not alias rhs.
 ///
 /// \p Precond, when not NoPreconditioner, preconditions every solve.
 template <typename Backend, typename Op, typename Precond = NoPreconditioner>
 class CGInvOp {
  public:
   using backend_t = Backend;
-  using x_vector_t = decltype(Backend::make_domain_vector(std::declval<const Op&>()));
   using range_vector_t = decltype(Backend::make_range_vector(std::declval<const Op&>()));
-  using op_workspace_t = impl::workspace_for_t<Op>;
-  using value_type = impl::vector_value_type<x_vector_t>;
+  using value_type = impl::vector_value_type<range_vector_t>;
   using config_t = CGConfig<value_type>;
 
+  template <class RVector, class PVector, class ApVector, class OpWorkspace>
+  struct Workspace : impl::CommitGroup<OpWorkspace> {
+   private:
+    using base_t = impl::CommitGroup<OpWorkspace>;
+
+   public:
+    KOKKOS_INLINE_FUNCTION Workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace,
+                                     bool committed = false)
+        : base_t(std::forward<OpWorkspace>(op_workspace), committed),
+          r_storage_(std::forward<RVector>(r)),
+          p_storage_(std::forward<PVector>(p)),
+          ap_storage_(std::forward<ApVector>(ap)) {
+    }
+
+    KOKKOS_INLINE_FUNCTION Backend backend() const {
+      return Backend{};
+    }
+    MUNDY_OP_WORKSPACE(r, RVector)
+    MUNDY_OP_WORKSPACE(p, PVector)
+    MUNDY_OP_WORKSPACE(ap, ApVector)
+    MUNDY_OP_WORKSPACE_CHILD(op_workspace, 0)
+  };
+
   KOKKOS_FUNCTION
-  CGInvOp(Backend, Op&& op, const config_t& cfg, bool warm_start = false)
-      : CGInvOp(Backend{}, std::forward<Op>(op), cfg, NoPreconditioner{}, warm_start) {
+  CGInvOp(Backend, Op&& op, const config_t& cfg) : CGInvOp(Backend{}, std::forward<Op>(op), cfg, NoPreconditioner{}) {
   }
 
   KOKKOS_FUNCTION
-  CGInvOp(Backend, Op&& op, const config_t& cfg, Precond&& precond, bool warm_start = false)
-      : op_storage_(std::forward<Op>(op)),
-        precond_storage_(std::forward<Precond>(precond)),
-        cfg_(cfg),
-        warm_start_(warm_start),
-        x_(Backend::make_domain_vector(op_storage_.get())),
-        r_(Backend::make_range_vector(op_storage_.get())),
-        p_(Backend::make_range_vector(op_storage_.get())),
-        ap_(Backend::make_range_vector(op_storage_.get())),
-        op_workspace_(impl::make_workspace(op_storage_.get())) {
+  CGInvOp(Backend, Op&& op, const config_t& cfg, Precond&& precond)
+      : op_storage_(std::forward<Op>(op)), precond_storage_(std::forward<Precond>(precond)), cfg_(cfg) {
     MUNDY_THROW_ASSERT(Backend::domain_size(op_storage_.get()) == Backend::range_size(op_storage_.get()),
                        std::invalid_argument, "CGInvOp: operator must be square.");
   }
 
   // clang-format off
   KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const auto& op() const { return op_storage_.get(); }
   KOKKOS_INLINE_FUNCTION size_t domain_size() const { return Backend::domain_size(op_storage_.get()); }
   KOKKOS_INLINE_FUNCTION size_t range_size() const { return Backend::range_size(op_storage_.get()); }
   KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
@@ -446,18 +459,24 @@ class CGInvOp {
   KOKKOS_INLINE_FUNCTION auto make_range_vector() const { return Backend::make_range_vector(op_storage_.get()); }
   // clang-format on
 
-  /// out := op^{-1} rhs, via CG.
-  template <class RhsVector, class OutVector>
-  KOKKOS_FUNCTION void apply(const RhsVector& rhs, OutVector& out) const {
-    constexpr value_type zero = static_cast<value_type>(0);
-    if (!warm_start_ || first_apply_) {
-      Backend::axpby(zero, x_, zero, x_);  // cold start: x0 = 0
-    }
-    // else: leave x_ at whatever it held after the previous solve (warm start).
-    first_apply_ = false;
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(Backend::make_range_vector(op()), Backend::make_range_vector(op()),
+                          Backend::make_range_vector(op()), impl::make_workspace(op()), committed);
+  }
 
-    auto prob = LinearSystem(Backend{}, op_storage_.get(), rhs, op_workspace_);
-    auto state = CGState(x_, r_, p_, ap_);
+  template <class RVector, class PVector, class ApVector, class OpWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace,
+                                             bool committed = false) const {
+    return Workspace<RVector, PVector, ApVector, OpWorkspace>(std::forward<RVector>(r), std::forward<PVector>(p),
+                                                              std::forward<ApVector>(ap),
+                                                              std::forward<OpWorkspace>(op_workspace), committed);
+  }
+
+  /// out := op^{-1} rhs, via CG from the guess held in out.
+  template <class RhsVector, class OutVector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply(const RhsVector& rhs, OutVector& out, WorkspaceType& workspace) const {
+    auto prob = LinearSystem(Backend{}, op(), rhs, workspace.op_workspace());
+    auto state = CGState(out, workspace.r(), workspace.p(), workspace.ap());
     auto strat = CGStrategy(L2Residual{}, cfg_, precond_storage_.get());
     last_result_ = solve_linear_system(prob, strat, state);
 
@@ -465,7 +484,14 @@ class CGInvOp {
     MUNDY_THROW_REQUIRE(last_result_.converged || last_result_.num_iters == cfg_.max_iters, std::runtime_error,
                         "CGInvOp: CG stopped early: p^T A p <= 0, so the operator is not positive definite.");
     MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error, "CGInvOp: inner CG solve failed to converge.");
-    Backend::deep_copy(out, x_);
+  }
+
+  // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
+  // direct member call bypasses the Backend::apply dispatch layer, so no separate invalidate is needed here.
+  template <class RhsVector, class OutVector>
+  KOKKOS_FUNCTION void apply(const RhsVector& rhs, OutVector& out) const {
+    auto tmp_workspace = make_workspace();
+    apply(rhs, out, tmp_workspace);
   }
 
   KOKKOS_INLINE_FUNCTION const CGResult<value_type>& last_result() const {
@@ -476,37 +502,29 @@ class CGInvOp {
   ::mundy::storage<Op> op_storage_;
   ::mundy::storage<Precond> precond_storage_;
   config_t cfg_;
-  bool warm_start_;
-  mutable bool first_apply_ = true;
-  mutable x_vector_t x_;
-  mutable range_vector_t r_;
-  mutable range_vector_t p_;
-  mutable range_vector_t ap_;
-  mutable op_workspace_t op_workspace_;
   mutable CGResult<value_type> last_result_{};
 };
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <class Backend, class Op, class Scalar>
-CGInvOp(Backend, Op&&, const CGConfig<Scalar>&, bool = false) -> CGInvOp<Backend, Op>;
+CGInvOp(Backend, Op&&, const CGConfig<Scalar>&) -> CGInvOp<Backend, Op>;
 
 template <class Backend, class Op, class Scalar, class Precond>
 MUNDY_REQUIRES(Preconditioner<Precond, Backend,
                               decltype(Backend::make_domain_vector(std::declval<const std::remove_cvref_t<Op>&>()))>)
-CGInvOp(Backend, Op&&, const CGConfig<Scalar>&, Precond&&, bool = false) -> CGInvOp<Backend, Op, Precond>;
+CGInvOp(Backend, Op&&, const CGConfig<Scalar>&, Precond&&) -> CGInvOp<Backend, Op, Precond>;
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 template <class Backend, class Op, class Scalar>
-KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg, bool warm_start = false) {
-  return CGInvOp(Backend{}, std::forward<Op>(op), cfg, warm_start);
+KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg) {
+  return CGInvOp(Backend{}, std::forward<Op>(op), cfg);
 }
 
 template <class Backend, class Op, class Scalar, class Precond>
 MUNDY_REQUIRES(Preconditioner<Precond, Backend,
                               decltype(Backend::make_domain_vector(std::declval<const std::remove_cvref_t<Op>&>()))>)
-KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg, Precond&& precond,
-                                           bool warm_start = false) {
-  return CGInvOp(Backend{}, std::forward<Op>(op), cfg, std::forward<Precond>(precond), warm_start);
+KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg, Precond&& precond) {
+  return CGInvOp(Backend{}, std::forward<Op>(op), cfg, std::forward<Precond>(precond));
 }
 //@}
 

@@ -148,6 +148,7 @@ void bench_view_methods(ankerl::nanobench::Bench& bench, const std::vector<doubl
   cg_cfg.tol = kTol;
   cg_cfg.max_iters = kMaxIters;
   auto mundy_inv = mundy::make_cg_inv_op<kokkos_backend_t>(mat_t(A), cg_cfg);
+  auto mundy_workspace = mundy_inv.make_workspace();
 
   mundy::BelosConfig<double> belos_cg_cfg;
   belos_cg_cfg.solver = mundy::BelosSolver::PSEUDOBLOCK_CG;
@@ -162,16 +163,19 @@ void bench_view_methods(ankerl::nanobench::Bench& bench, const std::vector<doubl
   auto belos_gmres_inv = mundy::make_belos_inv_op<kokkos_backend_t>(mat_t(A), belos_gmres_cfg);
 
   bench.run(kMethodLabels[kMundyKokkosCG], [&] {
-    mundy_inv.apply(bview, xview);
+    Kokkos::deep_copy(xview, 0.0);  // each run solves from zero
+    mundy_inv.apply(bview, xview, mundy_workspace);
     Kokkos::fence();
     ankerl::nanobench::doNotOptimizeAway(xview);
   });
   bench.run(kMethodLabels[kBelosCG], [&] {
+    Kokkos::deep_copy(xview, 0.0);  // each run solves from zero
     belos_cg_inv.apply(bview, xview);
     Kokkos::fence();
     ankerl::nanobench::doNotOptimizeAway(xview);
   });
   bench.run(kMethodLabels[kBelosGmres], [&] {
+    Kokkos::deep_copy(xview, 0.0);  // each run solves from zero
     belos_gmres_inv.apply(bview, xview);
     Kokkos::fence();
     ankerl::nanobench::doNotOptimizeAway(xview);

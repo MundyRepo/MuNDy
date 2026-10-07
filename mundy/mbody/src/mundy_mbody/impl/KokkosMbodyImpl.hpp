@@ -1980,6 +1980,7 @@ class LinearizationWorkspace {
         b("b", step.index_map.num_bilateral),
         b_rate("b_rate", step.index_map.num_bilateral),
         y_rhs("y_rhs", step.index_map.num_bilateral),
+        s_y("S_y_rhs", step.index_map.num_bilateral),
         grad("grad", step.index_map.num_unilateral),
         x_tmp("x_tmp", step.index_map.num_unilateral),
         grad_tmp("grad_tmp", step.index_map.num_unilateral),
@@ -2012,6 +2013,9 @@ class LinearizationWorkspace {
         const auto BT = make_block_rate_op<ExecSpace>(geometry_, step.num_rods);
         mixed_cqpp_workspace.emplace(
             make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, step.q, B, *schur_complement, BT));
+        // S solves from the guess held in its output: S b and S B^T M D x start from zero, then from their last values.
+        Kokkos::deep_copy(mixed_cqpp_workspace->s_b, 0.0);
+        Kokkos::deep_copy(mixed_cqpp_workspace->l_workspace.u(), 0.0);
       } else {
         lcp_workspace.emplace(make_quadratic_form<backend_t>(DT, M_dt, D).make_workspace());
       }
@@ -2058,6 +2062,7 @@ class LinearizationWorkspace {
   view_t b;
   view_t b_rate;
   view_t y_rhs;
+  view_t s_y;
   view_t grad;
   view_t x_tmp;
   view_t grad_tmp;
@@ -2151,11 +2156,15 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
       backend_t::apply(M_dt, workspace.dx, workspace.mdx, workspace.m_dt_workspace);
       backend_t::apply(BT, workspace.mdx, workspace.y_rhs, workspace.bt_workspace);
       backend_t::axpby(1.0, workspace.b, 1.0, workspace.y_rhs);  // y_rhs = b + B^T M D x*
+
+      // S y_rhs = S b + S B^T M D x*, both left by the unilateral solve at x*, so S y_rhs is solved from their sum.
+      Kokkos::deep_copy(workspace.s_y, workspace.mixed_cqpp_workspace->l_workspace.u());
+      backend_t::axpby(1.0, workspace.mixed_cqpp_workspace->s_b, 1.0, workspace.s_y);
     } else {
       Kokkos::deep_copy(workspace.y_rhs, workspace.b);
     }
-    backend_t::apply(*workspace.schur_complement, workspace.y_rhs, out.y, *workspace.s_workspace);
-    backend_t::axpby(-1.0, out.y, 0.0, out.y);  // y := -y
+    backend_t::apply(*workspace.schur_complement, workspace.y_rhs, workspace.s_y, *workspace.s_workspace);
+    backend_t::axpby(-1.0, workspace.s_y, 0.0, out.y);  // y = -S y_rhs
     backend_t::apply(B, out.y, out.bilateral_wrench, workspace.b_workspace);
   } else {
     Kokkos::deep_copy(out.bilateral_wrench, 0.0);

@@ -25,6 +25,7 @@
 
 // C++ core
 #include <cmath>      // for std::ldexp
+#include <cstdint>    // for uint64_t
 #include <limits>     // for std::numeric_limits
 #include <stdexcept>  // for std::runtime_error
 
@@ -103,9 +104,9 @@ void solve_spd_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecutionSpa
       });
 }
 
-// Applies cold, warm-started, and Jacobi-preconditioned inverses of spd_matrix() to one rhs inside a kernel, the warm
-// one twice. The inverses are const, so all their state changes go through mutable members. Solution k is
-// x(3k), ..., x(3k + 2) and took iters(k) iterations.
+// Applies plain and Jacobi-preconditioned inverses of spd_matrix() to one rhs inside a kernel, the plain one twice:
+// from zero, then from its solution. The inverses are const, so all their state changes go through mutable members.
+// Solution k is x(3k), ..., x(3k + 2) and took iters(k) iterations.
 void apply_cg_inv_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>& x,
                             const Kokkos::View<unsigned*, Kokkos::DefaultExecutionSpace::memory_space>& iters) {
   Kokkos::parallel_for(
@@ -114,20 +115,18 @@ void apply_cg_inv_in_kernel(const Kokkos::View<double*, Kokkos::DefaultExecution
                          -1.0, 2.0,  -1.0,  //
                          0.0,  -1.0, 2.0};
         const Vector3d rhs{0.3, -0.1, 0.7};
-        const auto cold = make_cg_inv_op<mm_backend_t>(Matrix3d(A), CGConfig<double>{});
-        const auto warm = make_cg_inv_op<mm_backend_t>(Matrix3d(A), CGConfig<double>{}, /*warm_start=*/true);
+        const auto plain = make_cg_inv_op<mm_backend_t>(Matrix3d(A), CGConfig<double>{});
         const auto jacobi = make_cg_inv_op<mm_backend_t>(
             Matrix3d(A), CGConfig<double>{}, make_jacobi_preconditioner<mm_backend_t>(Vector3d{2.0, 2.0, 2.0}));
-        Vector3d out[4];
-        cold.apply(rhs, out[0]);
-        iters(0) = cold.last_result().num_iters;
-        warm.apply(rhs, out[1]);
-        iters(1) = warm.last_result().num_iters;
-        warm.apply(rhs, out[2]);
-        iters(2) = warm.last_result().num_iters;
-        jacobi.apply(rhs, out[3]);
-        iters(3) = jacobi.last_result().num_iters;
-        for (int k = 0; k < 4; ++k) {
+        Vector3d out[3] = {Vector3d{0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 0.0}, Vector3d{0.0, 0.0, 0.0}};
+        plain.apply(rhs, out[0]);
+        iters(0) = plain.last_result().num_iters;
+        out[1] = out[0];
+        plain.apply(rhs, out[1]);
+        iters(1) = plain.last_result().num_iters;
+        jacobi.apply(rhs, out[2]);
+        iters(2) = jacobi.last_result().num_iters;
+        for (int k = 0; k < 3; ++k) {
           for (int i = 0; i < 3; ++i) {
             x(3 * k + i) = out[k][i];
           }
@@ -258,23 +257,6 @@ TEST(LinearSystem, CGInvOpMatchesDenseInverse) {
   EXPECT_TRUE(pcg_inv.last_result().converged);
 }
 
-TEST(LinearSystem, CGInvOpReusedAcrossMultipleRhsAlwaysColdStarts) {
-  // CGInvOp's constructor default is warm_start = false: every apply() call must solve from x0 = 0, regardless
-  // of what a previous apply() call left behind in the persistent x_ buffer.
-  const Matrix3d A = spd_matrix();
-  auto cg_inv = CGInvOp(mm_backend_t{}, Matrix3d(A), CGConfig<double>{});
-
-  Vector3d out1{0.0, 0.0, 0.0};
-  cg_inv.apply(Vector3d{1.0, 0.0, 0.0}, out1);
-  Vector3d out2{0.0, 0.0, 0.0};
-  cg_inv.apply(Vector3d{0.0, 0.0, 1.0}, out2);
-
-  const Vector3d expected2 = inverse(A) * Vector3d{0.0, 0.0, 1.0};
-  for (int i = 0; i < 3; ++i) {
-    EXPECT_NEAR(out2[i], expected2[i], 1e-6);
-  }
-}
-
 // With P = I, preconditioned CG is plain CG: z = r ./ 1 is r itself, so the solves agree bit for bit.
 TEST(LinearSystem, UnitJacobiIsPlainCG) {
   const Matrix7d A = spd_matrix7();
@@ -387,26 +369,22 @@ TEST(LinearSystem, NotPositiveDefiniteStopsEarly) {
   EXPECT_THROW(cg_inv.apply(b, out), std::runtime_error);
 }
 
-// CGInvOps constructed and applied inside a kernel. The warm inverse's first apply is the cold solve, and its second
-// starts on the solution.
+// CGInvOps constructed and applied inside a kernel. A solve from the solution takes no iteration.
 TEST(LinearSystem, CGInvOpInKernel) {
-  Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space> x("x", 12);
-  Kokkos::View<unsigned*, Kokkos::DefaultExecutionSpace::memory_space> iters("iters", 4);
+  Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space> x("x", 9);
+  Kokkos::View<unsigned*, Kokkos::DefaultExecutionSpace::memory_space> iters("iters", 3);
   apply_cg_inv_in_kernel(x, iters);
 
   const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
   const auto iters_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, iters);
   const Vector3d expected = inverse(spd_matrix()) * Vector3d{0.3, -0.1, 0.7};
-  for (int k = 0; k < 4; ++k) {
+  for (int k = 0; k < 3; ++k) {
     for (int i = 0; i < 3; ++i) {
       EXPECT_NEAR(x_host(3 * k + i), expected[i], 1e-6) << "solution " << k << ", entry " << i;
     }
   }
-  for (int i = 0; i < 3; ++i) {
-    EXPECT_EQ(x_host(3 + i), x_host(i)) << "entry " << i;
-  }
-  EXPECT_EQ(iters_host(1), iters_host(0));
-  EXPECT_EQ(iters_host(2), 0u);
+  EXPECT_GT(iters_host(0), 0u);
+  EXPECT_EQ(iters_host(1), 0u);
 }
 
 // A LinearSystem constructed and solved inside a kernel.
@@ -428,6 +406,21 @@ TEST(LinearSystem, MundyMathBackendInKernel) {
 
 using kokkos_backend_t = KokkosBackend<Kokkos::DefaultExecutionSpace>;
 using view_t = Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>;
+
+/// \brief How many Kokkos allocations f makes.
+template <class F>
+size_t count_allocations(F&& f) {
+  static size_t count = 0;
+  count = 0;
+  Kokkos::Tools::Experimental::set_init_callback(
+      [](const int, const uint64_t, const uint32_t, Kokkos_Profiling_KokkosPDeviceInfo*) {});
+  Kokkos::Tools::Experimental::set_allocate_data_callback(
+      [](const Kokkos_Profiling_SpaceHandle, const char*, const void*, const uint64_t) { ++count; });
+  f();
+  Kokkos::Tools::Experimental::set_allocate_data_callback(nullptr);
+  Kokkos::Tools::Experimental::set_init_callback(nullptr);
+  return count;
+}
 
 // A hand-rolled 3x3 SPD tridiagonal operator over Kokkos::View, avoiding any dependence on
 // KokkosBlas/KokkosLapack (which may not have a usable LAPACK backend in a given build environment) -- this
@@ -503,8 +496,52 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
   EXPECT_NEAR(pcg_x_host(2), 1.0, 1e-8);
 }
 
-// The solution buffer starts zeroed, so a warm-started inverse's first apply is a cold solve, bit for bit.
-TEST(LinearSystem, CGInvOpFirstWarmApplyIsCold) {
+// An inverse holds no solve history: each solve iterates in its out from the guess it holds. Into a zeroed out it is a
+// fresh inverse's solve, bit for bit, whatever it solved before; re-solving a right-hand side into the out holding its
+// solution takes no iteration.
+TEST(LinearSystem, CGInvOpStartsFromOut) {
+  view_t rhs_a("rhs_a", 3), rhs_b("rhs_b", 3);
+  auto rhs_a_host = Kokkos::create_mirror_view(rhs_a);
+  auto rhs_b_host = Kokkos::create_mirror_view(rhs_b);
+  rhs_a_host(0) = 0.3;
+  rhs_a_host(1) = -0.1;
+  rhs_a_host(2) = 0.7;
+  rhs_b_host(0) = -0.5;
+  rhs_b_host(1) = 0.9;
+  rhs_b_host(2) = 0.2;
+  Kokkos::deep_copy(rhs_a, rhs_a_host);
+  Kokkos::deep_copy(rhs_b, rhs_b_host);
+  const CGConfig<double> cfg;
+
+  // Solve
+  auto fresh = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg);
+  view_t fresh_out("fresh_out", 3);
+  fresh.apply(rhs_a, fresh_out);
+  auto inv = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg);
+  view_t out_a("out_a", 3), out_b("out_b", 3);
+  inv.apply(rhs_b, out_b);
+  inv.apply(rhs_a, out_a);
+  const unsigned zeroed_iters = inv.last_result().num_iters;
+  const auto zeroed = Kokkos::create_mirror(Kokkos::HostSpace{}, out_a);  // a copy, as the next solve rewrites out_a
+  Kokkos::deep_copy(zeroed, out_a);
+  inv.apply(rhs_a, out_a);
+
+  // Into a zeroed out
+  ASSERT_GT(fresh.last_result().num_iters, 0u);
+  EXPECT_EQ(zeroed_iters, fresh.last_result().num_iters);
+  const auto fresh_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, fresh_out);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(zeroed(i), fresh_host(i)) << "entry " << i;
+  }
+
+  // Into the out holding the solution
+  EXPECT_EQ(inv.last_result().num_iters, 0u);
+  EXPECT_TRUE(inv.last_result().converged);
+}
+
+// An inverse's scratch lives in its workspace: constructing the inverse allocates nothing, and solves through one
+// workspace allocate nothing. A solve through a held workspace is the solve through a temporary one, bit for bit.
+TEST(LinearSystem, CGInvOpScratchLivesInItsWorkspace) {
   view_t rhs("rhs", 3);
   auto rhs_host = Kokkos::create_mirror_view(rhs);
   rhs_host(0) = 0.3;
@@ -514,18 +551,27 @@ TEST(LinearSystem, CGInvOpFirstWarmApplyIsCold) {
   const CGConfig<double> cfg;
 
   // Solve
-  auto warm = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg, /*warm_start=*/true);
-  auto cold = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg, /*warm_start=*/false);
-  view_t warm_out("warm_out", 3), cold_out("cold_out", 3);
-  warm.apply(rhs, warm_out);
-  cold.apply(rhs, cold_out);
+  const size_t construct_allocations =
+      count_allocations([&] { (void)make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg); });
+  const auto inv = make_cg_inv_op<kokkos_backend_t>(TridiagKokkosOp{}, cfg);
+  view_t temp_out("temp_out", 3), held_out("held_out", 3);
+  inv.apply(rhs, temp_out);
+  auto workspace = inv.make_workspace();
+  const size_t solve_allocations = count_allocations([&] {
+    inv.apply(rhs, held_out, workspace);
+    Kokkos::deep_copy(held_out, 0.0);
+    inv.apply(rhs, held_out, workspace);
+  });
+
+  // Allocations
+  EXPECT_EQ(construct_allocations, 0u);
+  EXPECT_EQ(solve_allocations, 0u);
 
   // Bit for bit
-  EXPECT_EQ(warm.last_result().num_iters, cold.last_result().num_iters);
-  const auto warm_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, warm_out);
-  const auto cold_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, cold_out);
+  const auto temp_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, temp_out);
+  const auto held_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, held_out);
   for (int i = 0; i < 3; ++i) {
-    EXPECT_EQ(warm_host(i), cold_host(i)) << "entry " << i;
+    EXPECT_EQ(held_host(i), temp_host(i)) << "entry " << i;
   }
 }
 

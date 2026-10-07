@@ -437,7 +437,7 @@ TEST(BelosSolver, BelosInvOpThrowsOnNonConvergence) {
   cfg.num_blocks = A.n;
   auto inv = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg);
 
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), A.n);
+  view_t out("out", A.n);
   EXPECT_THROW(inv.apply(rhs, out), std::runtime_error);
 }
 
@@ -453,15 +453,15 @@ TEST(BelosSolver, BelosInvOpRecoversKnownSolution) {
   cfg.max_iters = 200;
   auto inv = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg);
 
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), A.n);
+  view_t out("out", A.n);
   inv.apply(rhs, out);
   EXPECT_TRUE(inv.last_result().converged) << "inner solve did not converge: " << inv.last_result();
   expect_matches(out, xe);
 }
 
 TEST(BelosSolver, BelosInvOpReusedAcrossRhsColdStarts) {
-  // Default warm_start = false: each apply() cold-starts, so a second solve of a different system is correct
-  // regardless of the internal buffer left by the first.
+  // An inverse holds no solve history: each solve starts from its own out, so a second system solved into a zeroed out
+  // is correct whatever the first left behind.
   const NonsymTridiagOp A{12};
   BelosConfig<double> cfg;
   cfg.tol = 1e-10;
@@ -470,23 +470,22 @@ TEST(BelosSolver, BelosInvOpReusedAcrossRhsColdStarts) {
 
   const host_view_t x1 = ramp(A.n, 0.5);
   const view_t rhs1 = known_rhs(A, x1);
-  view_t out1(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out1"), A.n);
+  view_t out1("out1", A.n);
   inv.apply(rhs1, out1);
   expect_matches(out1, x1);
 
   const host_view_t x2 = ramp(A.n, -0.3);  // a different solution
   const view_t rhs2 = known_rhs(A, x2);
-  view_t out2(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out2"), A.n);
+  view_t out2("out2", A.n);
   inv.apply(rhs2, out2);
   EXPECT_TRUE(inv.last_result().converged);
   expect_matches(out2, x2);
 }
 
 TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
-  // warm_start = true feeds the previous solve's solution as the next initial guess. With the stopping tolerance
-  // measured against the right-hand-side norm (the regime in which a better guess is worth fewer iterations),
-  // priming the warm operator on one system and then solving a nearby one (same operator, slightly shifted rhs)
-  // takes fewer iterations than an otherwise-identical cold operator solving that same nearby system from zero.
+  // A solve starts from the guess held in out. With the stopping tolerance measured against the right-hand-side norm
+  // (the regime in which a better guess is worth fewer iterations), solving a nearby system (same operator, slightly
+  // shifted rhs) from an out holding the first system's solution takes fewer iterations than solving it from zero.
   // A clustered, well-conditioned spectrum makes convergence residual-driven, so the guess's head start shows up
   // as a clear iteration reduction (a spread spectrum would need ~one iteration per eigenvalue regardless).
   const NonsymTridiagOp A{40};
@@ -501,15 +500,12 @@ TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
   cfg.extra->set("Implicit Residual Scaling", std::string("Norm of RHS"));
   cfg.extra->set("Explicit Residual Scaling", std::string("Norm of RHS"));
 
-  auto warm = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, NoPreconditioner{},
-                                                  /*warm_start=*/true);
-  auto cold = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, NoPreconditioner{},
-                                                  /*warm_start=*/false);
+  auto inv = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg);
 
   const host_view_t x1 = ramp(n, 0.1);
   const view_t rhs1 = known_rhs(A, x1);
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), n);
-  warm.apply(rhs1, out);  // prime the warm operator's internal guess with solution 1
+  view_t warm_out("warm_out", n);
+  inv.apply(rhs1, warm_out);  // warm_out now holds solution 1
 
   host_view_t x2("x2", n);  // a nearby system: solution shifted by a small constant
   for (int i = 0; i < n; ++i) {
@@ -517,12 +513,13 @@ TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
   }
   const view_t rhs2 = known_rhs(A, x2);
 
-  warm.apply(rhs2, out);
-  const unsigned warm_iters = warm.last_result().num_iters;
-  expect_matches(out, x2, 1e-4);
-  cold.apply(rhs2, out);
-  const unsigned cold_iters = cold.last_result().num_iters;
-  expect_matches(out, x2, 1e-4);
+  inv.apply(rhs2, warm_out);
+  const unsigned warm_iters = inv.last_result().num_iters;
+  expect_matches(warm_out, x2, 1e-4);
+  view_t cold_out("cold_out", n);
+  inv.apply(rhs2, cold_out);
+  const unsigned cold_iters = inv.last_result().num_iters;
+  expect_matches(cold_out, x2, 1e-4);
 
   EXPECT_LT(warm_iters, cold_iters) << "warm=" << warm_iters << " cold=" << cold_iters;
 }
@@ -544,7 +541,7 @@ TEST(BelosSolver, BelosInvOpWithPreconditionerRecoversSolution) {
   cfg.num_blocks = n;
   auto inv = make_belos_inv_op<kokkos_backend_t>(VaryingDiagTridiagOp(A), cfg, JacobiPrecond{sys.inv_diag, n});
 
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), n);
+  view_t out("out", n);
   inv.apply(rhs, out);
   EXPECT_TRUE(inv.last_result().converged) << inv.last_result();
   expect_matches(out, xe);
