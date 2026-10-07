@@ -46,10 +46,42 @@
 
 namespace mundy {
 
+namespace impl {
+template <class MemorySpace>
+constexpr bool invert_is_available() {
+  // KokkosLapack::gesv's backends: LAPACK for host memory, cuSOLVER or MAGMA for CUDA memory, rocSOLVER or MAGMA for
+  // HIP memory.
+  if constexpr (std::is_same_v<MemorySpace, Kokkos::HostSpace>) {
+#if defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK)
+    return true;
+#endif
+  }
+#if defined(KOKKOS_ENABLE_CUDA) && \
+    (defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) || defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA))
+  if constexpr (std::is_same_v<MemorySpace, Kokkos::CudaSpace>) {
+    return true;
+  }
+#endif
+#if defined(KOKKOS_ENABLE_HIP) && \
+    (defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) || defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA))
+  if constexpr (std::is_same_v<MemorySpace, Kokkos::HIPSpace>) {
+    return true;
+  }
+#endif
+  return false;
+}
+}  // namespace impl
+
+/// \brief Whether this build can invert matrices held in MemorySpace. Where it cannot, invert throws
+/// std::runtime_error.
+template <class MemorySpace>
+inline constexpr bool invert_is_available_v = impl::invert_is_available<MemorySpace>();
+
 /// \brief matrix_inverse = matrix^{-1} for a dense square matrix, by LU factorization with partial pivoting.
 ///
 /// matrix is overwritten by its LU factors, which saves a copy of an n x n matrix. Throws std::runtime_error if matrix
-/// is singular: if a pivot of its factorization is zero (LAPACK's info > 0) or not finite.
+/// is singular: if a pivot of its factorization is zero (LAPACK's info > 0) or not finite; and if this build cannot
+/// invert matrices held in the views' memory space (see invert_is_available_v).
 ///
 /// \param[in] space The execution space instance to run on.
 /// \param[in,out] matrix On entry, the n x n matrix; on exit, its LU factors.
