@@ -170,7 +170,7 @@ void bench_size(int order, const Options& opts, RowMap& rows) {
       .set_quadrature_weights(g.weights);
 
   // Build both inverses once so the solve timings do not include setup.
-  periphery.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+  periphery.build_inverse_self_interaction_matrix();
   mundy::BelosConfig<double> cfg;
   cfg.solver = mundy::BelosSolver::PSEUDOBLOCK_GMRES;
   cfg.tol = kGmresTol;
@@ -191,7 +191,7 @@ void bench_size(int order, const Options& opts, RowMap& rows) {
   auto bench = make_bench(num_nodes, opts);
 
   bench.run(kOpLabels[kDirectBuild], [&] {
-    periphery.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+    periphery.build_inverse_self_interaction_matrix();
     ankerl::nanobench::doNotOptimizeAway(periphery.get_M_inv().data());
   });
 

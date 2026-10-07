@@ -29,6 +29,7 @@
 
 // C++ core
 #include <array>    // for std::array
+#include <cstdio>   // for std::remove
 #include <fstream>  // for std::ofstream
 #include <iomanip>  // for std::setw, std::setprecision
 #include <numeric>  // for std::accumulate
@@ -41,6 +42,8 @@
 // Mundy
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Vector3.hpp>              // for Vector3
+#include <mundy_math/invert.hpp>               // for mundy::invert
+#include <mundy_math/matrix_market.hpp>        // for mundy::read_matrix_market, mundy::write_matrix_market
 #include <mundy_mbody/Periphery.hpp>           // for fill_skfie_matrix, apply_skfie, PeripheryT, ...
 #include <mundy_utils/rng.hpp>                 // for mundy::make_philox
 
@@ -354,7 +357,7 @@ void apply_resistance(const double viscosity,
   // Invert the SKFIE matrix
   Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> M_inv("M_inv", 3 * num_surface_points,
                                                                       3 * num_surface_points);
-  invert_matrix(Kokkos::DefaultHostExecutionSpace(), M, M_inv);
+  mundy::invert(Kokkos::DefaultHostExecutionSpace(), M, M_inv);
 
   // F = M^{-1} * U_slip
   KokkosBlas::gemv(Kokkos::DefaultHostExecutionSpace(), "N", 1.0, M_inv, surface_velocities, 0.0, surface_forces);
@@ -424,130 +427,53 @@ class SphereQuadFunctor {
 //! \name Periphery auxilary function tests
 //@{
 
-TEST(PeripheryTest, KokkosInvertMatrix) {
-  // This test tests our understanding of how to use Kokkos to invert a matrix.
-  // It explicitly tests that the matrix_inverse function works as expected.
+TEST(PeripheryTest, FileSettersMatchViewSetters) {
+  // The file setters read Matrix Market files exactly: a periphery set from files matches one set from views bit for
+  // bit, and a written inverse reads back bit for bit.
+  using HostPeripheryType = PeripheryT<Kokkos::DefaultHostExecutionSpace>;
+  const double viscosity = 0.5305;
+  const bool outward_normal = false;
+  auto [points, weights, normals] = SphereQuadFunctor(1.7, outward_normal)(6);
+  const size_t num_surface_nodes = weights.extent(0);
+  const std::string prefix = "FileSettersMatchViewSetters_";
+  mundy::write_matrix_market(prefix + "points.mtx", points);
+  mundy::write_matrix_market(prefix + "normals.mtx", normals);
+  mundy::write_matrix_market(prefix + "weights.mtx", weights);
 
-  // Statistically speaking, nearly all randomly generated matrices are invertible, so we'll just generate a random
-  // matrix and invert it!
+  HostPeripheryType from_views(num_surface_nodes, viscosity);
+  from_views.set_surface_positions(points)
+      .set_surface_normals(normals, outward_normal)
+      .set_quadrature_weights(weights)
+      .build_inverse_self_interaction_matrix();
+  HostPeripheryType from_files(num_surface_nodes, viscosity);
+  from_files.set_surface_positions(prefix + "points.mtx")
+      .set_surface_normals(prefix + "normals.mtx", outward_normal)
+      .set_quadrature_weights(prefix + "weights.mtx")
+      .build_inverse_self_interaction_matrix();
 
-  // Generate a random matrix with random normally distributed entities with mean 0 and variance 1
-  const int matrix_size = 10;
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> matrix_scratch("matrix_scratch", matrix_size,
-                                                                               matrix_size);
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> matrix_original("matrix_original", matrix_size,
-                                                                                matrix_size);
+  from_views.write_inverse_self_interaction_matrix(prefix + "M_inv.mtx");
+  HostPeripheryType from_inverse_file(num_surface_nodes, viscosity);
+  from_inverse_file.set_inverse_self_interaction_matrix(prefix + "M_inv.mtx");
 
-  size_t seed = 1234;
-  size_t counter = 0;
-  openrand::Philox rng = make_philox(seed, counter);
-  for (int i = 0; i < matrix_size; ++i) {
-    for (int j = 0; j < matrix_size; ++j) {
-      matrix_scratch(i, j) = rng.randn<double>();
-      matrix_original(i, j) = matrix_scratch(i, j);
+  const auto& expected = from_views.get_M_inv();
+  size_t file_mismatches = 0;
+  size_t inverse_file_mismatches = 0;
+  for (size_t i = 0; i < expected.extent(0); ++i) {
+    for (size_t j = 0; j < expected.extent(1); ++j) {
+      file_mismatches += from_files.get_M_inv()(i, j) != expected(i, j);
+      inverse_file_mismatches += from_inverse_file.get_M_inv()(i, j) != expected(i, j);
     }
   }
+  EXPECT_EQ(file_mismatches, 0u) << "entries of M^{-1} that differ when the geometry is read from files";
+  EXPECT_EQ(inverse_file_mismatches, 0u) << "entries of M^{-1} that differ after a write and read";
 
-  // Invert the matrix
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> matrix_inverse("matrix_inverse", matrix_size,
-                                                                               matrix_size);
-  invert_matrix(Kokkos::DefaultHostExecutionSpace(), matrix_scratch, matrix_inverse);
-
-  // Multiply the original matrix by the inverse matrix and store the result in matrix_scratch
-  KokkosBlas::gemm(Kokkos::DefaultHostExecutionSpace(), "N", "N", 1.0, matrix_original, matrix_inverse, 0.0,
-                   matrix_scratch);
-
-  // Check that the result (stored in matrix_scratch) is the identity matrix
-  for (int i = 0; i < matrix_size; ++i) {
-    for (int j = 0; j < matrix_size; ++j) {
-      if (i == j) {
-        ASSERT_NEAR(matrix_scratch(i, j), 1.0, 1.0e-10) << "i = " << i << ", j = " << j;
-      } else {
-        ASSERT_NEAR(matrix_scratch(i, j), 0.0, 1.0e-10) << "i = " << i << ", j = " << j;
-      }
-    }
+  // A file of the wrong length is rejected.
+  HostPeripheryType larger(num_surface_nodes + 1, viscosity);
+  EXPECT_THROW(larger.set_surface_positions(prefix + "points.mtx"), std::runtime_error);
+  EXPECT_THROW(larger.set_inverse_self_interaction_matrix(prefix + "M_inv.mtx"), std::runtime_error);
+  for (const char* name : {"points.mtx", "normals.mtx", "weights.mtx", "M_inv.mtx"}) {
+    std::remove((prefix + name).c_str());
   }
-}
-
-TEST(PeripheryTest, ReadWriteKokkosMatrixToFromFile) {
-  // Test that we can write a Kokkos matrix to a file and read it back in
-
-  // Generate a random matrix with random normally distributed entities with mean 0 and variance 1
-  const int matrix_size = 10;
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> matrix("matrix", matrix_size, matrix_size);
-
-  size_t seed = 1234;
-  size_t counter = 0;
-  openrand::Philox rng = make_philox(seed, counter);
-  for (int i = 0; i < matrix_size; ++i) {
-    for (int j = 0; j < matrix_size; ++j) {
-      matrix(i, j) = rng.randn<double>();
-    }
-  }
-
-  // Write the matrix to a file
-  const std::string file_name = "ReadWriteKokkosMatrixToFromFile_matrix.dat";
-  write_matrix_to_file(file_name, matrix);
-
-  // Read the matrix back in
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> matrix_read("matrix_read", matrix_size, matrix_size);
-  read_matrix_from_file(file_name, matrix_size, matrix_size, matrix_read);
-
-  // Check that the matrix read in is the same as the original matrix, to machine precision
-  for (int i = 0; i < matrix_size; ++i) {
-    for (int j = 0; j < matrix_size; ++j) {
-      EXPECT_NEAR(matrix(i, j), matrix_read(i, j), 1e-12);
-    }
-  }
-}
-
-TEST(PeripheryTest, ReadWriteKokkosVectorToFromFile) {
-  // Test that we can write a Kokkos vector to a file and read it back in
-
-  // Generate a random vector with random normally distributed entities with mean 0 and variance 1
-  const int vector_size = 10;
-  Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> vector("vector", vector_size);
-
-  size_t seed = 1234;
-  size_t counter = 0;
-  openrand::Philox rng = make_philox(seed, counter);
-  for (int i = 0; i < vector_size; ++i) {
-    vector(i) = rng.randn<double>();
-  }
-
-  // Write the vector to a file
-  const std::string file_name = "ReadWriteKokkosVectorToFromFile_vector.dat";
-  write_vector_to_file(file_name, vector);
-
-  // Read the vector back in
-  Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> vector_read("vector_read", vector_size);
-  read_vector_from_file(file_name, vector_size, vector_read);
-
-  // Check that the vector read in is the same as the original vector, to machine precision
-  for (int i = 0; i < vector_size; ++i) {
-    EXPECT_NEAR(vector(i), vector_read(i), 1e-12);
-  }
-}
-
-// Every file I/O failure throws instead of leaving the output silently unset.
-TEST(PeripheryTest, FileIoFailuresThrow) {
-  Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> vector("vector", 5);
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> matrix("matrix", 2, 2);
-  EXPECT_THROW(read_vector_from_file("FileIoFailuresThrow_missing.dat", 5, vector), std::runtime_error);
-  EXPECT_THROW(read_matrix_from_file("FileIoFailuresThrow_missing.dat", 2, 2, matrix), std::runtime_error);
-
-  const std::string vector_file = "FileIoFailuresThrow_vector.dat";
-  write_vector_to_file(vector_file, vector);
-  Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> longer_vector("longer_vector", 6);
-  EXPECT_THROW(read_vector_from_file(vector_file, 6, longer_vector), std::runtime_error);
-
-  const std::string matrix_file = "FileIoFailuresThrow_matrix.dat";
-  write_matrix_to_file(matrix_file, matrix);
-  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> taller_matrix("taller_matrix", 3, 2);
-  EXPECT_THROW(read_matrix_from_file(matrix_file, 3, 2, taller_matrix), std::runtime_error);
-
-  EXPECT_THROW(write_vector_to_file("FileIoFailuresThrow_missing_dir/vector.dat", vector), std::runtime_error);
-  EXPECT_THROW(write_matrix_to_file("FileIoFailuresThrow_missing_dir/matrix.dat", matrix), std::runtime_error);
 }
 
 // DIAGNOSTIC (prints for inspection; no pass/fail assertions).
@@ -1024,6 +950,8 @@ TEST(PeripheryDiagnostic, StokesDoubleLayerSmoothForces) {
 
 // [TEMP] Quick test only: read periphery quadrature straight from hfirouznia's dir (icosahedron + octahedron
 // families, all available sizes), ordered finest-first. Delete this block and revert the from-file tests after.
+// The files are read as Matrix Market arrays, so each needs the banner "%%MatrixMarket matrix array real general"
+// and the extents line "n 1" in place of its leading count.
 struct TempQuad {
   size_t n;
   std::string label, pts, nrm, wgt;
@@ -1094,9 +1022,9 @@ TEST(PeripheryDiagnostic, SKFIESelfConvFromFile) {
     Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> normals("normal", 3 * num_quad_points);
     Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> points("points", 3 * num_quad_points);
     Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> weights("weights", num_quad_points);
-    read_vector_from_file(quad_files[i].nrm, 3 * num_quad_points, normals);
-    read_vector_from_file(quad_files[i].pts, 3 * num_quad_points, points);
-    read_vector_from_file(quad_files[i].wgt, num_quad_points, weights);
+    mundy::read_matrix_market(quad_files[i].nrm, normals);
+    mundy::read_matrix_market(quad_files[i].pts, points);
+    mundy::read_matrix_market(quad_files[i].wgt, weights);
 
     // Compute the surface slip velocity induced by the bulk forces
     Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace> surface_slip_velocity("surface_slip_velocity",
@@ -1149,9 +1077,9 @@ TEST(PeripheryTest, SKFIEIsInvertible) {
     fill_skfie_matrix(Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_nodes, host_points, host_normals,
                       host_weights, M, outward_normal);
 
-    // The inverse function will replace M with its pivot matrix, so we need to stash the original matrix
+    // invert overwrites M with its LU factors, so stash the original matrix
     Kokkos::deep_copy(M_original, M);
-    invert_matrix(Kokkos::DefaultHostExecutionSpace(), M, M_inv);
+    mundy::invert(Kokkos::DefaultHostExecutionSpace(), M, M_inv);
 
     // Multiply the matrix by its inverse and check that it is the m_m_inv matrix
     Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> m_m_inv("m_m_inv", 3 * num_surface_nodes,
@@ -1242,7 +1170,7 @@ TEST(PeripheryTest, MatrixFreeMatchesDirectInverse) {
     periphery_direct.set_surface_positions(points)
         .set_surface_normals(normals, outward_normal)
         .set_quadrature_weights(weights);
-    periphery_direct.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+    periphery_direct.build_inverse_self_interaction_matrix();
     periphery_direct.set_inverse_method(InverseMethod::Direct);
     view_t f_direct("f_direct", 3 * num_nodes);
     Kokkos::deep_copy(f_direct, 0.0);
@@ -1425,7 +1353,7 @@ TEST(PeripheryTest, SkfieReproducesInteriorStokesFlow) {
         periphery.set_surface_positions(points)
             .set_surface_normals(normals, outward_normal)
             .set_quadrature_weights(weights);
-        periphery.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+        periphery.build_inverse_self_interaction_matrix();
         view_t surface_forces("surface_forces", 3 * num_nodes);
         periphery.compute_surface_forces(slip, surface_forces);
 
@@ -1549,7 +1477,7 @@ TEST(PeripheryTest, SkfieRejectsMismatchedNormals) {
 
     HostPeripheryType periphery(num_nodes, viscosity);
     periphery.set_surface_positions(points).set_surface_normals(normals, wrong).set_quadrature_weights(weights);
-    EXPECT_THROW(periphery.build_inverse_self_interaction_matrix(/*write_to_file=*/false), std::invalid_argument);
+    EXPECT_THROW(periphery.build_inverse_self_interaction_matrix(), std::invalid_argument);
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
     EXPECT_THROW(periphery.build_matrix_free_inverse(), std::invalid_argument);
 #endif
@@ -1903,7 +1831,7 @@ void solve_cavity(const double mu, const double a, const double b, const int ord
   periphery.set_surface_positions(p_pts.data())
       .set_quadrature_weights(p_wts.data())
       .set_surface_normals(p_nrm.data(), /*outward_normal=*/false);
-  periphery.build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+  periphery.build_inverse_self_interaction_matrix();
   auto M_inv = periphery.get_M_inv();
   auto p_positions = periphery.get_surface_positions();
   auto p_normals = periphery.get_surface_normals();
@@ -2128,7 +2056,7 @@ std::shared_ptr<PeripheryT<ExecSpace>> make_cavity_periphery(const int order, co
   periphery->set_surface_positions(points.data())
       .set_quadrature_weights(weights.data())
       .set_surface_normals(normals.data(), /*outward_normal=*/false);
-  periphery->build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+  periphery->build_inverse_self_interaction_matrix();
   return periphery;
 }
 #endif
@@ -2654,7 +2582,7 @@ std::shared_ptr<HostPeriphery> make_sphere_periphery(const int order, const doub
   periphery_ptr->set_surface_positions(points_vec.data())
       .set_quadrature_weights(weights_vec.data())
       .set_surface_normals(normals_vec.data(), outward_normal);
-  periphery_ptr->build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+  periphery_ptr->build_inverse_self_interaction_matrix();
   return periphery_ptr;
 }
 
@@ -2827,7 +2755,7 @@ TEST(PeripheryDiagnostic, SphereQuadPeripheryRPYC) {
     periphery_ptr->set_surface_positions(points_vec.data())
         .set_quadrature_weights(weights_vec.data())
         .set_surface_normals(normals_vec.data(), outward_normal);
-    periphery_ptr->build_inverse_self_interaction_matrix(false);
+    periphery_ptr->build_inverse_self_interaction_matrix();
 
     // Loop over the test types (what direction we are moving and the force director)
     for (auto itest = 0; itest < test_types.size(); ++itest) {
@@ -2944,7 +2872,7 @@ TEST(PeripheryDiagnostic, ExternalQuadPeripheryRPYC) {
     periphery_ptr->set_surface_positions(external_quadrature_points_filename[itype].c_str())
         .set_quadrature_weights(external_quadrature_weights_filename[itype].c_str())
         .set_surface_normals(external_quadrature_normals_filename[itype], temp_quad_files_outward_normal);
-    periphery_ptr->build_inverse_self_interaction_matrix(/*write_to_file*/ false);
+    periphery_ptr->build_inverse_self_interaction_matrix();
 
     // Loop over the test types (what direction we are moving and the force director)
     for (auto itest = 0; itest < test_types.size(); ++itest) {

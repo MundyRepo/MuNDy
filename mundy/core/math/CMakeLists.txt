@@ -35,17 +35,20 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/GaussLegendreSphereImpl.hpp
   src/mundy_math/impl/linear_ops_impl.hpp
   src/mundy_math/impl/MatrixImpl.hpp
+  src/mundy_math/impl/matrix_market_impl.hpp
   src/mundy_math/impl/minimize_impl.hpp
   src/mundy_math/impl/QuaternionImpl.hpp
   src/mundy_math/impl/solver_backends_impl.hpp
   src/mundy_math/impl/TrapezoidalTorusImpl.hpp
   src/mundy_math/impl/VectorImpl.hpp
+  src/mundy_math/invert.hpp
   src/mundy_math/lcp.hpp
   src/mundy_math/linear_ops.hpp
   src/mundy_math/linear_system.hpp
   src/mundy_math/MaskedAccessor.hpp
   src/mundy_math/Matrix3.hpp
   src/mundy_math/Matrix.hpp
+  src/mundy_math/matrix_market.hpp
   src/mundy_math/minimize.hpp
   src/mundy_math/NumTraits.hpp
   src/mundy_math/preconditioners.hpp

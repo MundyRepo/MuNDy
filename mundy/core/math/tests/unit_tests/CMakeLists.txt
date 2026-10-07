@@ -142,6 +142,22 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestMatrixMarket
+    SOURCES UnitTestMatrixMarket.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  # The dense inverse needs the KokkosKernels TPL; the source guards itself on HAVE_MUNDYMATH_KOKKOSKERNELS and is an
+  # empty (trivially passing) translation unit otherwise.
+  tribits_add_executable_and_test(
+    UnitTestInvert
+    SOURCES UnitTestInvert.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestLinearOperators
     SOURCES UnitTestLinearOperators.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1

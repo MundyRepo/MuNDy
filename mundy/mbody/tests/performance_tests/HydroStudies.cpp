@@ -112,7 +112,7 @@ std::shared_ptr<PeripheryT<ExecSpace>> make_cavity_periphery(const int order, co
   periphery->set_surface_positions(p_pts.data())
       .set_quadrature_weights(p_wts.data())
       .set_surface_normals(p_nrm.data(), /*outward_normal=*/false);
-  periphery->build_inverse_self_interaction_matrix(/*write_to_file=*/false);
+  periphery->build_inverse_self_interaction_matrix();
   return periphery;
 }
 
