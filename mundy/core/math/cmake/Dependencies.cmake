@@ -6,5 +6,5 @@ tribits_package_define_dependencies(
   LIB_REQUIRED_TPLS Kokkos OpenRAND
   LIB_OPTIONAL_TPLS MPI KokkosKernels Tpetra Belos
   TEST_REQUIRED_TPLS
-  TEST_OPTIONAL_TPLS CUDA GTest nanobench
+  TEST_OPTIONAL_TPLS CUDA GTest nanobench STKFMM
 )

@@ -1698,6 +1698,35 @@ TYPED_TEST(VectorSingleTypeTest, ViewFactoryReturnTypeContract) {
 }
 //@}
 
+
+//! \name Kokkos reductions
+//@{
+
+/// \brief The sum over i < n of (i, 2 i, 3 i), reduced with Kokkos::Sum on the default execution space.
+///
+/// A free function, since CUDA forbids KOKKOS_LAMBDA in a test body (a private member function).
+Vector<double, 3> sum_vectors_on_device(const int n) {
+  Vector<double, 3> sum;
+  Kokkos::parallel_reduce(
+      "SumReducesVectors", n,
+      KOKKOS_LAMBDA(const int i, Vector<double, 3>& partial) {
+        partial += Vector<double, 3>{1.0 * i, 2.0 * i, 3.0 * i};
+      },
+      Kokkos::Sum<Vector<double, 3>>(sum));
+  return sum;
+}
+
+TEST(VectorKokkos, SumReducesVectorsInParallelReduce) {
+  // sum over i < n of (i, 2 i, 3 i) is (1, 2, 3) n (n - 1) / 2.
+  const int n = 1000;
+  const Vector<double, 3> sum = sum_vectors_on_device(n);
+  const double triangle = 0.5 * n * (n - 1);
+  EXPECT_EQ(sum[0], triangle);
+  EXPECT_EQ(sum[1], 2.0 * triangle);
+  EXPECT_EQ(sum[2], 3.0 * triangle);
+}
+//@}
+
 }  // namespace
 
 }  // namespace mundy

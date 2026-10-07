@@ -118,6 +118,7 @@ periphery)
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion (reference->lab rotation)
 #include <mundy_math/Vector3.hpp>              // for mundy::Vector3, mundy::cross
+#include <mundy_math/direct_sum.hpp>           // for mundy::direct_sum
 #include <mundy_math/invert.hpp>               // for mundy::invert
 #include <mundy_math/matrix_market.hpp>        // for mundy::read_matrix_market, mundy::write_matrix_market
 #include <mundy_utils/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
@@ -270,6 +271,16 @@ View read_matrix_market_with_extents(const std::string& filename, const size_t r
   return view;
 }
 
+/// \brief The direct_sum accumulator that adds target t's 3-vector sum to entries 3 t, 3 t + 1, 3 t + 2 of out.
+template <class View>
+auto add_to_vector3_entries(const View& out) {
+  return KOKKOS_LAMBDA(const size_t t, const mundy::Vector3d& sum) {
+    out(3 * t + 0) += sum[0];
+    out(3 * t + 1) += sum[1];
+    out(3 * t + 2) += sum[2];
+  };
+}
+
 }  // namespace impl
 
 /// \brief Copy a host std::vector<double> into a fresh device (LayoutLeft) view of the same length.
@@ -285,191 +296,6 @@ Kokkos::View<double*, Kokkos::LayoutLeft, typename ExecSpace::memory_space> to_d
   return dev;
 }
 
-template <class Space>
-struct VelocityReducer {
- public:
-  // Required
-  typedef VelocityReducer reducer;
-  typedef mundy::Vector3d value_type;
-  typedef Kokkos::View<value_type*, Space, Kokkos::MemoryUnmanaged> result_view_type;
-
- private:
-  value_type& value;
-
- public:
-  KOKKOS_INLINE_FUNCTION
-  VelocityReducer(value_type& value_) : value(value_) {
-  }
-
-  // Required
-  KOKKOS_INLINE_FUNCTION
-  void join(value_type& dest, const value_type& src) const {
-    dest += src;
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  void init(value_type& val) const {
-    val.set(0.0, 0.0, 0.0);
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  value_type& reference() const {
-    return value;
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  result_view_type view() const {
-    return result_view_type(&value, 1);
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const {
-    return true;
-  }
-};
-
-template <typename Func>
-struct VelocityKernelThreadReductionFunctor {
-  KOKKOS_INLINE_FUNCTION
-  VelocityKernelThreadReductionFunctor(const Func& compute_velocity_contribution, const int t)
-      : compute_velocity_contribution_(compute_velocity_contribution), t_(t) {
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  void operator()(const int s, mundy::Vector3d& v_accum) const {
-    // Call the custom operation to compute the contribution
-    compute_velocity_contribution_(t_, s, v_accum[0], v_accum[1], v_accum[2]);
-  }
-
-  const Func compute_velocity_contribution_;
-  const int t_;
-};
-
-template <int panel_size, typename ExecutionSpace, typename Func>
-struct VelocityKernelTeamFunctor {
-  using TeamMemberType = typename Kokkos::TeamPolicy<ExecutionSpace>::member_type;
-
-  KOKKOS_INLINE_FUNCTION
-  VelocityKernelTeamFunctor(const TeamMemberType& team_member, const Func& compute_velocity_contribution,
-                            const int panel_start, const int num_source_points,
-                            Kokkos::Array<double, panel_size>& local_vx, Kokkos::Array<double, panel_size>& local_vy,
-                            Kokkos::Array<double, panel_size>& local_vz)
-      : team_member_(team_member),
-        compute_velocity_contribution_(compute_velocity_contribution),
-        panel_start_(panel_start),
-        num_source_points_(num_source_points),
-        local_vx_(local_vx),
-        local_vy_(local_vy),
-        local_vz_(local_vz) {
-  }
-
-  KOKKOS_FUNCTION
-  void operator()(const int t) const {
-    mundy::Vector3d v_sum = {0.0, 0.0, 0.0};
-
-    // Loop over all source points
-    Kokkos::parallel_reduce(Kokkos::ThreadVectorRange(team_member_, num_source_points_),
-                            VelocityKernelThreadReductionFunctor<Func>(compute_velocity_contribution_, t),
-                            VelocityReducer<ExecutionSpace>(v_sum));
-
-    // Store the results in the local arrays
-    local_vx_[t - panel_start_] = v_sum[0];
-    local_vy_[t - panel_start_] = v_sum[1];
-    local_vz_[t - panel_start_] = v_sum[2];
-  }
-
-  const TeamMemberType& team_member_;
-  const Func compute_velocity_contribution_;
-  const int panel_start_;
-  const int num_source_points_;
-  Kokkos::Array<double, panel_size>& local_vx_;
-  Kokkos::Array<double, panel_size>& local_vy_;
-  Kokkos::Array<double, panel_size>& local_vz_;
-};
-
-template <int panel_size, typename VectorType>
-struct VelocityKernelTeamTeamAccumulator {
-  KOKKOS_INLINE_FUNCTION
-  VelocityKernelTeamTeamAccumulator(const VectorType& target_velocities,                //
-                                    const Kokkos::Array<double, panel_size>& local_vx,  //
-                                    const Kokkos::Array<double, panel_size>& local_vy,  //
-                                    const Kokkos::Array<double, panel_size>& local_vz,  //
-                                    const int panel_start,                              //
-                                    const int panel_end)
-      : target_velocities_(target_velocities),
-        local_vx_(local_vx),
-        local_vy_(local_vy),
-        local_vz_(local_vz),
-        panel_start_(panel_start),
-        panel_end_(panel_end) {
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  void operator()() const {
-    for (int t = panel_start_; t < panel_end_; ++t) {
-      Kokkos::atomic_add(&target_velocities_(3 * t + 0), local_vx_[t - panel_start_]);
-      Kokkos::atomic_add(&target_velocities_(3 * t + 1), local_vy_[t - panel_start_]);
-      Kokkos::atomic_add(&target_velocities_(3 * t + 2), local_vz_[t - panel_start_]);
-    }
-  }
-
-  static_assert(Kokkos::is_view<VectorType>::value,
-                "VelocityKernelTeamTeamAccumulator: target_velocities must be a "
-                "Kokkos::View.");
-  static_assert(VectorType::rank == 1, "VelocityKernelTeamTeamAccumulator: target_velocities must be rank 1.");
-  static_assert(std::is_same_v<typename VectorType::value_type, double>,
-                "VelocityKernelTeamTeamAccumulator: target_velocities must have double as its value type.");
-
-  const VectorType target_velocities_;
-  const Kokkos::Array<double, panel_size>& local_vx_;
-  const Kokkos::Array<double, panel_size>& local_vy_;
-  const Kokkos::Array<double, panel_size>& local_vz_;
-  const int panel_start_;
-  const int panel_end_;
-};
-
-template <int panel_size, class ExecutionSpace, typename VectorType, typename Func>
-void panelize_velocity_kernel_over_target_points([[maybe_unused]] const ExecutionSpace& space,  //
-                                                 int num_target_points,                         //
-                                                 int num_source_points,                         //
-                                                 const VectorType target_velocities,            //
-                                                 const Func& compute_velocity_contribution) {
-  static_assert(Kokkos::is_view<VectorType>::value,
-                "panelize_velocity_kernel_over_target_points: target_velocities must be a "
-                "Kokkos::View.");
-  static_assert(VectorType::rank == 1,
-                "panelize_velocity_kernel_over_target_points: target_velocities must be rank 1.");
-  static_assert(std::is_same_v<typename VectorType::value_type, double>,
-                "panelize_velocity_kernel_over_target_points: target_velocities must have double as its value type.");
-
-  int num_panels = (num_target_points + panel_size - 1) / panel_size;
-
-  // Define the team policy with the number of panels
-  using team_policy = Kokkos::TeamPolicy<ExecutionSpace>;
-  Kokkos::parallel_for(
-      team_policy(num_panels, Kokkos::AUTO), KOKKOS_LAMBDA(const team_policy::member_type& team_member) {
-        const int panel_start = team_member.league_rank() * panel_size;
-        const int panel_end =
-            (panel_start + panel_size) > num_target_points ? num_target_points : (panel_start + panel_size);
-
-        // Local accumulation arrays for each target point in the panel
-        Kokkos::Array<double, panel_size> local_vx = {0.0};
-        Kokkos::Array<double, panel_size> local_vy = {0.0};
-        Kokkos::Array<double, panel_size> local_vz = {0.0};
-
-        // Loop over each target point in the panel
-        Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, panel_start, panel_end),
-                             VelocityKernelTeamFunctor<panel_size, ExecutionSpace, Func>(
-                                 team_member, compute_velocity_contribution, panel_start, num_source_points, local_vx,
-                                 local_vy, local_vz));
-
-        // After processing, update the global output using a single thread per team
-        Kokkos::single(Kokkos::PerTeam(team_member),
-                       VelocityKernelTeamTeamAccumulator<panel_size, VectorType>(target_velocities, local_vx, local_vy,
-                                                                                 local_vz, panel_start, panel_end));
-      });
-}
-
 /// \brief Apply the stokes kernel to map source forces to target velocities: u_target += M f_source
 ///
 /// \param space The execution space
@@ -480,11 +306,11 @@ void panelize_velocity_kernel_over_target_points([[maybe_unused]] const Executio
 /// \param[out] target_values The target values (size num_target_points x 3)
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceForceVectorType, typename TargetVelocityVectorType>
-void apply_stokes_kernel([[maybe_unused]] const ExecutionSpace& space,  //
-                         const double viscosity,                        //
-                         const SourcePosVectorType& source_positions,   //
-                         const TargetPosVectorType& target_positions,   //
-                         const SourceForceVectorType& source_forces,    //
+void apply_stokes_kernel(const ExecutionSpace& space,                  //
+                         const double viscosity,                       //
+                         const SourcePosVectorType& source_positions,  //
+                         const TargetPosVectorType& target_positions,  //
+                         const SourceForceVectorType& source_forces,   //
                          const TargetVelocityVectorType& target_velocities) {
   static_assert(impl::are_double_vectors_v<SourcePosVectorType, TargetPosVectorType, SourceForceVectorType,
                                            TargetVelocityVectorType>,
@@ -501,8 +327,7 @@ void apply_stokes_kernel([[maybe_unused]] const ExecutionSpace& space,  //
   // Launch the parallel kernel
   const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
 
-  auto stokes_computation =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto stokes_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
@@ -513,20 +338,20 @@ void apply_stokes_kernel([[maybe_unused]] const ExecutionSpace& space,  //
     const double fz = source_forces(3 * s + 2);
 
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = r2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(r2);
+    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
 
     const double f_dot_r = fx * dx + fy * dy + fz * dz;
     const double scale_factor_rinv3 = scale_factor * rinv3;
 
     // Accumulate velocity contribution to local variables
-    vx_accum += scale_factor_rinv3 * (r2 * fx + dx * f_dot_r);
-    vy_accum += scale_factor_rinv3 * (r2 * fy + dy * f_dot_r);
-    vz_accum += scale_factor_rinv3 * (r2 * fz + dz * f_dot_r);
+    return mundy::Vector3d{scale_factor_rinv3 * (r2 * fx + dx * f_dot_r), scale_factor_rinv3 * (r2 * fy + dy * f_dot_r),
+                           scale_factor_rinv3 * (r2 * fz + dz * f_dot_r)};
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                  stokes_computation);
+  mundy::direct_sum(space, num_target_points, num_source_points, stokes_computation,
+                    impl::add_to_vector3_entries(target_velocities));
 }
 
 /// \brief Apply the stokes kernel to map source forces to target velocities: u_target += M f_source
@@ -539,7 +364,7 @@ void apply_stokes_kernel([[maybe_unused]] const ExecutionSpace& space,  //
 /// \param[out] target_values The target values (size num_target_points x 3)
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceForceVectorType, typename SourceWeightVectorType, typename TargetVelocityVectorType>
-void apply_weighted_stokes_kernel([[maybe_unused]] const ExecutionSpace& space,  //
+void apply_weighted_stokes_kernel(const ExecutionSpace& space,                   //
                                   const double viscosity,                        //
                                   const SourcePosVectorType& source_positions,   //
                                   const TargetPosVectorType& target_positions,   //
@@ -561,8 +386,7 @@ void apply_weighted_stokes_kernel([[maybe_unused]] const ExecutionSpace& space, 
 
   // Launch the parallel kernel
   const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
-  auto weighted_stokes_computation =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto weighted_stokes_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
@@ -585,20 +409,20 @@ void apply_weighted_stokes_kernel([[maybe_unused]] const ExecutionSpace& space, 
     // vz_accum += scale_factor_rinv3 * (r2 * fz + dz * inner_prod);
 
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = r2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(r2);
+    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
     const double rinv2 = rinv * rinv;
 
     const double f_dot_r_rinv2 = (fx * dx + fy * dy + fz * dz) * rinv2;
     const double scale_factor_rinv = scale_factor * rinv;
 
     // Accumulate velocity contribution to local variables
-    vx_accum += scale_factor_rinv * (fx + dx * f_dot_r_rinv2);
-    vy_accum += scale_factor_rinv * (fy + dy * f_dot_r_rinv2);
-    vz_accum += scale_factor_rinv * (fz + dz * f_dot_r_rinv2);
+    return mundy::Vector3d{scale_factor_rinv * (fx + dx * f_dot_r_rinv2), scale_factor_rinv * (fy + dy * f_dot_r_rinv2),
+                           scale_factor_rinv * (fz + dz * f_dot_r_rinv2)};
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                  weighted_stokes_computation);
+  mundy::direct_sum(space, num_target_points, num_source_points, weighted_stokes_computation,
+                    impl::add_to_vector3_entries(target_velocities));
 }
 
 /// \brief Apply the RPY kernel to map source forces to target velocities: u_target += M f_source
@@ -614,13 +438,13 @@ void apply_weighted_stokes_kernel([[maybe_unused]] const ExecutionSpace& space, 
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceRadiusVectorType, typename TargetRadiusVectorType, typename SourceForceVectorType,
           typename TargetVelocityVectorType>
-void apply_rpy_kernel([[maybe_unused]] const ExecutionSpace& space,  //
-                      const double viscosity,                        //
-                      const SourcePosVectorType& source_positions,   //
-                      const TargetPosVectorType& target_positions,   //
-                      const SourceRadiusVectorType& source_radii,    //
-                      const TargetRadiusVectorType& target_radii,    //
-                      const SourceForceVectorType& source_forces,    //
+void apply_rpy_kernel(const ExecutionSpace& space,                  //
+                      const double viscosity,                       //
+                      const SourcePosVectorType& source_positions,  //
+                      const TargetPosVectorType& target_positions,  //
+                      const SourceRadiusVectorType& source_radii,   //
+                      const TargetRadiusVectorType& target_radii,   //
+                      const SourceForceVectorType& source_forces,   //
                       const TargetVelocityVectorType& target_velocities) {
   static_assert(impl::are_double_vectors_v<SourcePosVectorType, TargetPosVectorType, SourceRadiusVectorType,
                                            TargetRadiusVectorType, SourceForceVectorType, TargetVelocityVectorType>,
@@ -638,8 +462,7 @@ void apply_rpy_kernel([[maybe_unused]] const ExecutionSpace& space,  //
 
   // Launch the parallel kernel
   const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
-  auto rpy_computation =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto rpy_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
@@ -655,7 +478,8 @@ void apply_rpy_kernel([[maybe_unused]] const ExecutionSpace& space,  //
 
     const double a2_over_three = one_over_three * a * a;
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = r2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(r2);
+    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
     const double rinv5 = rinv * rinv * rinv3;
     const double fdotr = fx * dx + fy * dy + fz * dz;
@@ -679,13 +503,11 @@ void apply_rpy_kernel([[maybe_unused]] const ExecutionSpace& space,  //
 
     // Apply the result
     const double lap_coeff = one_over_six * target_radii(t) * target_radii(t);
-    vx_accum += v0 + lap_coeff * lap0;
-    vy_accum += v1 + lap_coeff * lap1;
-    vz_accum += v2 + lap_coeff * lap2;
+    return mundy::Vector3d{v0 + lap_coeff * lap0, v1 + lap_coeff * lap1, v2 + lap_coeff * lap2};
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                  rpy_computation);
+  mundy::direct_sum(space, num_target_points, num_source_points, rpy_computation,
+                    impl::add_to_vector3_entries(target_velocities));
 }
 
 /// \brief Apply the corrected RPY kernel to map source forces to target velocities: u_target += M f_source
@@ -701,13 +523,13 @@ void apply_rpy_kernel([[maybe_unused]] const ExecutionSpace& space,  //
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceRadiusVectorType, typename TargetRadiusVectorType, typename SourceForceVectorType,
           typename TargetVelocityVectorType>
-void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace& space,  //
-                       const double viscosity,                        //
-                       const SourcePosVectorType& source_positions,   //
-                       const TargetPosVectorType& target_positions,   //
-                       const SourceRadiusVectorType& source_radii,    //
-                       const TargetRadiusVectorType& target_radii,    //
-                       const SourceForceVectorType& source_forces,    //
+void apply_rpyc_kernel(const ExecutionSpace& space,                  //
+                       const double viscosity,                       //
+                       const SourcePosVectorType& source_positions,  //
+                       const TargetPosVectorType& target_positions,  //
+                       const SourceRadiusVectorType& source_radii,   //
+                       const TargetRadiusVectorType& target_radii,   //
+                       const SourceForceVectorType& source_forces,   //
                        const TargetVelocityVectorType& target_velocities) {
   static_assert(impl::are_double_vectors_v<SourcePosVectorType, TargetPosVectorType, SourceRadiusVectorType,
                                            TargetRadiusVectorType, SourceForceVectorType, TargetVelocityVectorType>,
@@ -730,8 +552,7 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace& space,  //
   constexpr double one_over_32 = 1.0 / 32.0;
   constexpr double inv_pi = 1.0 / Kokkos::numbers::pi_v<double>;
   const double inv_viscosity = 1.0 / viscosity;
-  auto rpyc_computation =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto rpyc_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
@@ -746,7 +567,8 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace& space,  //
     const double r2 = dx * dx + dy * dy + dz * dz;
     const double r = Kokkos::sqrt(r2);
     const double r3 = r * r2;
-    const double rinv = r2 < DOUBLE_ZERO ? 0.0 : 1.0 / r;
+    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on
+    const double rinv = coincident ? 0.0 : 1.0 / (coincident ? 1.0 : r);
     const double rinv2 = rinv * rinv;
     const double rinv3 = rinv2 * rinv;
 
@@ -769,9 +591,9 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace& space,  //
       const double scale_factor = one_over_eight * inv_pi * inv_viscosity * rinv;
       const double tmp1_scaled = scale_factor * (1. + a2_plus_b2_rinv2 * one_over_three);
       const double tmp2_scaled = scale_factor * (1. - a2_plus_b2_rinv2);
-      vx_accum += tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat);
-      vy_accum += tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat);
-      vz_accum += tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat);
+      return mundy::Vector3d{tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat),
+                             tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat),
+                             tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat)};
     } else if (Kokkos::abs(a - b) < r && a > DOUBLE_ZERO && b > DOUBLE_ZERO) {
       // If neither radius is zero and if abs(a - b) < r < a + b, corrected RPY
       // M = 1/(6 pi mu a b) * (tmp1 I + tmp2 r_hat outer r_hat) f
@@ -788,27 +610,25 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace& space,  //
       const double tmp1_scaled = scale_factor * (16.0 * r3 * a_plus_b - tmp3 * tmp3) * one_over_32 * rinv3;
       const double tmp2_scaled = scale_factor * 3.0 * tmp4 * tmp4 * one_over_32 * rinv3;
 
-      vx_accum += tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat);
-      vy_accum += tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat);
-      vz_accum += tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat);
+      return mundy::Vector3d{tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat),
+                             tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat),
+                             tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat)};
     } else {
       //  if r < abs(a - b), Local drag
       // v = 1 / (6 pi mu max(a, b)) * f
       if (r2 < DOUBLE_ZERO) {
         // Skip self interaction
-        return;
+        return mundy::Vector3d{0.0, 0.0, 0.0};
       }
 
       const double max_a_b = Kokkos::max(a, b);
       const double scale_factor = one_over_six * inv_pi * inv_viscosity / max_a_b;
-      vx_accum += scale_factor * fx;
-      vy_accum += scale_factor * fy;
-      vz_accum += scale_factor * fz;
+      return mundy::Vector3d{scale_factor * fx, scale_factor * fy, scale_factor * fz};
     }
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                  rpyc_computation);
+  mundy::direct_sum(space, num_target_points, num_source_points, rpyc_computation,
+                    impl::add_to_vector3_entries(target_velocities));
 }
 
 /// \brief Accumulate the singularity-subtracted exterior trace u += (J + T)[f] of a closed body surface.
@@ -826,7 +646,7 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace& space,  //
 /// \param[out] velocities The resulting surface velocities (size num_points * 3)
 template <class ExecutionSpace, typename PosVectorType, typename NormalVectorType, typename QuadratureWeightVectorType,
           typename ForceVectorType, typename VelocityVectorType>
-void apply_stokes_double_layer_kernel_ss([[maybe_unused]] const ExecutionSpace& space,          //
+void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,                           //
                                          const double viscosity,                                //
                                          const size_t num_points,                               //
                                          const PosVectorType& positions,                        //
@@ -850,11 +670,10 @@ void apply_stokes_double_layer_kernel_ss([[maybe_unused]] const ExecutionSpace& 
 
   // Launch the parallel kernel
   const double scale_factor = 3.0 / (4.0 * M_PI * viscosity);
-  auto stokes_double_layer_computation =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto stokes_double_layer_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Skip self-interaction
     if (t == s) {
-      return;
+      return mundy::Vector3d{0.0, 0.0, 0.0};
     }
 
     // Compute the distance vector
@@ -864,7 +683,8 @@ void apply_stokes_double_layer_kernel_ss([[maybe_unused]] const ExecutionSpace& 
 
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = dr2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(dr2);
+    const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -888,13 +708,11 @@ void apply_stokes_double_layer_kernel_ss([[maybe_unused]] const ExecutionSpace& 
     coeff += (syz + szy) * dy * dz;
     coeff *= -scale_factor * rinv5;
 
-    vx_accum += dx * coeff;
-    vy_accum += dy * coeff;
-    vz_accum += dz * coeff;
+    return mundy::Vector3d{dx * coeff, dy * coeff, dz * coeff};
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_points, num_points, velocities,
-                                                  stokes_double_layer_computation);
+  mundy::direct_sum(space, num_points, num_points, stokes_double_layer_computation,
+                    impl::add_to_vector3_entries(velocities));
 }
 
 /// \brief Apply the stokes double layer kernel to map source forces to target velocities: u_target += M f_source
@@ -912,7 +730,7 @@ void apply_stokes_double_layer_kernel_ss([[maybe_unused]] const ExecutionSpace& 
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceNormalVectorType, typename QuadratureWeightVectorType, typename SourceForceVectorType,
           typename TargetVelocityVectorType>
-void apply_stokes_double_layer_kernel([[maybe_unused]] const ExecutionSpace& space,          //
+void apply_stokes_double_layer_kernel(const ExecutionSpace& space,                           //
                                       const double viscosity,                                //
                                       const size_t num_source_points,                        //
                                       const size_t num_target_points,                        //
@@ -938,8 +756,7 @@ void apply_stokes_double_layer_kernel([[maybe_unused]] const ExecutionSpace& spa
 
   // Launch the parallel kernel
   const double scale_factor = 3.0 / (4.0 * M_PI * viscosity);
-  auto stokes_double_layer_contribution =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto stokes_double_layer_contribution = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
@@ -947,7 +764,8 @@ void apply_stokes_double_layer_kernel([[maybe_unused]] const ExecutionSpace& spa
 
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = dr2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(dr2);
+    const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -968,13 +786,11 @@ void apply_stokes_double_layer_kernel([[maybe_unused]] const ExecutionSpace& spa
     coeff += (syz + szy) * dy * dz;
     coeff *= -scale_factor * rinv5;
 
-    vx_accum += dx * coeff;
-    vy_accum += dy * coeff;
-    vz_accum += dz * coeff;
+    return mundy::Vector3d{dx * coeff, dy * coeff, dz * coeff};
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                  stokes_double_layer_contribution);
+  mundy::direct_sum(space, num_target_points, num_source_points, stokes_double_layer_contribution,
+                    impl::add_to_vector3_entries(target_velocities));
 }
 
 /// \brief Apply local drag to the sphere velocities v += 1/(6 pi mu r) f
@@ -1060,7 +876,8 @@ void fill_stokes_double_layer_matrix([[maybe_unused]] const ExecutionSpace& spac
 
         // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
         const double dr2 = dx * dx + dy * dy + dz * dz;
-        const double rinv = dr2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(dr2);
+        const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+        const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
         const double rinv2 = rinv * rinv;
         const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -1285,7 +1102,7 @@ void add_complementary_matrix([[maybe_unused]] const ExecutionSpace& space,     
 /// against the geometry
 template <class ExecutionSpace, typename PosVectorType, typename NormalVectorType, typename QuadratureWeightVectorType,
           typename MatrixType>
-void fill_skfie_matrix([[maybe_unused]] const ExecutionSpace& space,          //
+void fill_skfie_matrix(const ExecutionSpace& space,                           //
                        const double viscosity,                                //
                        const size_t num_points,                               //
                        const PosVectorType& positions,                        //
@@ -1336,7 +1153,7 @@ void fill_skfie_matrix([[maybe_unused]] const ExecutionSpace& space,          //
 /// against the geometry
 template <class ExecutionSpace, typename PosVectorType, typename NormalVectorType, typename QuadratureWeightVectorType,
           typename ForceVectorType, typename VelocityVectorType>
-void apply_skfie([[maybe_unused]] const ExecutionSpace& space,          //
+void apply_skfie(const ExecutionSpace& space,                           //
                  const double viscosity,                                //
                  const size_t num_points,                               //
                  const PosVectorType& positions,                        //
@@ -1364,8 +1181,7 @@ void apply_skfie([[maybe_unused]] const ExecutionSpace& space,          //
 
   // Launch the parallel kernel
   const double scale_factor = 3.0 / (4.0 * M_PI * viscosity);
-  auto skfie_contribution =
-      KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx_accum, double& vy_accum, double& vz_accum) {
+  auto skfie_contribution = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = positions(3 * t + 0) - positions(3 * s + 0);
     const double dy = positions(3 * t + 1) - positions(3 * s + 1);
@@ -1388,7 +1204,8 @@ void apply_skfie([[maybe_unused]] const ExecutionSpace& space,          //
 
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = dr2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(dr2);
+    const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
@@ -1413,12 +1230,12 @@ void apply_skfie([[maybe_unused]] const ExecutionSpace& space,          //
     const double scaled_normal_dot_force = (normal_s0 * force_s0 + normal_s1 * force_s1 + normal_s2 * force_s2) *
                                            quadrature_weight_s * complementary_scale;
 
-    vx_accum += dx * coeff + scaled_normal_dot_force * normal_t0;
-    vy_accum += dy * coeff + scaled_normal_dot_force * normal_t1;
-    vz_accum += dz * coeff + scaled_normal_dot_force * normal_t2;
+    return mundy::Vector3d{dx * coeff + scaled_normal_dot_force * normal_t0,
+                           dy * coeff + scaled_normal_dot_force * normal_t1,
+                           dz * coeff + scaled_normal_dot_force * normal_t2};
   };
 
-  panelize_velocity_kernel_over_target_points<32>(space, num_points, num_points, velocities, skfie_contribution);
+  mundy::direct_sum(space, num_points, num_points, skfie_contribution, impl::add_to_vector3_entries(velocities));
 
   // The analytic target term (sigma / viscosity) f_t, added once per target node -- NOT inside the per-source sweep.
   const double target_coefficient = impl::interior_trace_coefficient(viscosity, outward_normal);
@@ -1949,21 +1766,22 @@ using Periphery = PeripheryT<Kokkos::DefaultExecutionSpace>;  //!< Default perip
 /// with one source point. Accumulates into target_velocities (zero it first).
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
           typename SourceForceVectorType, typename SourceTorqueVectorType, typename TargetVelocityVectorType>
-void apply_stokeslet_rotlet_kernel([[maybe_unused]] const ExecutionSpace& space, const double viscosity,
-                                   const SourcePosVectorType& source_positions,
-                                   const TargetPosVectorType& target_positions,
-                                   const SourceForceVectorType& source_forces,
-                                   const SourceTorqueVectorType& source_torques,
+void apply_stokeslet_rotlet_kernel(const ExecutionSpace& space, const double viscosity,  //
+                                   const SourcePosVectorType& source_positions,          //
+                                   const TargetPosVectorType& target_positions,          //
+                                   const SourceForceVectorType& source_forces,           //
+                                   const SourceTorqueVectorType& source_torques,         //
                                    const TargetVelocityVectorType& target_velocities) {
   const size_t num_source_points = source_positions.extent(0) / 3;
   const size_t num_target_points = target_positions.extent(0) / 3;
   const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
-  auto contribution = KOKKOS_LAMBDA(const size_t t, const size_t s, double& vx, double& vy, double& vz) {
+  auto contribution = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
     const double dz = target_positions(3 * t + 2) - source_positions(3 * s + 2);
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const double rinv = r2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(r2);
+    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    const double rinv = coincident ? 0.0 : 1.0 / Kokkos::sqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
 
     // Stokeslet: (I/r + r r / r^3) . F
@@ -1971,20 +1789,20 @@ void apply_stokeslet_rotlet_kernel([[maybe_unused]] const ExecutionSpace& space,
     const double fy = source_forces(3 * s + 1);
     const double fz = source_forces(3 * s + 2);
     const double f_dot_r = fx * dx + fy * dy + fz * dz;
-    vx += scale_factor * (rinv * fx + rinv3 * dx * f_dot_r);
-    vy += scale_factor * (rinv * fy + rinv3 * dy * f_dot_r);
-    vz += scale_factor * (rinv * fz + rinv3 * dz * f_dot_r);
+    const mundy::Vector3d stokeslet{scale_factor * (rinv * fx + rinv3 * dx * f_dot_r),
+                                    scale_factor * (rinv * fy + rinv3 * dy * f_dot_r),
+                                    scale_factor * (rinv * fz + rinv3 * dz * f_dot_r)};
 
     // Rotlet: (tau x r) / r^3
     const double tx = source_torques(3 * s + 0);
     const double ty = source_torques(3 * s + 1);
     const double tz = source_torques(3 * s + 2);
-    vx += scale_factor * rinv3 * (ty * dz - tz * dy);
-    vy += scale_factor * rinv3 * (tz * dx - tx * dz);
-    vz += scale_factor * rinv3 * (tx * dy - ty * dx);
+    const mundy::Vector3d rotlet{scale_factor * rinv3 * (ty * dz - tz * dy), scale_factor * rinv3 * (tz * dx - tx * dz),
+                                 scale_factor * rinv3 * (tx * dy - ty * dx)};
+    return stokeslet + rotlet;
   };
-  panelize_velocity_kernel_over_target_points<32>(space, static_cast<int>(num_target_points),
-                                                  static_cast<int>(num_source_points), target_velocities, contribution);
+  mundy::direct_sum(space, num_target_points, num_source_points, contribution,
+                    impl::add_to_vector3_entries(target_velocities));
 }
 
 /// \brief Body self-interaction LHS block: y = (-1/(2 viscosity) I + T_b)[q] - (U + Omega x (x - X)).

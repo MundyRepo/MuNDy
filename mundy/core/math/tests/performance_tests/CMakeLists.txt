@@ -48,6 +48,21 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
+  tribits_add_executable(
+    DirectSum
+    SOURCES DirectSum.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+  # The head-to-head against STKFMM's Stokes FMM needs the (optional) STKFMM TPL.
+  if(${PACKAGE_NAME}_ENABLE_STKFMM)
+    tribits_add_executable(
+      DirectSumVsSTKFMM
+      SOURCES DirectSumVsSTKFMM.cpp
+      INSTALLABLE
+      CATEGORIES PERFORMANCE
+    )
+  endif()
 else()
   message(STATUS
     "MundyMath: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")

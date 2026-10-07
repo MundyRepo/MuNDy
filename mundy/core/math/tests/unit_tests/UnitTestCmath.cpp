@@ -115,8 +115,10 @@ TEST(Cmath, ConstexprSqrtMatchesTheHardwareForEveryFloatInTwoBinades) {
   EXPECT_EQ(mismatches, 0);
 }
 
-TEST(Cmath, SqrtAgreesWithConstexprSqrtInKernels) {
-  // mundy::sqrt and impl::constexpr_sqrt, both called inside a kernel on the default execution space.
+/// \brief How many of 2^20 hashed doubles get different mundy::sqrt and impl::constexpr_sqrt bits inside a kernel.
+///
+/// A free function, since CUDA forbids KOKKOS_LAMBDA in a test body (a private member function).
+int count_sqrt_mismatches_in_kernel() {
   int mismatches = 0;
   Kokkos::parallel_reduce(
       "UnitTestCmath::SqrtAgreesWithConstexprSqrtInKernels", Kokkos::RangePolicy<>(0, 1 << 20),
@@ -128,7 +130,12 @@ TEST(Cmath, SqrtAgreesWithConstexprSqrtInKernels) {
         count += bit_cast<std::uint64_t>(expected) != bit_cast<std::uint64_t>(actual) && expected == expected;
       },
       mismatches);
-  EXPECT_EQ(mismatches, 0);
+  return mismatches;
+}
+
+TEST(Cmath, SqrtAgreesWithConstexprSqrtInKernels) {
+  // mundy::sqrt and impl::constexpr_sqrt, both called inside a kernel on the default execution space.
+  EXPECT_EQ(count_sqrt_mismatches_in_kernel(), 0);
 }
 
 }  // namespace

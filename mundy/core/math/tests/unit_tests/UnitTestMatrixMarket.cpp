@@ -216,13 +216,21 @@ TEST(MatrixMarket, RejectsInvalidFiles) {
   std::remove(filename.c_str());
 }
 
+/// \brief Fill matrix(i, j) = 1 / (1 + i + 7 j) on the default execution space.
+///
+/// A free function, since CUDA forbids KOKKOS_LAMBDA in a test body (a private member function).
+template <class View>
+void fill_on_device(const View& matrix) {
+  Kokkos::parallel_for(
+      "MatrixMarket::fill", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {matrix.extent(0), matrix.extent(1)}),
+      KOKKOS_LAMBDA(const int i, const int j) { matrix(i, j) = 1.0 / (1.0 + i + 7 * j); });
+}
+
 TEST(MatrixMarket, DeviceViewsRoundTrip) {
   using memory_space = Kokkos::DefaultExecutionSpace::memory_space;
   const std::string filename = "MatrixMarket_device.mtx";
   Kokkos::View<double**, Kokkos::LayoutLeft, memory_space> written("written", 4, 3);
-  Kokkos::parallel_for(
-      "MatrixMarket::fill", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {4, 3}),
-      KOKKOS_LAMBDA(const int i, const int j) { written(i, j) = 1.0 / (1.0 + i + 7 * j); });
+  fill_on_device(written);
   write_matrix_market(filename, written);
   Kokkos::View<double**, Kokkos::LayoutLeft, memory_space> read("read", 0, 0);
   read_matrix_market(filename, read);

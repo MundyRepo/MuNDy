@@ -1547,4 +1547,15 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AMatrix<T, N, M, Accessor1
 
 }  // namespace mundy
 
+/// \brief The identity of Kokkos::Sum over mundy::Matrix, so Matrix-valued sums work in any Kokkos::parallel_reduce.
+///
+/// Only Sum is supported: Prod, Max, and Min would need an elementwise product and an ordering, which Matrix does not
+/// define.
+template <typename T, size_t N, size_t M>
+struct Kokkos::reduction_identity<mundy::Matrix<T, N, M>> {
+  KOKKOS_FORCEINLINE_FUNCTION constexpr static mundy::Matrix<T, N, M> sum() {
+    return mundy::Matrix<T, N, M>::zeros();
+  }
+};
+
 #endif  // MUNDY_MATH_MATRIX_HPP_
