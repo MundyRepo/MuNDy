@@ -33,7 +33,6 @@
 #include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 #include <KokkosBlas.hpp>
-#include <KokkosBlas_gesv.hpp>
 #endif
 
 // Mundy

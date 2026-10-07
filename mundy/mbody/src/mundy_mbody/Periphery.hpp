@@ -102,7 +102,6 @@ periphery)
 // C++ core
 #include <algorithm>
 #include <cmath>
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -113,13 +112,14 @@ periphery)
 
 // Kokkos and Kokkos-Kernels
 #include <KokkosBlas.hpp>
-#include <KokkosBlas_gesv.hpp>
 #include <Kokkos_Core.hpp>
 
 // Mundy
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion (reference->lab rotation)
 #include <mundy_math/Vector3.hpp>              // for mundy::Vector3, mundy::cross
+#include <mundy_math/invert.hpp>               // for mundy::invert
+#include <mundy_math/matrix_market.hpp>        // for mundy::read_matrix_market, mundy::write_matrix_market
 #include <mundy_utils/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
 
 // The matrix-free GMRES inverse path is only available when both the Belos and Tpetra TPLs are enabled; without
@@ -255,320 +255,22 @@ inline double interior_trace_coefficient(const double viscosity, const bool outw
   return (outward_normal ? 1.0 : -1.0) / viscosity;
 }
 
+/// \brief A view read from a Matrix Market file, which must hold a rows x cols array (cols = 1 for a vector).
+///
+/// Files are external input, so their extents are checked in every build, not only in debug builds.
+template <class View>
+View read_matrix_market_with_extents(const std::string& filename, const size_t rows, const size_t cols,
+                                     const char* context) {
+  View view;
+  mundy::read_matrix_market(filename, view);
+  const size_t file_cols = View::rank() == 1 ? 1 : view.extent(1);
+  MUNDY_THROW_REQUIRE(view.extent(0) == rows && file_cols == cols, std::runtime_error,
+                      mundy::sink() << context << ": " << filename << " holds a " << view.extent(0) << " x "
+                                    << file_cols << " array, but a " << rows << " x " << cols << " array is expected.");
+  return view;
+}
+
 }  // namespace impl
-
-/// \brief Invert and LU decompose a dense square matrix of size n x n
-///
-/// \param space The execution space
-/// \param[in & out] matrix The matrix to invert. On exit, the matrix is replaced with its LU decomposition
-/// \param[out] M_inv The inverse of the matrix.
-template <class ExecutionSpace, typename MatrixType1, typename MatrixType2>
-void invert_matrix([[maybe_unused]] const ExecutionSpace& space, const MatrixType1& matrix,
-                   const MatrixType2& matrix_inv) {
-  static_assert(Kokkos::is_view<MatrixType1>::value && Kokkos::is_view<MatrixType2>::value,
-                "The matrices must be a Kokkos::View");
-  static_assert(std::is_same_v<typename MatrixType1::value_type, double> &&
-                    std::is_same_v<typename MatrixType2::value_type, double>,
-                "invert_matrix: The view must have 'double' as its value "
-                "type");
-  static_assert(MatrixType1::rank == 2 && MatrixType2::rank == 2,
-                "invert_matrix: The view must have rank 2 (i.e., double**)");
-  static_assert(std::is_same_v<typename MatrixType1::memory_space, typename MatrixType2::memory_space>,
-                "invert_matrix: The matrices must have the same memory space");
-  static_assert(std::is_same_v<typename MatrixType1::array_layout, typename MatrixType2::array_layout>,
-                "invert_matrix: The matrices must have the same layout");
-
-  // Check the input sizes
-  const size_t matrix_size = matrix.extent(0);
-  MUNDY_THROW_ASSERT(matrix.extent(1) == matrix_size, std::invalid_argument, "invert_matrix: matrix must be square.");
-  MUNDY_THROW_ASSERT((matrix_inv.extent(0) == matrix_size) && (matrix_inv.extent(1) == matrix_size),
-                     std::invalid_argument, "invert_matrix: matrix_inv must be the same size as the matrix to invert.");
-
-  // Create a view to store the pivots
-  Kokkos::View<int*, typename MatrixType1::array_layout, typename MatrixType1::memory_space> pivots("pivots",
-                                                                                                    matrix_size);
-
-  // Fill matrix_inv with the identity matrix
-  Kokkos::deep_copy(matrix_inv, 0.0);
-  Kokkos::parallel_for(
-      "FillIdentity", Kokkos::RangePolicy<ExecutionSpace>(0, matrix_size),
-      KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
-
-  // Solve the dense linear equation system M*X = I, which results in X = M^{-1}
-  // On exist, M is replaced with its LU decomposition
-  //           M_inv is replaced with the solution X = M^{-1}
-  KokkosBlas::gesv(matrix, matrix_inv, pivots);
-}
-
-/// \brief Write a matrix to a human-readable text file
-///
-/// \param[in] filename The filename
-/// \param[in] matrix_host The matrix to write (host)
-template <typename MatrixType>
-void write_matrix_to_file(const std::string& filename, const MatrixType& matrix_host) {
-  static_assert(Kokkos::is_view<MatrixType>::value, "The matrix must be a Kokkos::View");
-  static_assert(MatrixType::rank == 2, "write_matrix_to_file: The view must have rank 2 (i.e., double**)");
-  static_assert(std::is_same_v<typename MatrixType::memory_space, Kokkos::HostSpace>,
-                "write_matrix_to_file: The matrix must be in host memory");
-
-  // Perform the write
-  std::ofstream outfile(filename);
-  MUNDY_THROW_REQUIRE(outfile.is_open(), std::runtime_error,
-                      mundy::sink() << "write_matrix_to_file: failed to open " << filename);
-
-  // Write the matrix to the file (space separated)
-  // The first two lines are the number of rows and columns
-  const size_t num_rows = matrix_host.extent(0);
-  const size_t num_columns = matrix_host.extent(1);
-  outfile << num_rows << std::endl;
-  outfile << num_columns << std::endl;
-
-  // Write matrix data with appropriate precision
-  using ValueType = typename MatrixType::value_type;
-  if constexpr (std::is_floating_point_v<ValueType>) {
-    outfile << std::fixed << std::setprecision(std::numeric_limits<ValueType>::digits10 + 1);
-  }
-  for (size_t i = 0; i < num_rows; ++i) {
-    for (size_t j = 0; j < num_columns; ++j) {
-      outfile << matrix_host(i, j) << " ";
-    }
-    outfile << std::endl;
-  }
-  MUNDY_THROW_REQUIRE(outfile.good(), std::runtime_error,
-                      mundy::sink() << "write_matrix_to_file: failed while writing " << filename);
-
-  // Close the file
-  outfile.close();
-}
-
-/// \brief Read a matrix from a human-readable text file
-///
-/// \param[in] filename The filename
-/// \param[out] matrix_host The matrix to read (host)
-template <typename MatrixType>
-void read_matrix_from_file(const std::string& filename, const size_t expected_num_rows,
-                           const size_t expected_num_columns, const MatrixType& matrix_host) {
-  static_assert(Kokkos::is_view<MatrixType>::value, "The matrix must be a Kokkos::View");
-  static_assert(MatrixType::rank == 2, "read_matrix_from_file: The view must have rank 2 (i.e., double**)");
-  static_assert(std::is_same_v<typename MatrixType::memory_space, Kokkos::HostSpace>,
-                "read_matrix_from_file: The matrix must be in host memory");
-
-  // Read the matrix from a file
-  std::ifstream infile(filename);
-  MUNDY_THROW_REQUIRE(infile.is_open(), std::runtime_error,
-                      mundy::sink() << "read_matrix_from_file: failed to open " << filename);
-
-  // Parse the input
-  size_t num_rows = 0;
-  size_t num_columns = 0;
-  const bool read_dimensions = static_cast<bool>(infile >> num_rows >> num_columns);
-  MUNDY_THROW_REQUIRE(read_dimensions, std::runtime_error,
-                      mundy::sink() << "read_matrix_from_file: failed to read the matrix dimensions from " << filename);
-  MUNDY_THROW_REQUIRE((num_rows == expected_num_rows) && (num_columns == expected_num_columns), std::runtime_error,
-                      mundy::sink() << "read_matrix_from_file: " << filename << " holds a " << num_rows << " x "
-                                    << num_columns << " matrix but " << expected_num_rows << " x "
-                                    << expected_num_columns << " was expected");
-  for (size_t i = 0; i < num_rows; ++i) {
-    for (size_t j = 0; j < num_columns; ++j) {
-      const bool read_element = static_cast<bool>(infile >> matrix_host(i, j));
-      MUNDY_THROW_REQUIRE(read_element, std::runtime_error,
-                          mundy::sink() << "read_matrix_from_file: failed to read element (" << i << ", " << j
-                                        << ") from " << filename);
-    }
-  }
-
-  // Close the file
-  infile.close();
-}
-
-/// \brief Write a vector to a human readable text file
-///
-/// \param[in] filename The filename
-/// \param[in] vector_host The vector to write (host)
-template <typename VectorType>
-void write_vector_to_file(const std::string& filename, const VectorType& vector_host) {
-  static_assert(Kokkos::is_view<VectorType>::value, "The vector must be a Kokkos::View");
-  static_assert(VectorType::rank == 1, "write_vector_to_file: The view must have rank 1 (i.e., double*)");
-  static_assert(std::is_same_v<typename VectorType::memory_space, Kokkos::HostSpace>,
-                "write_vector_to_file: The vector must be in host memory");
-
-  // Perform the write
-  std::ofstream outfile(filename);
-  MUNDY_THROW_REQUIRE(outfile.is_open(), std::runtime_error,
-                      mundy::sink() << "write_vector_to_file: failed to open " << filename);
-
-  // Write the vector to the file (space separated)
-  // The first line is the number of elements
-  const size_t num_elements = vector_host.extent(0);
-  outfile << num_elements << std::endl;
-
-  // Write vector data with appropriate precision
-  using ValueType = typename VectorType::value_type;
-  if constexpr (std::is_floating_point_v<ValueType>) {
-    outfile << std::fixed << std::setprecision(std::numeric_limits<ValueType>::digits10 + 1);
-  }
-
-  for (size_t i = 0; i < num_elements; ++i) {
-    outfile << vector_host(i) << std::endl;
-  }
-  MUNDY_THROW_REQUIRE(outfile.good(), std::runtime_error,
-                      mundy::sink() << "write_vector_to_file: failed while writing " << filename);
-
-  // Close the file
-  outfile.close();
-}
-
-/// \brief Read a vector from a file
-///
-/// \param[in] filename The filename
-/// \param[out] vector_host The vector to read (host)
-template <typename VectorType>
-void read_vector_from_file(const std::string& filename, const size_t expected_num_elements,
-                           const VectorType& vector_host) {
-  static_assert(Kokkos::is_view<VectorType>::value, "The vector must be a Kokkos::View");
-  static_assert(VectorType::rank == 1, "read_vector_from_file: The view must have rank 1 (i.e., double*)");
-  static_assert(std::is_same_v<typename VectorType::memory_space, Kokkos::HostSpace>,
-                "read_vector_from_file: The vector must be in host memory");
-
-  // Read the vector from a file
-  std::ifstream infile(filename);
-  MUNDY_THROW_REQUIRE(infile.is_open(), std::runtime_error,
-                      mundy::sink() << "read_vector_from_file: failed to open " << filename);
-
-  // Parse the input
-  size_t num_elements = 0;
-  const bool read_length = static_cast<bool>(infile >> num_elements);
-  MUNDY_THROW_REQUIRE(read_length, std::runtime_error,
-                      mundy::sink() << "read_vector_from_file: failed to read the vector length from " << filename);
-  MUNDY_THROW_REQUIRE(num_elements == expected_num_elements, std::runtime_error,
-                      mundy::sink() << "read_vector_from_file: " << filename << " holds " << num_elements
-                                    << " elements but " << expected_num_elements << " were expected");
-
-  for (size_t i = 0; i < num_elements; ++i) {
-    const bool read_element = static_cast<bool>(infile >> vector_host(i));
-    MUNDY_THROW_REQUIRE(read_element, std::runtime_error,
-                        mundy::sink() << "read_vector_from_file: failed to read element " << i << " from " << filename);
-  }
-
-  // Close the file
-  infile.close();
-}
-
-// /// \brief Write a matrix to a file
-// ///
-// /// \param[in] filename The filename
-// /// \param[in] matrix_host The matrix to write (host)
-// template <typename ValueType, class Layout>
-// void write_matrix_to_file(const std::string &filename,
-//                           const Kokkos::View<ValueType **, Layout, Kokkos::HostSpace> &matrix_host) {
-//   // Perform the write
-//   std::ofstream outfile(filename, std::ios::binary);
-//   if (!outfile) {
-//     std::cerr << "Failed to open file: " << filename << std::endl;
-//     return;
-//   }
-
-//   // Write the matrix to the file (using reinterpret_cast to map directly to binary data)
-//   const size_t num_rows = matrix_host.extent(0);
-//   const size_t num_columns = matrix_host.extent(1);
-//   outfile.write(reinterpret_cast<const char *>(&num_rows), sizeof(size_t));
-//   outfile.write(reinterpret_cast<const char *>(&num_columns), sizeof(size_t));
-//   for (size_t i = 0; i < num_rows; ++i) {
-//     for (size_t j = 0; j < num_columns; ++j) {
-//       outfile.write(reinterpret_cast<const char *>(&matrix_host(i, j)), sizeof(ValueType));
-//     }
-//   }
-
-//   // Close the file
-//   outfile.close();
-// }
-
-// /// \brief Read a matrix from a file
-// ///
-// /// \param[in] filename The filename
-// /// \param[out] matrix_host The matrix to read (host)
-// template <typename ValueType, class Layout>
-// void read_matrix_from_file(const std::string &filename, const size_t expected_num_rows,
-//                            const size_t expected_num_columns,
-//                            const Kokkos::View<ValueType **, Layout, Kokkos::HostSpace> &matrix_host) {
-//   // Read the matrix from a file
-//   std::ifstream infile(filename, std::ios::binary);
-//   if (!infile) {
-//     std::cerr << "Failed to open file: " << filename << std::endl;
-//     return;
-//   }
-
-//   // Parse the input
-//   size_t num_rows;
-//   size_t num_columns;
-//   infile.read(reinterpret_cast<char *>(&num_rows), sizeof(size_t));
-//   infile.read(reinterpret_cast<char *>(&num_columns), sizeof(size_t));
-//   if ((num_rows != expected_num_rows) || (num_columns != expected_num_columns)) {
-//     std::cerr << "Matrix size mismatch: expected (" << expected_num_rows << ", " << expected_num_columns << "), got
-//     ("
-//               << num_rows << ", " << num_columns << ")" << std::endl;
-//     return;
-//   }
-//   for (size_t i = 0; i < num_rows; ++i) {
-//     for (size_t j = 0; j < num_columns; ++j) {
-//       infile.read(reinterpret_cast<char *>(&matrix_host(i, j)), sizeof(ValueType));
-//     }
-//   }
-// }
-
-// /// \brief Write a vector to a file
-// ///
-// /// \param[in] filename The filename
-// /// \param[in] vector_host The vector to write (host)
-// template <typename VectorDataType, class Layout>
-// void write_vector_to_file(const std::string &filename,
-//                           const Kokkos::View<VectorDataType *, Layout, Kokkos::HostSpace> &vector_host) {
-//   // Perform the write
-//   std::ofstream outfile(filename, std::ios::binary);
-//   if (!outfile) {
-//     std::cerr << "Failed to open file: " << filename << std::endl;
-//     return;
-//   }
-
-//   // Write the vector to the file (using reinterpret_cast to map directly to binary data)
-//   const size_t num_elements = vector_host.extent(0);
-//   outfile.write(reinterpret_cast<const char *>(&num_elements), sizeof(size_t));
-//   for (size_t i = 0; i < num_elements; ++i) {
-//     outfile.write(reinterpret_cast<const char *>(&vector_host(i)), sizeof(VectorDataType));
-//   }
-
-//   // Close the file
-//   outfile.close();
-// }
-
-// /// \brief Read a vector from a file
-// ///
-// /// \param[in] filename The filename
-// /// \param[out] vector_host The vector to read (host)
-// template <typename VectorDataType, class Layout>
-// void read_vector_from_file(const std::string &filename, const size_t expected_num_elements,
-//                            const Kokkos::View<VectorDataType *, Layout, Kokkos::HostSpace> &vector_host) {
-//   // Read the vector from a file
-//   std::ifstream infile(filename, std::ios::binary);
-//   if (!infile) {
-//     std::cerr << "Failed to open file: " << filename << std::endl;
-//     return;
-//   }
-
-//   // Parse the input
-//   size_t num_elements;
-//   infile.read(reinterpret_cast<char *>(&num_elements), sizeof(size_t));
-//   if (num_elements != expected_num_elements) {
-//     std::cerr << "Vector size mismatch: expected " << expected_num_elements << ", got " << num_elements << std::endl;
-//     return;
-//   }
-//   for (size_t i = 0; i < num_elements; ++i) {
-//     infile.read(reinterpret_cast<char *>(&vector_host(i)), sizeof(VectorDataType));
-//   }
-
-//   // Close the file
-//   infile.close();
-// }
 
 /// \brief Copy a host std::vector<double> into a fresh device (LayoutLeft) view of the same length.
 template <class ExecSpace = Kokkos::DefaultExecutionSpace>
@@ -1782,6 +1484,8 @@ class PeripheryT {
 
   using DeviceExecutionSpace = ExecSpace;
   using DeviceMemorySpace = typename ExecSpace::memory_space;
+  using device_vector_t = Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>;
+  using device_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, DeviceMemorySpace>;
   //@}
 
   //! \name Constructors and destructor
@@ -1865,13 +1569,10 @@ class PeripheryT {
 
   /// \brief Set the surface positions
   ///
-  /// \param surface_positions_filename The filename to read the surface positions from
+  /// \param surface_positions_filename A Matrix Market file of the surface positions (num_nodes * 3 x 1)
   PeripheryT& set_surface_positions(const std::string& surface_positions_filename) {
-    read_vector_from_file(surface_positions_filename, 3 * num_surface_nodes_, surface_positions_host_);
-    Kokkos::deep_copy(surface_positions_, surface_positions_host_);
-    is_surface_positions_set_ = true;
-
-    return *this;
+    return set_surface_positions(impl::read_matrix_market_with_extents<device_vector_t>(
+        surface_positions_filename, 3 * num_surface_nodes_, 1, "set_surface_positions"));
   }
 
   /// \brief Set the surface normals and declare their orientation
@@ -1912,16 +1613,13 @@ class PeripheryT {
 
   /// \brief Set the surface normals and declare their orientation
   ///
-  /// \param surface_normals_filename The filename to read the surface normals from
+  /// \param surface_normals_filename A Matrix Market file of the surface normals (num_nodes * 3 x 1)
   /// \param outward_normal Whether the normals point out of (true) or into (false) the enclosed fluid; checked against
   /// the geometry when the inverse is built
   PeripheryT& set_surface_normals(const std::string& surface_normals_filename, const bool outward_normal) {
-    read_vector_from_file(surface_normals_filename, 3 * num_surface_nodes_, surface_normals_host_);
-    Kokkos::deep_copy(surface_normals_, surface_normals_host_);
-    outward_normal_ = outward_normal;
-    is_surface_normals_set_ = true;
-
-    return *this;
+    return set_surface_normals(impl::read_matrix_market_with_extents<device_vector_t>(
+                                   surface_normals_filename, 3 * num_surface_nodes_, 1, "set_surface_normals"),
+                               outward_normal);
   }
 
   /// \brief Set the quadrature weights
@@ -1952,13 +1650,10 @@ class PeripheryT {
 
   /// \brief Set the quadrature weights
   ///
-  /// \param quadrature_weights_filename The filename to read the quadrature weights from
+  /// \param quadrature_weights_filename A Matrix Market file of the quadrature weights (num_nodes x 1)
   PeripheryT& set_quadrature_weights(const std::string& quadrature_weights_filename) {
-    read_vector_from_file(quadrature_weights_filename, num_surface_nodes_, quadrature_weights_host_);
-    Kokkos::deep_copy(quadrature_weights_, quadrature_weights_host_);
-    is_quadrature_weights_set_ = true;
-
-    return *this;
+    return set_quadrature_weights(impl::read_matrix_market_with_extents<device_vector_t>(
+        quadrature_weights_filename, num_surface_nodes_, 1, "set_quadrature_weights"));
   }
 
   /// \brief Set the precomputed matrix
@@ -1995,24 +1690,22 @@ class PeripheryT {
 
   /// \brief Set the precomputed matrix
   ///
-  /// \param inverse_self_interaction_matrix_filename The filename to read the precomputed matrix from
+  /// \param inverse_self_interaction_matrix_filename A Matrix Market file of the precomputed matrix, as written by
+  /// write_inverse_self_interaction_matrix (num_nodes * 3 x num_nodes * 3)
   PeripheryT& set_inverse_self_interaction_matrix(const std::string& inverse_self_interaction_matrix_filename) {
-    read_matrix_from_file(inverse_self_interaction_matrix_filename, 3 * num_surface_nodes_, 3 * num_surface_nodes_,
-                          M_inv_host_);
-    Kokkos::deep_copy(M_inv_, M_inv_host_);
-    is_inverse_self_interaction_matrix_set_ = true;
-
-    return *this;
+    return set_inverse_self_interaction_matrix(impl::read_matrix_market_with_extents<device_matrix_t>(
+        inverse_self_interaction_matrix_filename, 3 * num_surface_nodes_, 3 * num_surface_nodes_,
+        "set_inverse_self_interaction_matrix"));
   }
   //@}
 
   //! \name Public member functions
   //@{
 
-  // TODO(palmerb4): A better method would be read_from_file and write_to_file, which would be more general
-  PeripheryT& build_inverse_self_interaction_matrix(
-      const bool& write_to_file = true,
-      const std::string& inverse_self_interaction_matrix_filename = "inverse_self_interaction_matrix.dat") {
+  /// \brief Build the dense inverse M^{-1} of the self-interaction matrix, for the direct inverse method.
+  ///
+  /// Save it with write_inverse_self_interaction_matrix and restore it with set_inverse_self_interaction_matrix.
+  PeripheryT& build_inverse_self_interaction_matrix() {
     MUNDY_THROW_REQUIRE(is_surface_positions_set_ && is_surface_normals_set_ && is_quadrature_weights_set_,
                         std::runtime_error,
                         "build_inverse_self_interaction_matrix: surface_positions, surface_normals, and "
@@ -2024,15 +1717,23 @@ class PeripheryT {
     fill_skfie_matrix(DeviceExecutionSpace(), viscosity_, num_surface_nodes_, surface_positions_, surface_normals_,
                       quadrature_weights_, M, outward_normal_);
 
-    // Now invert the matrix and store the result
-    invert_matrix(DeviceExecutionSpace(), M, M_inv_);
-
-    if (write_to_file) {
-      // Write the precomputed matrix to a file
-      Kokkos::deep_copy(M_inv_host_, M_inv_);
-      write_matrix_to_file(inverse_self_interaction_matrix_filename, M_inv_host_);
-    }
+    // Invert M; its LU factors overwrite the temporary
+    mundy::invert(DeviceExecutionSpace(), M, M_inv_);
     is_inverse_self_interaction_matrix_set_ = true;
+
+    return *this;
+  }
+
+  /// \brief Write the dense inverse M^{-1} to a Matrix Market file, exactly.
+  ///
+  /// set_inverse_self_interaction_matrix reads it back. Like every Matrix Market write, this is serial: under MPI,
+  /// call it from one process only.
+  const PeripheryT& write_inverse_self_interaction_matrix(
+      const std::string& inverse_self_interaction_matrix_filename) const {
+    MUNDY_THROW_REQUIRE(is_inverse_self_interaction_matrix_set_, std::runtime_error,
+                        "write_inverse_self_interaction_matrix: build_inverse_self_interaction_matrix() or "
+                        "set_inverse_self_interaction_matrix() must be called first.");
+    mundy::write_matrix_market(inverse_self_interaction_matrix_filename, M_inv_);
 
     return *this;
   }
