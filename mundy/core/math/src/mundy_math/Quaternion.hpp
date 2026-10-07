@@ -1135,7 +1135,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector
       ny = -v_from[0];
       nz = CommonType(0);
     }
-    const CommonType inv_len = CommonType(1) / sqrt(nx * nx + ny * ny + nz * nz);
+    const CommonType inv_len = rsqrt(nx * nx + ny * ny + nz * nz);
     quat.w() = CommonType(0);
     quat.x() = nx * inv_len;
     quat.y() = ny * inv_len;
