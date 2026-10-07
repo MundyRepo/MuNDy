@@ -22,7 +22,8 @@
 #define MUNDY_MBODY_IMPL_KOKKOSMBODYIMPL_HPP_
 
 /// \file
-/// \brief Operators and geometry kernels for the multibody step solvers (mbody::solve_mixed_lcp, solve_mixed_slcp).
+/// \brief Operators, geometry kernels and storage for the multibody time integrators (mbody::MixedLCPIntegrator,
+/// MixedSLCPIntegrator).
 ///
 /// The D/D^T and B/B^T Jacobian operators and the geometry kernels that fill them.
 
@@ -1272,6 +1273,17 @@ struct ConstraintIndexMap {
   }
 };
 
+/// \brief Whether two index maps give every family the same rows.
+template <typename... Families>
+bool same_layout(const ConstraintIndexMap<Families...>& a, const ConstraintIndexMap<Families...>& b) {
+  for (size_t f = 0; f < sizeof...(Families); ++f) {
+    if (a.ranges[f].begin != b.ranges[f].begin || a.ranges[f].end != b.ranges[f].end) {
+      return false;
+    }
+  }
+  return a.num_unilateral == b.num_unilateral && a.num_bilateral == b.num_bilateral;
+}
+
 /// \brief The arity order in which each block packs its families.
 inline constexpr size_t arity_pack_order[] = {2, 3, 1};
 
@@ -1640,13 +1652,11 @@ void fill_family_compliance(const F& family, const KinvView& kinv, const Constra
   }
 }
 
-/// \brief The bilateral compliance diagonal K^-1 in the index map's order.
-template <typename ExecSpace, typename... Families>
-Kokkos::View<double*, typename ExecSpace::memory_space> compliance_diagonal(
-    const ConstraintSet<Families...>& constraints, const ConstraintIndexMap<Families...>& index_map) {
-  Kokkos::View<double*, typename ExecSpace::memory_space> kinv("kinv", index_map.num_bilateral);
+/// \brief kinv := the bilateral compliance diagonal K^-1 in the index map's order.
+template <typename ExecSpace, typename KinvView, typename... Families>
+void fill_compliance_diagonal(const ConstraintSet<Families...>& constraints,
+                              const ConstraintIndexMap<Families...>& index_map, const KinvView& kinv) {
   (fill_family_compliance<ExecSpace>(get<Families>(constraints), kinv, index_map), ...);
-  return kinv;
 }
 
 /// \brief units(row) := the unit of family F's row, for F's rows.
@@ -1748,7 +1758,7 @@ LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num
 //! \name One step
 //@{
 
-/// \brief The parts of a step that no linearization changes.
+/// \brief The parts of a step that no linearization changes, and how its linearizations are solved.
 ///
 /// The unilateral block is linearized at the start of the step, C^k: its Jacobian and q = Phi(C^k) + dt D^T U_free.
 /// The mobility is that of C^k, and U_free = V_ext + M F_ext is the velocity without constraint forces.
@@ -1766,40 +1776,9 @@ struct StepData {
   view_t kinv;
   MobilityOp mobility;
   view_t u_free;
+  PGDConfig<double> pgd_config;
+  CGConfig<double> cg_config;
 };
-
-/// \brief The step data of rods and constraints at their current configuration, where their mobility is mobility.
-template <typename ExecSpace, typename MobilityOp, typename... Families>
-StepData<ExecSpace, MobilityOp, Families...> make_step_data(const RodViews<ExecSpace>& rods,
-                                                            const ConstraintSet<Families...>& constraints,
-                                                            const MobilityOp& mobility, double dt) {
-  using view_t = typename StepData<ExecSpace, MobilityOp, Families...>::view_t;
-  using backend_t = KokkosBackend<ExecSpace>;
-
-  const size_t num_rods = rods.size();
-  const ConstraintIndexMap<Families...> index_map = make_constraint_index_map(constraints);
-  const size_t num_unilateral = index_map.num_unilateral;
-
-  view_t q("q", num_unilateral);
-  const auto unilateral_geo = make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(index_map);
-  compute_block_geometry<ConstraintType::UNILATERAL>(rods, constraints, index_map, unilateral_geo, q);
-
-  view_t u_free("u_free", rods.num_rows());
-  Kokkos::deep_copy(u_free, rods.velocity_omega_view());
-  view_t m_force_torque_ext("m_force_torque_ext", rods.num_rows());
-  backend_t::apply(mobility, rods.force_torque_view(), m_force_torque_ext);
-  backend_t::axpby(1.0, m_force_torque_ext, 1.0, u_free);
-
-  if (num_unilateral > 0) {
-    view_t q_rate("q_rate", num_unilateral);
-    make_block_rate_op<ExecSpace>(unilateral_geo, num_rods).apply(u_free, q_rate);
-    backend_t::axpby(dt, q_rate, 1.0, q);
-  }
-
-  return StepData<ExecSpace, MobilityOp, Families...>{
-      index_map, num_rods, dt, unilateral_geo, q, compliance_diagonal<ExecSpace>(constraints, index_map),
-      mobility,  u_free};
-}
 
 /// \brief One linearization's solution and the wrench and velocity it produces.
 ///
@@ -1818,13 +1797,13 @@ struct LinearizedStep {
   PGDResult<double> result;
 };
 
-/// \brief Storage for one linearization of the step.
-template <typename ExecSpace, typename MobilityOp, typename... Families>
-LinearizedStep<ExecSpace> make_linearized_step(const StepData<ExecSpace, MobilityOp, Families...>& step) {
+/// \brief Storage for one linearization of a step of num_rods rods and index_map's constraints.
+template <typename ExecSpace, typename... Families>
+LinearizedStep<ExecSpace> make_linearized_step(const ConstraintIndexMap<Families...>& index_map, size_t num_rods) {
   using view_t = typename LinearizedStep<ExecSpace>::view_t;
-  const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * step.num_rods;
-  return LinearizedStep<ExecSpace>{view_t("x", step.index_map.num_unilateral),
-                                   view_t("y", step.index_map.num_bilateral),
+  const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * num_rods;
+  return LinearizedStep<ExecSpace>{view_t("x", index_map.num_unilateral),
+                                   view_t("y", index_map.num_bilateral),
                                    view_t("bilateral_wrench", num_rows),
                                    view_t("wrench", num_rows),
                                    view_t("m_wrench", num_rows),
@@ -1852,16 +1831,17 @@ auto make_schur_operator(const StepData<ExecSpace, MobilityOp, Families...>& ste
 
 /// \brief The bilateral block's Schur complement S := (B^T dt M B + K^{-1})^{-1}, with B read from geometry.
 ///
-/// S is applied by matrix-free CG to cg_config, preconditioned by preconditioner unless it is NoPreconditioner.
+/// S is applied by matrix-free CG to cg_config, preconditioned by a copy of preconditioner unless it is
+/// NoPreconditioner. The copy shares the preconditioner's data.
 template <typename ExecSpace, typename MobilityOp, typename BilateralGeometry, typename Preconditioner,
           typename... Families>
 auto make_schur_complement(const StepData<ExecSpace, MobilityOp, Families...>& step, const BilateralGeometry& geometry,
-                           const CGConfig<double>& cg_config, Preconditioner& preconditioner) {
+                           const CGConfig<double>& cg_config, const Preconditioner& preconditioner) {
   using backend_t = KokkosBackend<ExecSpace>;
-  if constexpr (std::same_as<std::remove_cv_t<Preconditioner>, NoPreconditioner>) {
+  if constexpr (std::same_as<Preconditioner, NoPreconditioner>) {
     return make_cg_inv_op<backend_t>(make_schur_operator(step, geometry), cg_config);
   } else {
-    return make_cg_inv_op<backend_t>(make_schur_operator(step, geometry), cg_config, preconditioner);
+    return make_cg_inv_op<backend_t>(make_schur_operator(step, geometry), cg_config, ::mundy::own(preconditioner));
   }
 }
 
@@ -1878,11 +1858,11 @@ class SchurLinearization {
   SchurLinearization(double dt, const MobilityOp& mobility, const view_t& compliance, const Jacobian& jacobian,
                      const Operator& op, OperatorWorkspace& op_workspace)
       : dt_(dt),
-        mobility_(&mobility),
+        mobility_(mobility),
         compliance_(compliance),
         jacobian_(jacobian),
-        op_(&op),
-        op_workspace_(&op_workspace) {
+        op_(op),
+        op_workspace_(op_workspace) {
   }
 
   size_t num_rows() const {
@@ -1892,7 +1872,7 @@ class SchurLinearization {
     return dt_;
   }
   const MobilityOp& mobility() const {
-    return *mobility_;
+    return mobility_.get();
   }
   const view_t& compliance() const {
     return compliance_;
@@ -1903,16 +1883,16 @@ class SchurLinearization {
 
   template <class XVector, class YVector>
   void apply(const XVector& x, YVector& y) const {
-    KokkosBackend<ExecSpace>::apply(*op_, x, y, *op_workspace_);
+    KokkosBackend<ExecSpace>::apply(op_.get(), x, y, op_workspace_.get());
   }
 
  private:
   double dt_;
-  const MobilityOp* mobility_;
+  ::mundy::storage<const MobilityOp&> mobility_;
   view_t compliance_;
   Jacobian jacobian_;
-  const Operator* op_;
-  OperatorWorkspace* op_workspace_;
+  ::mundy::storage<const Operator&> op_;
+  ::mundy::storage<OperatorWorkspace&> op_workspace_;
 };
 
 /// \brief The preconditioner op a policy makes from a linearization; none for NoPreconditioner.
@@ -1925,22 +1905,23 @@ struct schur_preconditioner_of<NoPreconditioner, Linearization> {
   using type = NoPreconditioner;
 };
 
-/// \brief The storage of a step's linearizations: the bilateral block's linearization point and everything a solve at
-/// it writes.
+/// \brief The storage of a step: its step data, its linearizations, and everything a solve at one writes.
 ///
-/// Each linearization overwrites it in place. Only the storage of the blocks the step has is allocated.
+/// It is sized for one layout of rods and constraints (fits), and each call overwrites it in place. Only the storage of
+/// the blocks the layout has is allocated. S solves from the guess held in its output: S b, S B^T M D x and S y_rhs
+/// start from zero and then from their values at the previous solve.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
 class LinearizationWorkspace {
  public:
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
   using step_t = StepData<ExecSpace, MobilityOp, Families...>;
+  using unilateral_geometry_t = typename step_t::unilateral_geometry_t;
   using bilateral_geometry_t = decltype(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(
       std::declval<const ConstraintIndexMap<Families...>&>()));
   static constexpr bool is_preconditioned = !std::same_as<Policy, NoPreconditioner>;
 
  private:
   using backend_t = KokkosBackend<ExecSpace>;
-  using unilateral_geometry_t = typename step_t::unilateral_geometry_t;
   using d_t = decltype(make_block_force_op<ExecSpace>(std::declval<const unilateral_geometry_t&>(), size_t{}));
   using dt_t = decltype(make_block_rate_op<ExecSpace>(std::declval<const unilateral_geometry_t&>(), size_t{}));
   using b_t = decltype(make_block_force_op<ExecSpace>(std::declval<const bilateral_geometry_t&>(), size_t{}));
@@ -1956,12 +1937,12 @@ class LinearizationWorkspace {
  public:
   using linearization_t =
       SchurLinearization<ExecSpace, MobilityOp, jacobian_t, schur_operator_t, apply_workspace_t<schur_operator_t>>;
+  using preconditioner_t = typename schur_preconditioner_of<Policy, linearization_t>::type;
 
  private:
-  using preconditioner_t = typename schur_preconditioner_of<Policy, linearization_t>::type;
   using schur_complement_t =
       decltype(make_schur_complement(std::declval<const step_t&>(), std::declval<const bilateral_geometry_t&>(),
-                                     std::declval<const CGConfig<double>&>(), std::declval<preconditioner_t&>()));
+                                     std::declval<const CGConfig<double>&>(), std::declval<const preconditioner_t&>()));
   using lcp_workspace_t =
       decltype(make_quadratic_form<backend_t>(std::declval<const dt_t&>(), std::declval<const m_dt_t&>(),
                                               std::declval<const d_t&>())
@@ -1972,47 +1953,58 @@ class LinearizationWorkspace {
       std::declval<const bt_t&>()));
 
  public:
-  LinearizationWorkspace(const StepData<ExecSpace, MobilityOp, Families...>& step, const PGDConfig<double>& pgd_cfg,
-                         const CGConfig<double>& cg_cfg, const Policy& policy)
-      : geometry_(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(step.index_map)),
-        psi_("psi", step.index_map.num_bilateral),
-        pgd_config(pgd_cfg),
-        b("b", step.index_map.num_bilateral),
-        b_rate("b_rate", step.index_map.num_bilateral),
-        y_rhs("y_rhs", step.index_map.num_bilateral),
-        s_y("S_y_rhs", step.index_map.num_bilateral),
-        grad("grad", step.index_map.num_unilateral),
-        x_tmp("x_tmp", step.index_map.num_unilateral),
-        grad_tmp("grad_tmp", step.index_map.num_unilateral),
-        dx("Dx", has_unilateral(step) ? num_rows(step) : 0),
-        mdx("MDx", has_unilateral(step) && has_bilateral(step) ? num_rows(step) : 0),
-        d_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(step.unilateral_geo, step.num_rods))),
-        b_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(geometry_, step.num_rods))),
-        bt_workspace(backend_t::make_workspace(make_block_rate_op<ExecSpace>(geometry_, step.num_rods))),
-        m_dt_workspace(backend_t::make_workspace(make_scaled_op<backend_t>(step.dt, step.mobility))),
-        mobility_workspace(backend_t::make_workspace(step.mobility)) {
-    if (has_bilateral(step)) {
+  /// \brief Storage for steps of size dt of num_rods rods under index_map's constraints, whose mobility is mobility,
+  /// preconditioned by policy.
+  LinearizationWorkspace(const ConstraintIndexMap<Families...>& index_map, size_t num_rods, const MobilityOp& mobility,
+                         double dt, const Policy& policy)
+      : index_map_(index_map),
+        num_rods_(num_rods),
+        unilateral_geo(make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(index_map)),
+        q("q", index_map.num_unilateral),
+        q_rate("q_rate", index_map.num_unilateral),
+        kinv("kinv", index_map.num_bilateral),
+        u_free("u_free", num_rows()),
+        m_force_torque_ext("m_force_torque_ext", num_rows()),
+        geometry_(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(index_map)),
+        psi_("psi", index_map.num_bilateral),
+        b("b", index_map.num_bilateral),
+        b_rate("b_rate", index_map.num_bilateral),
+        y_rhs("y_rhs", index_map.num_bilateral),
+        s_y("S_y_rhs", index_map.num_bilateral),
+        grad("grad", index_map.num_unilateral),
+        x_tmp("x_tmp", index_map.num_unilateral),
+        grad_tmp("grad_tmp", index_map.num_unilateral),
+        dx("Dx", has_unilateral() ? num_rows() : 0),
+        mdx("MDx", has_unilateral() && has_bilateral() ? num_rows() : 0),
+        d_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(unilateral_geo, num_rods))),
+        b_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(geometry_, num_rods))),
+        bt_workspace(backend_t::make_workspace(make_block_rate_op<ExecSpace>(geometry_, num_rods))),
+        m_dt_workspace(backend_t::make_workspace(make_scaled_op<backend_t>(dt, mobility))),
+        mobility_workspace(backend_t::make_workspace(mobility)) {
+    // The step at this storage, whose values are not yet computed: only its sizes are read here.
+    const CGConfig<double> cg_cfg{};
+    const step_t step{index_map, num_rods, dt, unilateral_geo, q, kinv, mobility, u_free, PGDConfig<double>{}, cg_cfg};
+    if (has_bilateral()) {
       if constexpr (is_preconditioned) {
         static_assert(SchurPreconditionerPolicy<Policy, linearization_t>,
                       "mbody: the preconditioner policy must be a SchurPreconditionerPolicy.");
-        schur_operator.emplace(make_schur_operator(step, geometry_));
-        schur_operator_workspace.emplace(backend_t::make_workspace(*schur_operator));
-        preconditioner.emplace(policy.make_preconditioner(schur_linearization(step)));
+        const schur_operator_t schur_operator = make_schur_operator(step, geometry_);
+        schur_operator_workspace.emplace(backend_t::make_workspace(schur_operator));
+        preconditioner.emplace(policy.make_preconditioner(schur_linearization(step, schur_operator)));
       } else {
         preconditioner.emplace();
       }
-      schur_complement.emplace(make_schur_complement(step, geometry_, cg_cfg, *preconditioner));
-      s_workspace.emplace(backend_t::make_workspace(*schur_complement));
+      s_workspace.emplace(backend_t::make_workspace(make_schur_complement(step, geometry_, cg_cfg, *preconditioner)));
     }
-    if (has_unilateral(step)) {
-      const auto D = make_block_force_op<ExecSpace>(step.unilateral_geo, step.num_rods);
-      const auto DT = make_block_rate_op<ExecSpace>(step.unilateral_geo, step.num_rods);
-      const auto M_dt = make_scaled_op<backend_t>(step.dt, step.mobility);
-      if (has_bilateral(step)) {
-        const auto B = make_block_force_op<ExecSpace>(geometry_, step.num_rods);
-        const auto BT = make_block_rate_op<ExecSpace>(geometry_, step.num_rods);
-        mixed_cqpp_workspace.emplace(
-            make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, step.q, B, *schur_complement, BT));
+    if (has_unilateral()) {
+      const auto D = make_block_force_op<ExecSpace>(unilateral_geo, num_rods);
+      const auto DT = make_block_rate_op<ExecSpace>(unilateral_geo, num_rods);
+      const auto M_dt = make_scaled_op<backend_t>(dt, mobility);
+      if (has_bilateral()) {
+        const auto B = make_block_force_op<ExecSpace>(geometry_, num_rods);
+        const auto BT = make_block_rate_op<ExecSpace>(geometry_, num_rods);
+        const auto S = make_schur_complement(step, geometry_, cg_cfg, *preconditioner);
+        mixed_cqpp_workspace.emplace(make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, q, B, S, BT));
         // S solves from the guess held in its output: S b and S B^T M D x start from zero, then from their last values.
         Kokkos::deep_copy(mixed_cqpp_workspace->s_b, 0.0);
         Kokkos::deep_copy(mixed_cqpp_workspace->l_workspace.u(), 0.0);
@@ -2022,16 +2014,21 @@ class LinearizationWorkspace {
     }
   }
 
-  // S refers to the preconditioner it holds, so a workspace stays where it is made.
-  LinearizationWorkspace(const LinearizationWorkspace&) = delete;
-  LinearizationWorkspace& operator=(const LinearizationWorkspace&) = delete;
-  LinearizationWorkspace(LinearizationWorkspace&&) = delete;
-  LinearizationWorkspace& operator=(LinearizationWorkspace&&) = delete;
+  /// \brief Whether it is sized for num_rods rods under index_map's constraints.
+  bool fits(const ConstraintIndexMap<Families...>& index_map, size_t num_rods) const {
+    return num_rods == num_rods_ && same_layout(index_map, index_map_);
+  }
 
-  /// \brief The bilateral block at the linearization point, as a preconditioner policy sees it.
-  linearization_t schur_linearization(const step_t& step) {
-    return linearization_t(step.dt, step.mobility, step.kinv, jacobian_t(geometry_), *schur_operator,
+  /// \brief The bilateral block at the linearization point, as a preconditioner policy sees it, where the Schur
+  /// complement's operator is schur_operator.
+  linearization_t schur_linearization(const step_t& step, const schur_operator_t& schur_operator) {
+    return linearization_t(step.dt, step.mobility, step.kinv, jacobian_t(geometry_), schur_operator,
                            *schur_operator_workspace);
+  }
+
+  /// \brief The constraints' layout it is sized for.
+  const ConstraintIndexMap<Families...>& index_map() const {
+    return index_map_;
   }
 
   /// \brief The bilateral block's Jacobian and constraint values psi at the linearization point.
@@ -2043,22 +2040,33 @@ class LinearizationWorkspace {
   }
 
  private:
-  static bool has_unilateral(const step_t& step) {
-    return step.index_map.num_unilateral > 0;
+  bool has_unilateral() const {
+    return index_map_.num_unilateral > 0;
   }
-  static bool has_bilateral(const step_t& step) {
-    return step.index_map.num_bilateral > 0;
+  bool has_bilateral() const {
+    return index_map_.num_bilateral > 0;
   }
-  static size_t num_rows(const step_t& step) {
-    return RodViews<ExecSpace>::rows_per_entry * step.num_rods;
+  size_t num_rows() const {
+    return RodViews<ExecSpace>::rows_per_entry * num_rods_;
   }
 
-  // S reads the geometry's storage, so the geometry is never rebound.
+  ConstraintIndexMap<Families...> index_map_;
+  size_t num_rods_;
+
+ public:
+  unilateral_geometry_t unilateral_geo;
+  view_t q;
+  view_t q_rate;
+  view_t kinv;
+  view_t u_free;
+  view_t m_force_torque_ext;
+
+ private:
+  // The operators read the geometry's storage, so the geometry is never rebound.
   bilateral_geometry_t geometry_;
   view_t psi_;
 
  public:
-  PGDConfig<double> pgd_config;
   view_t b;
   view_t b_rate;
   view_t y_rhs;
@@ -2073,16 +2081,46 @@ class LinearizationWorkspace {
   apply_workspace_t<bt_t> bt_workspace;
   apply_workspace_t<m_dt_t> m_dt_workspace;
   apply_workspace_t<mobility_t> mobility_workspace;
-  std::optional<schur_operator_t> schur_operator;
   std::optional<apply_workspace_t<schur_operator_t>> schur_operator_workspace;
   std::optional<preconditioner_t> preconditioner;
-  std::optional<schur_complement_t> schur_complement;
   std::optional<apply_workspace_t<schur_complement_t>> s_workspace;
   std::optional<lcp_workspace_t> lcp_workspace;
   std::optional<mixed_cqpp_workspace_t> mixed_cqpp_workspace;
 };
 
-/// \brief Linearize the bilateral block at rods' configuration: its Jacobian and psi, into workspace.
+/// \brief The step data of rods and constraints at their current configuration, where their mobility is mobility,
+/// computed into workspace.
+///
+/// workspace fits rods and constraints.
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
+StepData<ExecSpace, MobilityOp, Families...> make_step_data(
+    const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints, const MobilityOp& mobility,
+    double dt, const PGDConfig<double>& pgd_cfg, const CGConfig<double>& cg_cfg,
+    LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace) {
+  using backend_t = KokkosBackend<ExecSpace>;
+  const ConstraintIndexMap<Families...>& index_map = workspace.index_map();
+  const size_t num_rods = rods.size();
+
+  compute_block_geometry<ConstraintType::UNILATERAL>(rods, constraints, index_map, workspace.unilateral_geo,
+                                                     workspace.q);
+
+  Kokkos::deep_copy(workspace.u_free, rods.velocity_omega_view());
+  backend_t::apply(mobility, rods.force_torque_view(), workspace.m_force_torque_ext, workspace.mobility_workspace);
+  backend_t::axpby(1.0, workspace.m_force_torque_ext, 1.0, workspace.u_free);
+
+  if (index_map.num_unilateral > 0) {
+    make_block_rate_op<ExecSpace>(workspace.unilateral_geo, num_rods).apply(workspace.u_free, workspace.q_rate);
+    backend_t::axpby(dt, workspace.q_rate, 1.0, workspace.q);
+  }
+
+  fill_compliance_diagonal<ExecSpace>(constraints, index_map, workspace.kinv);
+  return StepData<ExecSpace, MobilityOp, Families...>{index_map,   num_rods,       dt,       workspace.unilateral_geo,
+                                                      workspace.q, workspace.kinv, mobility, workspace.u_free,
+                                                      pgd_cfg,     cg_cfg};
+}
+
+/// \brief Linearize the bilateral block at rods' configuration: its Jacobian and psi, into workspace./// \brief
+/// Linearize the bilateral block at rods' configuration: its Jacobian and psi, into workspace.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
 void linearize(const StepData<ExecSpace, MobilityOp, Families...>& step,
                LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
@@ -2120,7 +2158,8 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
 
   if (has_bilateral) {
     if constexpr (LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>::is_preconditioned) {
-      workspace.preconditioner->update(workspace.schur_linearization(step));
+      workspace.preconditioner->update(
+          workspace.schur_linearization(step, make_schur_operator(step, workspace.geometry())));
     }
     Kokkos::deep_copy(workspace.b, workspace.psi());
     backend_t::apply(BT, to_free_end.velocity, workspace.b_rate, workspace.bt_workspace);
@@ -2130,13 +2169,14 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
   // x* (unilateral multipliers): the reduced CQPP, which without bilateral rows is the LCP. Without unilateral rows
   // x* is empty, and its projected residual is zero before any iteration.
   Kokkos::deep_copy(out.x, x_start);
-  out.result = PGDResult<double>{0, 0.0, 0.0 <= workspace.pgd_config.tol};
+  out.result = PGDResult<double>{0, 0.0, 0.0 <= step.pgd_config.tol};
   if (has_unilateral) {
-    auto pgd = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, workspace.pgd_config);
+    auto pgd = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, step.pgd_config);
     auto pgd_state = make_pgd_state(out.x, workspace.grad, workspace.x_tmp, workspace.grad_tmp);
     if (has_bilateral) {
+      const auto S = make_schur_complement(step, workspace.geometry(), step.cg_config, *workspace.preconditioner);
       const auto mcqpp =
-          make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, *workspace.schur_complement, BT, workspace.b,
+          make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, S, BT, workspace.b,
                                      LowerBoundSpace<double>{.lower_bound = 0.0}, *workspace.mixed_cqpp_workspace);
       out.result = solve_mixed_cqpp(mcqpp, pgd, pgd_state);
     } else {
@@ -2163,7 +2203,8 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
     } else {
       Kokkos::deep_copy(workspace.y_rhs, workspace.b);
     }
-    backend_t::apply(*workspace.schur_complement, workspace.y_rhs, workspace.s_y, *workspace.s_workspace);
+    const auto S = make_schur_complement(step, workspace.geometry(), step.cg_config, *workspace.preconditioner);
+    backend_t::apply(S, workspace.y_rhs, workspace.s_y, *workspace.s_workspace);
     backend_t::axpby(-1.0, workspace.s_y, 0.0, out.y);  // y = -S y_rhs
     backend_t::apply(B, out.y, out.bilateral_wrench, workspace.b_workspace);
   } else {
@@ -2178,6 +2219,133 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
   Kokkos::deep_copy(out.velocity, step.u_free);
   backend_t::axpby(1.0, out.m_wrench, 1.0, out.velocity);
 }
+
+/// \brief Storage for mixed LCP steps of one layout of rods and constraints, reused across steps.
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
+struct MixedLCPWorkspace {
+  using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
+
+  MixedLCPWorkspace(const ConstraintIndexMap<Families...>& index_map, size_t num_rods, const MobilityOp& mobility,
+                    double dt, const Policy& policy)
+      : linearization(index_map, num_rods, mobility, dt, policy),
+        x_start("x_start", index_map.num_unilateral),
+        linearized(make_linearized_step<ExecSpace>(index_map, num_rods)) {
+  }
+
+  /// \brief Whether it is sized for num_rods rods under index_map's constraints.
+  bool fits(const ConstraintIndexMap<Families...>& index_map, size_t num_rods) const {
+    return linearization.fits(index_map, num_rods);
+  }
+
+  LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...> linearization;
+  view_t x_start;  // zero: the unilateral solve's start
+  LinearizedStep<ExecSpace> linearized;
+};
+
+/// \brief Storage for mixed SLCP steps of one layout of rods and constraints, reused across steps.
+///
+/// later, the storage of the iterates after the first, is made by the first call that needs it.
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
+struct MixedSLCPWorkspace {
+  using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
+
+  MixedSLCPWorkspace(const ConstraintIndexMap<Families...>& index_map, size_t num_rods, const MobilityOp& mobility,
+                     double dt, const Policy& policy)
+      : lcp(index_map, num_rods, mobility, dt, policy),
+        row_units(make_row_units<ExecSpace>(index_map)),
+        wrench_change("wrench_change", RodViews<ExecSpace>::rows_per_entry * num_rods),
+        displacement_change("displacement_change", RodViews<ExecSpace>::rows_per_entry * num_rods),
+        trial(num_rods) {
+  }
+
+  /// \brief Whether it is sized for num_rods rods under index_map's constraints.
+  bool fits(const ConstraintIndexMap<Families...>& index_map, size_t num_rods) const {
+    return lcp.fits(index_map, num_rods);
+  }
+
+  MixedLCPWorkspace<ExecSpace, MobilityOp, Policy, Families...> lcp;
+  Kokkos::View<RowUnit*, typename ExecSpace::memory_space> row_units;
+  view_t wrench_change;
+  view_t displacement_change;
+  RodViews<ExecSpace> trial;
+  std::optional<std::array<LinearizedStep<ExecSpace>, 2>> later;
+};
+
+/// \brief The mobility op Model makes for rods under ExecSpace.
+template <typename Model, typename ExecSpace>
+using mobility_of_t = std::remove_cvref_t<decltype(std::declval<const Model&>().make_mobility(
+    std::declval<const RodViews<ExecSpace>&>()))>;
+
+/// \brief What a multibody time integrator holds: handles to its rods and constraints, which share their data, copies
+/// of its mobility model and preconditioner policy, its step size, and Workspace, the storage its steps write.
+template <typename ExecSpace, typename Model, typename Policy, typename Workspace, typename... Families>
+class IntegratorData {
+  static_assert((std::is_same_v<typename Families::execution_space, ExecSpace> && ...),
+                "mbody: the rods and every constraint family must share one execution space.");
+  static_assert(MobilityModel<Model, ExecSpace>,
+                "mbody: the mobility model must be a MobilityModel, whose make_mobility(rods) is a Mobility.");
+
+ public:
+  using execution_space = ExecSpace;
+  using workspace_t = Workspace;
+
+  /// \brief An integrator with storage of its own.
+  IntegratorData(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                 const Model& mobility_model, double dt, const Policy& preconditioner_policy)
+      : rods_(rods),
+        constraints_(constraints),
+        mobility_model_(mobility_model),
+        dt_(dt),
+        preconditioner_policy_(preconditioner_policy),
+        workspace_(make_workspace()) {
+  }
+
+  /// \brief An integrator in workspace's storage if it fits rods and constraints, and with storage of its own
+  /// otherwise.
+  IntegratorData(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                 const Model& mobility_model, double dt, const Policy& preconditioner_policy, Workspace workspace)
+      : rods_(rods),
+        constraints_(constraints),
+        mobility_model_(mobility_model),
+        dt_(dt),
+        preconditioner_policy_(preconditioner_policy),
+        workspace_(workspace.fits(make_constraint_index_map(constraints), rods.size()) ? std::move(workspace)
+                                                                                       : make_workspace()) {
+  }
+
+  const RodViews<ExecSpace>& rods() const {
+    return rods_;
+  }
+  const ConstraintSet<Families...>& constraints() const {
+    return constraints_;
+  }
+  const Model& mobility_model() const {
+    return mobility_model_;
+  }
+  double dt() const {
+    return dt_;
+  }
+  const Policy& preconditioner_policy() const {
+    return preconditioner_policy_;
+  }
+  /// \brief The storage its steps write, which a const integrator's steps also write.
+  Workspace& workspace() const {
+    return workspace_;
+  }
+
+ private:
+  Workspace make_workspace() const {
+    return Workspace(make_constraint_index_map(constraints_), rods_.size(), mobility_model_.make_mobility(rods_), dt_,
+                     preconditioner_policy_);
+  }
+
+  RodViews<ExecSpace> rods_;
+  ConstraintSet<Families...> constraints_;
+  Model mobility_model_;
+  double dt_;
+  Policy preconditioner_policy_;
+  mutable Workspace workspace_;
+};
 
 /// \brief Apply a linearization to rods and constraints.
 ///
