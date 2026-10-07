@@ -33,6 +33,7 @@
 
 // C++ core
 #include <cmath>    // for std::ldexp
+#include <limits>   // for std::numeric_limits
 #include <ostream>  // for std::cout
 
 // Mundy
@@ -42,6 +43,7 @@
 #include <mundy_math/convex_spaces.hpp>
 #include <mundy_math/cqpp.hpp>
 #include <mundy_math/lcp.hpp>
+#include <mundy_math/linear_system.hpp>  // for mundy::{CGConfig, make_cg_inv_op}
 #include <mundy_utils/rng.hpp>  // for mundy::make_philox
 
 namespace mundy {
@@ -895,6 +897,7 @@ struct RandomMixedCongruentCCQP {
   vecx_t get_q() const { return q_; }
   matyz_t get_BT() const { return BT_; }
   matyy_t get_S() const { return S_; }
+  matyy_t get_Kinv() const { return Kinv_; }
   matzy_t get_B() const { return B_; }
   vecy_t get_b() const { return b_; }
   // clang-format on
@@ -1498,6 +1501,90 @@ void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
     EXPECT_EQ(num_allocations, 0u) << test.name() << " pass " << pass;
   }
 }
+
+/// \brief op, whose new vectors start NaN-filled, as uninitialized storage may.
+template <class Op>
+struct NaNVectorsOp {
+  Op op;
+
+  size_t domain_size() const {
+    return op.domain_size();
+  }
+  size_t range_size() const {
+    return op.range_size();
+  }
+  auto make_domain_vector() const {
+    auto v = op.make_domain_vector();
+    Kokkos::deep_copy(v, std::numeric_limits<double>::quiet_NaN());
+    return v;
+  }
+  auto make_range_vector() const {
+    auto v = op.make_range_vector();
+    Kokkos::deep_copy(v, std::numeric_limits<double>::quiet_NaN());
+    return v;
+  }
+  auto make_workspace() const {
+    return op.make_workspace();
+  }
+  template <class XVector, class YVector, class Workspace>
+  void apply(const XVector& x, YVector& y, Workspace& workspace) const {
+    op.apply(x, y, workspace);
+  }
+  template <class XVector, class YVector>
+  void apply(const XVector& x, YVector& y) const {
+    op.apply(x, y);
+  }
+};
+
+// A mixed CQPP whose applies of S, for S b and within L = B S B^T, share one given workspace of S solves exactly as one
+// whose workspace holds its own, and both run in the given storage. S is CG on B^T M B + K^-1, so it has scratch of its
+// own: CG's vectors and the quadratic form's. Its vectors start NaN-filled, so either workspace must zero S's guesses.
+void run_kokkos_mixed_congruent_shared_s_workspace_test(const auto& test) {
+  using backend_t = KokkosBackend<decltype(test.get_exec_space())>;
+  const auto DT = test.get_DT();
+  const auto M = test.get_M();
+  const auto D = test.get_D();
+  const auto q = test.get_q();
+  const auto B = test.get_B();
+  const auto S = make_cg_inv_op<backend_t>(
+      NaNVectorsOp{make_sum_op<backend_t>(make_quadratic_form<backend_t>(test.get_BT(), test.get_M(), test.get_B()),
+                                          test.get_Kinv())},
+      CGConfig<double>{});
+  const auto BT = test.get_BT();
+  const auto b = test.get_b();
+  const auto space = test.get_space_x();
+  using vector_t = decltype(test.get_exact_x());
+  const size_t size = test.get_exact_x().extent(0);
+  const auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = 1e-6});
+  vector_t grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size);
+
+  // Solve
+  auto own = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT);
+  vector_t x_own("x_own", size);
+  auto own_state = make_pgd_state(x_own, grad, x_tmp, grad_tmp);
+  const auto own_result =
+      solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, own), pgd, own_state);
+  const auto s_workspace = S.make_workspace();
+  auto shared = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT, s_workspace);
+  vector_t x_shared("x_shared", size);
+  auto shared_state = make_pgd_state(x_shared, grad, x_tmp, grad_tmp);
+  const auto shared_result =
+      solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, shared), pgd, shared_state);
+  ASSERT_TRUE(own_result.converged) << test.name();
+
+  // Bit for bit
+  EXPECT_EQ(shared_result.num_iters, own_result.num_iters) << test.name();
+  const auto x_own_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_own);
+  const auto x_shared_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_shared);
+  for (size_t i = 0; i < size; ++i) {
+    EXPECT_EQ(x_shared_host(i), x_own_host(i)) << test.name() << " entry " << i;
+  }
+
+  // In the given storage
+  EXPECT_EQ(shared.s_workspace.r().data(), s_workspace.r().data()) << test.name();
+  EXPECT_EQ(shared.l_workspace.m_workspace().r().data(), s_workspace.r().data()) << test.name();
+  EXPECT_NE(own.s_workspace.r().data(), own.l_workspace.m_workspace().r().data()) << test.name();
+}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 TEST(Convex, MundyMathAnalyticalSolutions) {
@@ -1637,6 +1724,8 @@ TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
   auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_workspace_test(test_case), ...); }, test_cases);
+  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case), ...); },
+             test_cases);
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 

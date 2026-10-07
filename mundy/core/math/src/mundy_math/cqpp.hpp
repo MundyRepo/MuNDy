@@ -580,6 +580,19 @@ struct MixedCQPPWorkspace {
   LMDxVector lmdx;
 };
 
+namespace impl {
+
+/// \brief S b and S B^T M D x := 0, the guesses an inverse S applied into them starts its first solve from.
+template <typename Backend, typename Workspace>
+KOKKOS_FUNCTION void zero_s_guesses(Workspace& workspace) {
+  using value_type = vector_value_type<std::remove_cvref_t<decltype(workspace.s_b)>>;
+  constexpr value_type zero = static_cast<value_type>(0);
+  Backend::axpby(zero, workspace.s_b, zero, workspace.s_b);
+  Backend::axpby(zero, workspace.l_workspace.u(), zero, workspace.l_workspace.u());
+}
+
+}  // namespace impl
+
 /// \brief Storage for the mixed CQPPs formed from these operators and a q shaped like q, reusable for any b.
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
           typename LinearOpB, typename LinearOpS, typename LinearOpBT>
@@ -587,18 +600,46 @@ KOKKOS_FUNCTION auto make_mixed_cqpp_workspace(const LinearOpDT& DT, const Linea
                                                const QVector& q, const LinearOpB& B, const LinearOpS& S,
                                                const LinearOpBT& BT) {
   const auto L = make_quadratic_form<Backend>(B, S, BT);
-  return MixedCQPPWorkspace{Backend::make_range_vector(S),
-                            Backend::make_range_vector(B),
-                            impl::make_workspace(S),
-                            impl::make_workspace(B),
-                            impl::make_workspace(DT),
-                            impl::make_workspace(M),
-                            impl::make_workspace(D),
-                            impl::make_workspace(L),
-                            Backend::make_vector_like(q),
-                            Backend::make_range_vector(D),
-                            Backend::make_range_vector(M),
-                            Backend::make_range_vector(L)};
+  auto workspace = MixedCQPPWorkspace{Backend::make_range_vector(S),
+                                      Backend::make_range_vector(B),
+                                      impl::make_workspace(S),
+                                      impl::make_workspace(B),
+                                      impl::make_workspace(DT),
+                                      impl::make_workspace(M),
+                                      impl::make_workspace(D),
+                                      impl::make_workspace(L),
+                                      Backend::make_vector_like(q),
+                                      Backend::make_range_vector(D),
+                                      Backend::make_range_vector(M),
+                                      Backend::make_range_vector(L)};
+  impl::zero_s_guesses<Backend>(workspace);
+  return workspace;
+}
+
+/// \brief Storage for the mixed CQPPs formed from these operators and a q shaped like q, whose applies of S, for S b
+/// and within L = B S B^T, all run in s_workspace, a workspace of S.
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename SWorkspace>
+KOKKOS_FUNCTION auto make_mixed_cqpp_workspace(const LinearOpDT& DT, const LinearOpM& M, const LinearOpD& D,
+                                               const QVector& q, const LinearOpB& B, const LinearOpS& S,
+                                               const LinearOpBT& BT, const SWorkspace& s_workspace) {
+  const auto L = make_quadratic_form<Backend>(B, S, BT);
+  auto workspace = MixedCQPPWorkspace{Backend::make_range_vector(S),
+                                      Backend::make_range_vector(B),
+                                      SWorkspace(s_workspace),
+                                      impl::make_workspace(B),
+                                      impl::make_workspace(DT),
+                                      impl::make_workspace(M),
+                                      impl::make_workspace(D),
+                                      L.make_workspace(Backend::make_domain_vector(S), Backend::make_range_vector(S),
+                                                       impl::make_workspace(B), SWorkspace(s_workspace),
+                                                       impl::make_workspace(BT)),
+                                      Backend::make_vector_like(q),
+                                      Backend::make_range_vector(D),
+                                      Backend::make_range_vector(M),
+                                      Backend::make_range_vector(L)};
+  impl::zero_s_guesses<Backend>(workspace);
+  return workspace;
 }
 
 /// \brief The mixed CQPP of (DT, M, D, q, B, S, BT, b), formed in workspace from \ref make_mixed_cqpp_workspace.
