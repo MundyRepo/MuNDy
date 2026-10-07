@@ -71,6 +71,9 @@ static_assert(std::is_same_v<NumTraits<DD>::Real, DD> && !NumTraits<DD>::IsInteg
 static_assert(abs((DD(1.0) / 3.0 * 3.0 - 1.0).hi()) < 1e-31);
 static_assert(DD(1.0) + DD(0x1p-60) - 1.0 == DD(0x1p-60), "Cancellation is exact.");
 
+// So is sqrt: sqrt(2)^2 - 2 vanishes to double-double precision at compile time.
+static_assert(abs((sqrt(DD(2.0)) * sqrt(DD(2.0)) - 2.0).hi()) < 1e-30);
+
 template <typename T>
 concept HasAtomicAdd = requires(T* p, T v) { mundy::atomic_add(p, v); };
 static_assert(HasAtomicAdd<DD>, "Atomics accept passive scalars.");
@@ -178,6 +181,35 @@ TEST(DoubleDouble, SpecialValuesFollowIeee) {
   EXPECT_TRUE(std::signbit(sin(DD(-0.0)).hi()));
   EXPECT_TRUE(std::signbit(atan2(DD(-0.0), DD(1.0)).hi()));
   EXPECT_TRUE(std::isnan((NumTraits<DD>::quiet_NaN() + 1.0).hi()));
+}
+
+TEST(DoubleDouble, SqrtCoversTheWholeDoubleRange) {
+  // Near the largest double, and subnormals: their roots are normal, but subnormals carry at most double precision.
+  expect_dd_near(sqrt(DD(0x1.ffffffp+1023)), {0x1.ffffff7ffffffp+511, -0x1.0000005000002p+433}, kTol,
+                 "sqrt(0x1.ffffffp+1023)");
+  EXPECT_EQ(sqrt(DD(0x1p-1074)), DD(0x1p-537)) << "The smallest subnormal is a perfect square.";
+  EXPECT_EQ(sqrt(DD(0x1p-1073)).hi(), 0x1.6a09e667f3bcdp-537) << "sqrt(2) * 2^-537, correctly rounded";
+
+  // Special values: +-0 and +infinity are their own roots; negative numbers and NaN give NaN.
+  EXPECT_TRUE(sqrt(DD(-0.0)) == 0.0 && std::signbit(sqrt(DD(-0.0)).hi()));
+  EXPECT_EQ(sqrt(NumTraits<DD>::infinity()), NumTraits<DD>::infinity());
+  EXPECT_TRUE(std::isnan(sqrt(-NumTraits<DD>::infinity()).hi()));
+  EXPECT_TRUE(std::isnan(sqrt(NumTraits<DD>::quiet_NaN()).hi()));
+}
+
+TEST(DoubleDouble, SqrtIsTheSameAtCompileTimeAndRunTime) {
+  // The compile-time root starts from the correctly rounded constexpr double root, the run-time root from the
+  // hardware's; IEEE 754 makes the two equal, so the double-double roots match bit for bit. That holds wherever
+  // double-double arithmetic is exact, |a| >= NumTraits<DD>::norm_min(): below it, x^2 has a subnormal low part.
+  constexpr DD inputs[] = {DD(2.0), DD(1.0) / 3.0, DD(1e-280), DD(1e300), DD(0x1.ffffffp+1023)};
+  constexpr DD roots[] = {sqrt(inputs[0]), sqrt(inputs[1]), sqrt(inputs[2]), sqrt(inputs[3]), sqrt(inputs[4])};
+  for (int i = 0; i < 5; ++i) {
+    const volatile double hi = inputs[i].hi();  // opaque to the optimizer, so the root is computed at run time
+    const volatile double lo = inputs[i].lo();
+    const DD root = sqrt(DD(hi, lo));
+    EXPECT_EQ(root.hi(), roots[i].hi()) << "input " << i;
+    EXPECT_EQ(root.lo(), roots[i].lo()) << "input " << i;
+  }
 }
 
 TEST(DoubleDouble, TolerancesUseDoubleDoublePrecision) {

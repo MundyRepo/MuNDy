@@ -43,10 +43,11 @@
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy
-#include <mundy_geom/randomize.hpp>   // for mundy::generate_random_unit_quaternion
-#include <mundy_math/Vector3.hpp>     // for Vector3
-#include <mundy_mbody/Periphery.hpp>  // for gen_sphere_quadrature, fill_skfie_matrix, apply_skfie, PeripheryT, ...
-#include <mundy_utils/rng.hpp>        // for mundy::make_philox
+#include <mundy_geom/randomize.hpp>             // for mundy::generate_random_unit_quaternion
+#include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
+#include <mundy_math/Vector3.hpp>              // for Vector3
+#include <mundy_mbody/Periphery.hpp>           // for fill_skfie_matrix, apply_skfie, PeripheryT, ...
+#include <mundy_utils/rng.hpp>                 // for mundy::make_philox
 
 namespace mundy {
 
@@ -95,11 +96,18 @@ SphereSet<ExecSpace> make_rpy_body(const mundy::Vector3d& center, const double r
 template <class ExecSpace>
 std::shared_ptr<PeripheryT<ExecSpace>> make_cavity_periphery(const int order, const double cavity_radius,
                                                              const double mu) {
+  // The (order + 1)-ring sphere rule scaled to the cavity, with inward unit normals.
   std::vector<double> p_pts;
   std::vector<double> p_wts;
-  std::vector<double> p_nrm;
-  gen_sphere_quadrature(order, cavity_radius, &p_pts, &p_wts, &p_nrm, /*include_poles=*/false,
-                        /*outward_normal=*/false);
+  gauss_legendre_sphere_rule(order + 1, p_pts, p_wts);
+  std::vector<double> p_nrm(p_pts.size());
+  for (size_t i = 0; i < p_pts.size(); ++i) {
+    p_nrm[i] = -p_pts[i];
+    p_pts[i] *= cavity_radius;
+  }
+  for (double& w : p_wts) {
+    w *= cavity_radius * cavity_radius;
+  }
   auto periphery = std::make_shared<PeripheryT<ExecSpace>>(p_wts.size(), mu);
   periphery->set_surface_positions(p_pts.data())
       .set_quadrature_weights(p_wts.data())
@@ -748,7 +756,7 @@ void three_sphere_spd(std::ostream& csv, const int order, const double s, const 
       csv, csv_key({static_cast<double>(order), s, r}), order, r, [&](int) { return pos; }, configs, num_samples);
 }
 
-// The two extreme approach directions against a gen_sphere_quadrature periphery grid: straight at the node nearest +x,
+// The two extreme approach directions against a Gauss-Legendre sphere periphery grid: straight at the node nearest +x,
 // and at the center of the grid cell above it (half an azimuthal step, 2 pi / (2p + 2), and halfway in elevation to
 // the next Gauss-Legendre latitude on that meridian).
 template <class ExecSpace>

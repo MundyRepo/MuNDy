@@ -117,10 +117,10 @@ periphery)
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_math/GaussLegendre.hpp>  // for mundy::gauss_legendre_rule
-#include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion (reference->lab rotation)
-#include <mundy_math/Vector3.hpp>        // for mundy::Vector3, mundy::cross
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
+#include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion (reference->lab rotation)
+#include <mundy_math/Vector3.hpp>              // for mundy::Vector3, mundy::cross
+#include <mundy_utils/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
 
 // The matrix-free GMRES inverse path is only available when both the Belos and Tpetra TPLs are enabled; without
 // them the periphery still offers the dense direct inverse.
@@ -256,93 +256,6 @@ inline double interior_trace_coefficient(const double viscosity, const bool outw
 }
 
 }  // namespace impl
-
-/// \brief Get the Gauss Legrandre-based quadrature weights, nodes, and normals for a sphere
-///
-/// Point order: 0 at northpole, then 2p+2 points per circle. the last at south pole
-/// The north and south pole are not included in the nodesGL of Gauss-Legendre nodes.
-/// We add those two points with weight = 0 manually.
-/// total point = (p+1)(2p+2) + north/south pole = 2p^2+4p+4
-/// The normals point out of the sphere if outward_normal is true and into it otherwise.
-void gen_sphere_quadrature(const int& order, const double& radius, std::vector<double>* const points_ptr,
-                           std::vector<double>* const weights_ptr, std::vector<double>* const normals_ptr,
-                           const bool include_poles = false, const bool outward_normal = true) {
-  MUNDY_THROW_REQUIRE(order >= 0, std::invalid_argument, "gen_sphere_quadrature: order must be non-negative.");
-  MUNDY_THROW_REQUIRE(
-      radius > 0, std::invalid_argument,
-      mundy::sink() << "gen_sphere_quadrature: radius must be positive. The current value is " << radius);
-  MUNDY_THROW_REQUIRE(points_ptr != nullptr, std::invalid_argument,
-                      "gen_sphere_quadrature: points_ptr must be non-null.");
-  MUNDY_THROW_REQUIRE(weights_ptr != nullptr, std::invalid_argument,
-                      "gen_sphere_quadrature: weights_ptr must be non-null.");
-  MUNDY_THROW_REQUIRE(normals_ptr != nullptr, std::invalid_argument,
-                      "gen_sphere_quadrature: normals_ptr must be non-null.");
-
-  // Get references to the vectors
-  std::vector<double>& points = *points_ptr;
-  std::vector<double>& weights = *weights_ptr;
-  std::vector<double>& normals = *normals_ptr;
-
-  // Resize the vectors
-  const int num_points = (order + 1) * (2 * order + 2) + (include_poles ? 2 : 0);
-  points.resize(3 * num_points);
-  weights.resize(num_points);
-  normals.resize(3 * num_points);
-
-  // Compute the Gauss-Legendre nodes and weights
-  std::vector<double> nodes_gl;  // cos thetaj = tj
-  std::vector<double> weights_gl;
-  mundy::gauss_legendre_rule(order + 1, nodes_gl, weights_gl);  // order+1 points, excluding the two poles
-
-  // Calculate the grid cordinates with the [0, 0, 1] at the north pole and [0, 0, -1] at the south pole.
-  if (include_poles) {
-    // North pole:
-    points[0] = 0;
-    points[1] = 0;
-    points[2] = 1;
-    weights[0] = 0;
-  }
-
-  // Between north and south pole:
-  // from north pole (1) to south pole (-1), picking the points from nodes_gl in reversed order
-  constexpr double pi = Kokkos::numbers::pi_v<double>;
-  const double weightfactor = radius * radius * 2 * pi / (2 * order + 2);
-  for (int j = 0; j < order + 1; j++) {
-    for (int k = 0; k < 2 * order + 2; k++) {
-      const double costhetaj = nodes_gl[order - j];
-      const double phik = 2 * pi * k / (2 * order + 2);
-      const double sinthetaj = Kokkos::sqrt(1 - costhetaj * costhetaj);
-      const int index = (j * (2 * order + 2)) + k + (include_poles ? 1 : 0);
-      points[3 * index] = sinthetaj * Kokkos::cos(phik);
-      points[3 * index + 1] = sinthetaj * Kokkos::sin(phik);
-      points[3 * index + 2] = costhetaj;
-      weights[index] = weightfactor * weights_gl[order - j];  // area element = sin thetaj
-    }
-  }
-
-  if (include_poles) {
-    // South pole:
-    points[3 * (num_points - 1)] = 0;
-    points[3 * (num_points - 1) + 1] = 0;
-    points[3 * (num_points - 1) + 2] = -1;
-    weights[num_points - 1] = 0;
-  }
-
-  // On the unit sphere, grid norms equal grid coordinates
-  for (int i = 0; i < num_points; i++) {
-    const double sign = outward_normal ? 1 : -1;
-    normals[3 * i] = sign * points[3 * i];
-    normals[3 * i + 1] = sign * points[3 * i + 1];
-    normals[3 * i + 2] = sign * points[3 * i + 2];
-  }
-
-  // Scale the points by the radius
-  for (int i = 0; i < num_points; i++) {
-    points[3 * i] *= radius;
-    points[3 * i + 1] *= radius;
-    points[3 * i + 2] *= radius;
-  }
-}
 
 /// \brief Invert and LU decompose a dense square matrix of size n x n
 ///
@@ -2204,15 +2117,13 @@ class PeripheryT {
     Kokkos::deep_copy(mf_surface_normals_, surface_normals_);
     Kokkos::deep_copy(mf_quadrature_weights_, quadrature_weights_);
 
-    // Scratch for M^{-1} u, kept in the periphery's device space so the accumulate in compute_surface_forces stays
-    // in one space.
-    mf_solution_ = Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>(
-        Kokkos::view_alloc(Kokkos::WithoutInitializing, "mf_solution"), 3 * num_surface_nodes_);
+    // M^{-1} u, kept in the periphery's device space so the accumulate in compute_surface_forces stays in one space.
+    // Each solve starts from it, so it starts at zero.
+    mf_solution_ = Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>("mf_solution", 3 * num_surface_nodes_);
 
     SkfieOpType op{viscosity_,          num_surface_nodes_,     mf_surface_positions_,
                    mf_surface_normals_, mf_quadrature_weights_, outward_normal_};
-    belos_inv_op_.emplace(MatrixFreeBackend{}, std::move(op), belos_config_, mundy::NoPreconditioner{},
-                          /*warm_start=*/false);
+    belos_inv_op_.emplace(MatrixFreeBackend{}, std::move(op), belos_config_, mundy::NoPreconditioner{});
     is_matrix_free_inverse_set_ = true;
     return *this;
   }
@@ -2622,14 +2533,23 @@ struct BodySet {
 
 /// \brief A motile spherical body of the given radius with an order-`order` surface quadrature (outward normals).
 ///
-/// Geometry only: the pose and load live on the owning BodySet; see make_sphere_body_set.
+/// The quadrature is the (order + 1)-ring Gauss-Legendre sphere rule scaled to the radius. Geometry only: the pose and
+/// load live on the owning BodySet; see make_sphere_body_set.
 template <class ExecSpace>
 MotileBody<ExecSpace> make_sphere_body(const int order, const double radius) {
+  MUNDY_THROW_REQUIRE(order >= 0, std::invalid_argument, "make_sphere_body: order must be non-negative.");
+  MUNDY_THROW_REQUIRE(radius > 0.0, std::invalid_argument, "make_sphere_body: radius must be positive.");
   using view_t = typename MotileBody<ExecSpace>::view_t;
-  std::vector<double> points;
+  std::vector<double> normals;  // the unit-sphere points, which are the outward unit normals
   std::vector<double> weights;
-  std::vector<double> normals;
-  gen_sphere_quadrature(order, radius, &points, &weights, &normals, /*include_poles=*/false, /*outward_normal=*/true);
+  mundy::gauss_legendre_sphere_rule(order + 1, normals, weights);
+  std::vector<double> points(normals.size());
+  for (size_t i = 0; i < normals.size(); ++i) {
+    points[i] = radius * normals[i];
+  }
+  for (double& weight : weights) {
+    weight *= radius * radius;
+  }
   const size_t num_quadrature_points = weights.size();
 
   MotileBody<ExecSpace> body;

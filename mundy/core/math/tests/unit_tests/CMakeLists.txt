@@ -51,6 +51,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestCmath
+    SOURCES UnitTestCmath.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestAutoDiffScalar
     SOURCES UnitTestAutoDiffScalar.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
@@ -67,6 +74,20 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   tribits_add_executable_and_test(
     UnitTestGaussLegendre
     SOURCES UnitTestGaussLegendre.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestGaussLegendreSphere
+    SOURCES UnitTestGaussLegendreSphere.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestTrapezoidalTorus
+    SOURCES UnitTestTrapezoidalTorus.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
     INSTALLABLE
   )

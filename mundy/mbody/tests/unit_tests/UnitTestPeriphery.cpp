@@ -39,9 +39,10 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>     // for Vector3
-#include <mundy_mbody/Periphery.hpp>  // for gen_sphere_quadrature, fill_skfie_matrix, apply_skfie, PeripheryT, ...
-#include <mundy_utils/rng.hpp>        // for mundy::make_philox
+#include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
+#include <mundy_math/Vector3.hpp>              // for Vector3
+#include <mundy_mbody/Periphery.hpp>           // for fill_skfie_matrix, apply_skfie, PeripheryT, ...
+#include <mundy_utils/rng.hpp>                 // for mundy::make_philox
 
 namespace mundy {
 
@@ -364,19 +365,38 @@ void apply_resistance(const double viscosity,
                                    bulk_velocities);
 }
 
-/// \brief A functor for generate a quadrature rule on the sphere
+/// \brief A sphere's quadrature: points, weights, and unit normals.
+struct SphereQuadrature {
+  std::vector<double> points;
+  std::vector<double> weights;
+  std::vector<double> normals;
+};
+
+/// \brief The (order + 1)-ring Gauss-Legendre sphere rule scaled to a radius, with unit normals pointing out or in.
+SphereQuadrature sphere_quadrature(const int order, const double radius, const bool outward_normal) {
+  SphereQuadrature quadrature;
+  gauss_legendre_sphere_rule(order + 1, quadrature.normals, quadrature.weights);  // unit points = outward normals
+  quadrature.points.resize(quadrature.normals.size());
+  const double sign = outward_normal ? 1.0 : -1.0;
+  for (size_t i = 0; i < quadrature.normals.size(); ++i) {
+    quadrature.points[i] = radius * quadrature.normals[i];
+    quadrature.normals[i] *= sign;
+  }
+  for (double& weight : quadrature.weights) {
+    weight *= radius * radius;
+  }
+  return quadrature;
+}
+
+/// \brief A functor for generating a quadrature rule on the sphere
 class SphereQuadFunctor {
  public:
-  SphereQuadFunctor(const double sphere_radius, const bool include_pole = false, const bool outward_normal = true)
-      : sphere_radius_(sphere_radius), include_pole_(include_pole), outward_normal_(outward_normal) {
+  explicit SphereQuadFunctor(const double sphere_radius, const bool outward_normal = true)
+      : sphere_radius_(sphere_radius), outward_normal_(outward_normal) {
   }
 
   std::array<Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace>, 3> operator()(const int& order) {
-    std::vector<double> weights_vec;
-    std::vector<double> points_vec;
-    std::vector<double> normals_vec;
-    gen_sphere_quadrature(order, sphere_radius_, &points_vec, &weights_vec, &normals_vec, include_pole_,
-                          outward_normal_);
+    const auto [points_vec, weights_vec, normals_vec] = sphere_quadrature(order, sphere_radius_, outward_normal_);
     const size_t num_quadrature_points = weights_vec.size();
 
     // Convert the points, weights, and normals to Kokkos views
@@ -396,127 +416,9 @@ class SphereQuadFunctor {
 
  private:
   double sphere_radius_;
-  bool include_pole_;
   bool outward_normal_;
 };  // class SphereQuadFunctor
 
-//@}
-
-//! \name Quadrature tests
-//@{
-
-TEST(PeripheryTest, SphereQuadBasicChecks) {
-  // Test that the sum of the quadrature weights is equal to the surface area of the sphere
-  // There's no need to check convergence, as this result should converge to the exact value
-  // almost immediately.
-
-  // Define the sphere radius
-  const double sphere_radius = 12.34;
-  const double sphere_surface_area = 4.0 * M_PI * sphere_radius * sphere_radius;
-  for (int order = 1; order <= 16; order *= 2) {
-    std::vector<double> weights;
-    std::vector<double> points;
-    std::vector<double> normals;
-    gen_sphere_quadrature(order, sphere_radius, &points, &weights, &normals);
-
-    // Check that the number of quadrature points is correct
-    EXPECT_EQ(weights.size() * 3, points.size());
-    EXPECT_EQ(weights.size() * 3, normals.size());
-
-    for (size_t i = 0; i < points.size(); i += 3) {
-      // Check that the points have the right magnitude
-      const double x = points[i];
-      const double y = points[i + 1];
-      const double z = points[i + 2];
-      const double magnitude = std::sqrt(x * x + y * y + z * z);
-      EXPECT_NEAR(magnitude, sphere_radius, 1.0e-10);
-
-      // Check that the normals are equal to the normalized points
-      const double nx = normals[i];
-      const double ny = normals[i + 1];
-      const double nz = normals[i + 2];
-      const double normal_magnitude = std::sqrt(nx * nx + ny * ny + nz * nz);
-      EXPECT_NEAR(normal_magnitude, 1.0, 1.0e-10);
-      EXPECT_NEAR(nx, x / sphere_radius, 1.0e-10);
-      EXPECT_NEAR(ny, y / sphere_radius, 1.0e-10);
-      EXPECT_NEAR(nz, z / sphere_radius, 1.0e-10);
-    }
-
-    // Check that the sum of the weights is equal to the surface area of the sphere
-    const double sum_weights = std::accumulate(weights.begin(), weights.end(), 0.0);
-    EXPECT_NEAR(sum_weights, sphere_surface_area, 1.0e-10) << "failed for order = " << order << std::endl;
-  }
-}
-
-TEST(PeripheryTest, SphereQuadAnalyticallyIntegrableFunctions) {
-  // Test that we converge to the correct values for analytically integrable functions
-  // If you know of any other functions that can be integrated over the sphere analytically without adding additional
-  // dependencies like special functions (e.g., spherical harmonics), let us know and we can add them to this
-  // test!
-
-  auto run_test_for_function = [](const std::string& function_name, const double& known_integral,
-                                  const std::function<double(double, double, double)>& func_to_integrate,
-                                  const double final_tol) {
-    const double sphere_radius = 1.0;
-
-    // Weird behavior can occur for order = 1, so we start at order = 2
-    std::vector<double> num_quadrature_points;
-    std::vector<double> errors;
-    for (int order = 2; order <= 16; order *= 2) {
-      std::vector<double> weights;
-      std::vector<double> points;
-      std::vector<double> normals;
-      gen_sphere_quadrature(order, sphere_radius, &points, &weights, &normals);
-
-      // Compute the integral
-      double integral = 0.0;
-      for (size_t i = 0; i < weights.size(); ++i) {
-        const double x = points[3 * i];
-        const double y = points[3 * i + 1];
-        const double z = points[3 * i + 2];
-        integral += weights[i] * func_to_integrate(x, y, z);
-      }
-
-      // Stash the error
-      const double error = std::fabs(integral - known_integral);
-      num_quadrature_points.push_back(static_cast<double>(weights.size()));
-      errors.push_back(error);
-
-      std::cout << "function_name = " << function_name << ", order = " << order << ", integral = " << integral
-                << ", known_integral = " << known_integral << std::endl;
-    }
-
-    // Print the convergence rate (diagnostic; the log-log slope is meaningless once a smooth integrand hits the
-    // machine floor, so it is not asserted on).
-    const double slope = compute_log_log_slope(num_quadrature_points, errors);
-    std::cout << "function_name = " << function_name << ", slope = " << slope << std::endl;
-
-    // Complement the print with a real check: the finest order must reach the known integral within final_tol --
-    // tight for smooth integrands (they hit the machine floor), looser for the non-smooth max (algebraic only).
-    EXPECT_LT(errors.back(), final_tol) << function_name << ": integral error at the finest order";
-  };
-
-  // f(x, y, z) = 1 integrates to 4 pi (constant -> integrated exactly).
-  run_test_for_function("f(x, y, z) = 1", 4.0 * M_PI, [](double, double, double) { return 1.0; }, 1.0e-10);
-
-  // f(x, y, z) = x integrates to 0 (odd -> integrated exactly).
-  run_test_for_function("f(x, y, z) = x", 0.0, [](double x, double, double) { return x; }, 1.0e-10);
-
-  // f(x, y, z) = exp(x-y) integrates to 2^(3/2) * pi * sinh(sqrt(2)) (smooth -> spectral, machine by order ~4).
-  // https://math.stackexchange.com/questions/717202/surface-integral-on-unit-sphere
-  run_test_for_function(
-      "f(x, y, z) = exp(x-y)", 2.0 * std::sqrt(2.0) * M_PI * std::sinh(std::sqrt(2.0)),
-      [](double x, double y, double) { return std::exp(x - y); }, 1.0e-6);
-
-  // f(x, y, z) = max(0, x, x * cos(t) + y * sin(t)) integrates to pi + pi/2 * sqrt((1 - cos t)^2 + (sin t)^2).
-  // Non-smooth (a kink) -> only algebraic convergence, so a looser finest-order tolerance.
-  // https://math.stackexchange.com/questions/3246357/a-tricky-integration-over-the-unit-sphere
-  const double t = M_PI / 4.0;  // Arbitrary value of t simply needs to be in [0, 2pi]
-  run_test_for_function(
-      "f(x, y, z) = max(0, x, x * cos(t) + y * sin(t))",
-      M_PI + M_PI / 2.0 * std::sqrt((1.0 - std::cos(t)) * (1.0 - std::cos(t)) + std::sin(t) * std::sin(t)),
-      [&t](double x, double y, double) { return std::max({0.0, x, x * std::cos(t) + y * std::sin(t)}); }, 5.0e-3);
-}
 //@}
 
 //! \name Periphery auxilary function tests
@@ -916,7 +818,7 @@ TEST(PeripheryDiagnostic, StokesDoubleLayerConstantForce) {
   const double viscosity = 0.5305;
 
   const QuadGenerationFunc quad_gen =
-      SphereQuadFunctor(sphere_radius, /*include_pole=*/false, /*outward_normal=*/false);
+      SphereQuadFunctor(sphere_radius, /*outward_normal=*/false);
   const QuadVectorFunc in_field_gen =
       []([[maybe_unused]] const Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace>& points,
          [[maybe_unused]] const Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace>& normals,
@@ -1013,7 +915,7 @@ TEST(PeripheryDiagnostic, StokesDoubleLayerSmoothForces) {
         const double viscosity = 0.5305;
 
         const QuadGenerationFunc quad_gen =
-            SphereQuadFunctor(sphere_radius, /*include_pole=*/false, /*outward_normal=*/false);
+            SphereQuadFunctor(sphere_radius, /*outward_normal=*/false);
         const QuadVectorFunc in_field_gen =
             [&func_to_integrate](
                 [[maybe_unused]] const Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::HostSpace>& points,
@@ -1234,10 +1136,8 @@ TEST(PeripheryTest, SKFIEIsInvertible) {
   const double viscosity = 0.5305;
   const double sphere_radius = 12.34;
   const size_t spectral_order = 12;
-  const bool include_poles = false;
   for (const bool outward_normal : {false, true}) {
-    auto [host_points, host_weights, host_normals] =
-        SphereQuadFunctor(sphere_radius, include_poles, outward_normal)(spectral_order);
+    auto [host_points, host_weights, host_normals] = SphereQuadFunctor(sphere_radius, outward_normal)(spectral_order);
     const size_t num_surface_nodes = host_weights.extent(0);
 
     // Fill the self-interaction matrix and take its inverse
@@ -1318,9 +1218,7 @@ TEST(PeripheryTest, MatrixFreeMatchesDirectInverse) {
 
   for (const bool outward_normal : {false, true}) {
     // Generate a sphere quadrature rule.
-    std::vector<double> points_vec, weights_vec, normals_vec;
-    gen_sphere_quadrature(order, sphere_radius, &points_vec, &weights_vec, &normals_vec, /*include_poles=*/false,
-                          outward_normal);
+    const auto [points_vec, weights_vec, normals_vec] = sphere_quadrature(order, sphere_radius, outward_normal);
     const size_t num_nodes = weights_vec.size();
 
     view_t points("points", 3 * num_nodes), normals("normals", 3 * num_nodes), weights("weights", num_nodes);
@@ -1414,7 +1312,7 @@ TEST(PeripheryTest, SkfieConstantDensityJump) {
     for (const double viscosity : {1.0, 0.5305, 3.7}) {
       std::vector<double> pv_rel_err;
       for (const int order : orders) {
-        auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, false, outward_normal)(order);
+        auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, outward_normal)(order);
         const size_t num_nodes = weights.extent(0);
         matrix_t M("M", 3 * num_nodes, 3 * num_nodes);
         fill_skfie_matrix(space, viscosity, num_nodes, points, normals, weights, M, outward_normal);
@@ -1517,7 +1415,7 @@ TEST(PeripheryTest, SkfieReproducesInteriorStokesFlow) {
 
       std::vector<double> errors;
       for (const int order : orders) {
-        auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, false, outward_normal)(order);
+        auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, outward_normal)(order);
         const size_t num_nodes = weights.extent(0);
 
         view_t slip("slip", 3 * num_nodes);
@@ -1582,7 +1480,7 @@ TEST(PeripheryTest, SkfieDenseMatchesMatrixFree) {
 
   for (const bool outward_normal : {false, true}) {
     for (const int order : {4, 8, 12}) {
-      auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, false, outward_normal)(order);
+      auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, outward_normal)(order);
       const size_t num_nodes = weights.extent(0);
       view_t q("q", 3 * num_nodes);
       openrand::Philox rng = make_philox(static_cast<size_t>(order), 0);
@@ -1632,7 +1530,7 @@ TEST(PeripheryTest, SkfieRejectsMismatchedNormals) {
   const int order = 6;
 
   for (const bool outward_normal : {false, true}) {
-    auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, false, outward_normal)(order);
+    auto [points, weights, normals] = SphereQuadFunctor(sphere_radius, outward_normal)(order);
     const size_t num_nodes = weights.extent(0);
     const bool wrong = !outward_normal;
     matrix_t M("M", 3 * num_nodes, 3 * num_nodes);
@@ -1999,10 +1897,7 @@ void solve_cavity(const double mu, const double a, const double b, const int ord
   using view_t = Kokkos::View<double*, Kokkos::LayoutLeft, typename ExecSpace::memory_space>;
   using mat_t = Kokkos::View<double**, Kokkos::LayoutLeft, typename ExecSpace::memory_space>;
 
-  std::vector<double> p_pts;
-  std::vector<double> p_wts;
-  std::vector<double> p_nrm;
-  gen_sphere_quadrature(order, b, &p_pts, &p_wts, &p_nrm, /*include_poles=*/false, /*outward_normal=*/false);
+  auto [p_pts, p_wts, p_nrm] = sphere_quadrature(order, b, /*outward_normal=*/false);
   const size_t num_periphery_points = p_wts.size();
   PeripheryT<ExecSpace> periphery(num_periphery_points, mu);
   periphery.set_surface_positions(p_pts.data())
@@ -2228,11 +2123,7 @@ TEST(PeripheryTest, MotileBodyInSphericalCavityRotation) {
 template <class ExecSpace>
 std::shared_ptr<PeripheryT<ExecSpace>> make_cavity_periphery(const int order, const double cavity_radius,
                                                              const double viscosity) {
-  std::vector<double> points;
-  std::vector<double> weights;
-  std::vector<double> normals;
-  gen_sphere_quadrature(order, cavity_radius, &points, &weights, &normals, /*include_poles=*/false,
-                        /*outward_normal=*/false);
+  auto [points, weights, normals] = sphere_quadrature(order, cavity_radius, /*outward_normal=*/false);
   auto periphery = std::make_shared<PeripheryT<ExecSpace>>(weights.size(), viscosity);
   periphery->set_surface_positions(points.data())
       .set_quadrature_weights(weights.data())
@@ -2365,10 +2256,7 @@ TEST(PeripheryTest, MobilitySystemRejectsInvalidInputs) {
   EXPECT_THROW(mobility.body_solve_result(), std::runtime_error);
 
   // A periphery without a dense inverse.
-  std::vector<double> points;
-  std::vector<double> weights;
-  std::vector<double> normals;
-  gen_sphere_quadrature(4, 5.0, &points, &weights, &normals, /*include_poles=*/false, /*outward_normal=*/false);
+  auto [points, weights, normals] = sphere_quadrature(4, 5.0, /*outward_normal=*/false);
   auto periphery = std::make_shared<PeripheryT<ExecSpace>>(weights.size(), mu);
   periphery->set_surface_positions(points.data())
       .set_quadrature_weights(weights.data())
@@ -2761,11 +2649,7 @@ std::pair<double, double> antisymmetric_and_total_norms(const std::array<std::ar
 /// \brief Build a host periphery on the Gauss-Legendre sphere rule of the given order and radius.
 std::shared_ptr<HostPeriphery> make_sphere_periphery(const int order, const double periphery_radius,
                                                      const double viscosity, const bool outward_normal) {
-  std::vector<double> points_vec;
-  std::vector<double> weights_vec;
-  std::vector<double> normals_vec;
-  gen_sphere_quadrature(order, periphery_radius, &points_vec, &weights_vec, &normals_vec, /*include_poles=*/false,
-                        outward_normal);
+  auto [points_vec, weights_vec, normals_vec] = sphere_quadrature(order, periphery_radius, outward_normal);
   auto periphery_ptr = std::make_shared<HostPeriphery>(weights_vec.size(), viscosity);
   periphery_ptr->set_surface_positions(points_vec.data())
       .set_quadrature_weights(weights_vec.data())
@@ -2934,14 +2818,8 @@ TEST(PeripheryDiagnostic, SphereQuadPeripheryRPYC) {
   for (int order = 2; order <= 36; order += 4) {
     std::cout << "Order = " << order;
     // Create a periphery according to the constructor
-    std::vector<double> points_vec;
-    std::vector<double> weights_vec;
-    std::vector<double> normals_vec;
     const bool outward_normal = false;
-    const bool include_poles = false;
-    const size_t spectral_order = order;
-    mundy::mbody::gen_sphere_quadrature(spectral_order, periphery_radius, &points_vec, &weights_vec, &normals_vec,
-                                        include_poles, outward_normal);
+    auto [points_vec, weights_vec, normals_vec] = sphere_quadrature(order, periphery_radius, outward_normal);
     // Create the periphery object
     const size_t num_surface_nodes = weights_vec.size();
     std::cout << " | N = " << num_surface_nodes << std::endl;

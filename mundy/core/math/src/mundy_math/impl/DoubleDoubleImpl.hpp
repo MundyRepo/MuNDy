@@ -110,6 +110,11 @@ KOKKOS_INLINE_FUNCTION constexpr UnevaluatedSum mul_pow2(double hi, double lo, i
   return is_finite_double(scaled_hi) ? UnevaluatedSum{scaled_hi, lo * f1 * f2} : UnevaluatedSum{scaled_hi, 0.0};
 }
 
+/// \brief pi / 2 as a double-double (hi, lo).
+KOKKOS_INLINE_FUNCTION constexpr UnevaluatedSum pi_over_2() {
+  return {0x1.921fb54442d18p+0, 0x1.1a62633145c07p-54};
+}
+
 /// \brief 2^-106: a series term below this times the sum no longer changes a double-double.
 inline constexpr double double_double_negligible = 0x1p-106;
 //@}
@@ -127,27 +132,10 @@ struct SinCos {
   DoubleDoubleType cos;
 };
 
-/// \brief sin(a) and cos(a).
-///
-/// Reduce a = j pi/2 + t with |t| <= pi/4, sum both Taylor series in t, and rotate the result by the quadrant j. The
-/// reduction subtracts j pi/2 with pi/2 split into three doubles (about 160 bits, Cody-Waite), each product j p_i
-/// formed exactly, so it stays accurate for |j| < 2^50.
+/// \brief sin(t) and cos(t) for |t| <= pi/4, by their Taylor series.
 template <typename DoubleDoubleType>
-KOKKOS_INLINE_FUNCTION SinCos<DoubleDoubleType> sin_cos_impl(const DoubleDoubleType& a) {
-  if (!(Kokkos::abs(a.hi()) < 0x1p50)) {
-    return {Kokkos::sin(a.hi()), Kokkos::cos(a.hi())};  // beyond the reduction's range, infinity, NaN
-  }
-  constexpr double pi_2_part1 = 0x1.921fb54442d18p+0;
-  constexpr double pi_2_part2 = 0x1.1a62633145c07p-54;
-  constexpr double pi_2_part3 = -0x1.f1976b7ed8fbcp-110;
-  const double j = Kokkos::round(a.hi() / pi_2_part1);
-  const auto exact_product = [j](double p) {
-    const UnevaluatedSum jp = two_prod(j, p);
-    return DoubleDoubleType(jp.hi, jp.lo);
-  };
-  const DoubleDoubleType t = ((a - exact_product(pi_2_part1)) - exact_product(pi_2_part2)) - exact_product(pi_2_part3);
+KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDoubleType> sin_cos_taylor(const DoubleDoubleType& t) {
   const DoubleDoubleType t2 = t * t;
-
   DoubleDoubleType s = t;
   DoubleDoubleType c = 1.0;
   DoubleDoubleType s_term = t;
@@ -160,18 +148,64 @@ KOKKOS_INLINE_FUNCTION SinCos<DoubleDoubleType> sin_cos_impl(const DoubleDoubleT
     s += s_term;
     c += c_term;
   }
+  return {s, c};
+}
 
-  const int quadrant = static_cast<int>(j - 4.0 * Kokkos::floor(j / 4.0));  // j mod 4, in [0, 4)
+/// \brief The sine and cosine of t + quadrant * pi/2, from those of t (quadrant in [0, 4)).
+template <typename DoubleDoubleType>
+KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDoubleType> rotate_by_quadrant(const SinCos<DoubleDoubleType>& v,
+                                                                             int quadrant) {
   switch (quadrant) {
     case 0:
-      return {s, c};
+      return v;
     case 1:
-      return {c, -s};
+      return {v.cos, -v.sin};
     case 2:
-      return {-s, -c};
+      return {-v.sin, -v.cos};
     default:
-      return {-c, s};
+      return {-v.cos, v.sin};
   }
+}
+
+/// \brief The sine and cosine of 2 pi k / m, the fraction k / m of a full turn.
+///
+/// 2 pi k / m = (pi/2) (4k / m). Integer division splits 4k = q m + r exactly; moving r into (-m/2, m/2] leaves
+/// t = (pi/2) r / m with |t| <= pi/4 for the Taylor series, and the quadrant q rotates the result.
+template <typename DoubleDoubleType>
+KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDoubleType> sin_cos_of_turn_fraction(unsigned k, unsigned m) {
+  unsigned quadrant = (4 * k) / m;
+  long r = static_cast<long>(4 * k) - static_cast<long>(quadrant * m);
+  if (2 * r > static_cast<long>(m)) {
+    r -= static_cast<long>(m);
+    ++quadrant;
+  }
+  const UnevaluatedSum half_pi = pi_over_2();
+  const DoubleDoubleType t =
+      DoubleDoubleType(half_pi.hi, half_pi.lo) * static_cast<double>(r) / static_cast<double>(m);
+  return rotate_by_quadrant(sin_cos_taylor(t), static_cast<int>(quadrant % 4));
+}
+
+/// \brief sin(a) and cos(a).
+///
+/// Reduce a = j pi/2 + t with |t| <= pi/4, sum both Taylor series in t, and rotate the result by the quadrant j. The
+/// reduction subtracts j pi/2 with pi/2 split into three doubles (about 160 bits, Cody-Waite), each product j p_i
+/// formed exactly, so it stays accurate for |j| < 2^50.
+template <typename DoubleDoubleType>
+KOKKOS_INLINE_FUNCTION SinCos<DoubleDoubleType> sin_cos_impl(const DoubleDoubleType& a) {
+  if (!(Kokkos::abs(a.hi()) < 0x1p50)) {
+    return {Kokkos::sin(a.hi()), Kokkos::cos(a.hi())};  // beyond the reduction's range, infinity, NaN
+  }
+  constexpr double pi_2_part1 = pi_over_2().hi;
+  constexpr double pi_2_part2 = pi_over_2().lo;
+  constexpr double pi_2_part3 = -0x1.f1976b7ed8fbcp-110;
+  const double j = Kokkos::round(a.hi() / pi_2_part1);
+  const auto exact_product = [j](double p) {
+    const UnevaluatedSum jp = two_prod(j, p);
+    return DoubleDoubleType(jp.hi, jp.lo);
+  };
+  const DoubleDoubleType t = ((a - exact_product(pi_2_part1)) - exact_product(pi_2_part2)) - exact_product(pi_2_part3);
+  const int quadrant = static_cast<int>(j - 4.0 * Kokkos::floor(j / 4.0));  // j mod 4, in [0, 4)
+  return rotate_by_quadrant(sin_cos_taylor(t), quadrant);
 }
 //@}
 
