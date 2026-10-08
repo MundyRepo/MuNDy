@@ -33,6 +33,7 @@
 #include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 #include <KokkosBlas.hpp>
+#include <KokkosSparse_spmv.hpp>
 #endif
 
 // Mundy
@@ -72,15 +73,15 @@ concept VectorBackend = requires(Vector& y, const Vector& x, impl::vector_value_
 /// MUNDY_THROW_REQUIRE-at-runtime fallback for any Op that isn't otherwise recognized, so those three
 /// expressions alone are well-formed (and thus satisfied) for literally any Op -- checking only them would make
 /// this concept accept non-operators. The additional clause below requires Op to actually be one of the shapes
-/// a backend can recognize (a dense matrix/view, or a type that provides its own apply member), so a type with
-/// none of those is correctly rejected instead of silently passing and only failing at runtime.
+/// a backend can recognize (a matrix view, dense or sparse; a mundy::Matrix; or a type that provides its own apply
+/// member), so a type with none of those is correctly rejected instead of silently passing and only failing at runtime.
 template <class Backend, class Op, class XVector, class YVector>
 concept LinearOperator =
     requires(const Op& op, const XVector& x, YVector& y) {
       { Backend::domain_size(op) } -> std::convertible_to<size_t>;
       { Backend::range_size(op) } -> std::convertible_to<size_t>;
       { Backend::apply(op, x, y) } -> std::same_as<void>;
-    } && (impl::DenseMatView<Op> || is_matrix_v<Op> || impl::HasApplyMember<Op, XVector, YVector> ||
+    } && (impl::MatView<Op> || is_matrix_v<Op> || impl::HasApplyMember<Op, XVector, YVector> ||
           impl::HasApplyMemberWithWorkspace<Op, XVector, YVector, impl::workspace_for_t<Op>>);
 
 /// \brief Concept for an operator that provides its own fused scaled-apply: y := alpha * op(x) + beta * y.
@@ -94,6 +95,9 @@ concept HasScaledApplyMember = requires(const Op& op, Scalar a, const XVector& x
 };
 
 /// \brief Backend for Kokkos single process execution
+///
+/// Applies matrix views, dense (a rank-2 Kokkos::View) or sparse (a KokkosSparse::CrsMatrix), and operators that
+/// provide their own apply.
 template <typename ExecSpace>
 struct KokkosBackend {
  public:
@@ -120,7 +124,7 @@ struct KokkosBackend {
   KOKKOS_INLINE_FUNCTION static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
-    } else if constexpr (impl::DenseMatView<LinearOp>) {
+    } else if constexpr (impl::MatView<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
       using value_type = typename op_t::non_const_value_type;
       using mem_space = typename op_t::memory_space;
@@ -133,7 +137,7 @@ struct KokkosBackend {
                            return vector_t("domain_vector", domain_size(op));));
     } else {
       static_assert(dependent_false_v<LinearOp>,
-                    "KokkosBackend::make_domain_vector requires DenseMatView or op.make_domain_vector().");
+                    "KokkosBackend::make_domain_vector requires a matrix view or op.make_domain_vector().");
     }
   }
 
@@ -141,7 +145,7 @@ struct KokkosBackend {
   KOKKOS_INLINE_FUNCTION static auto make_range_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
-    } else if constexpr (impl::DenseMatView<LinearOp>) {
+    } else if constexpr (impl::MatView<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
       using value_type = typename op_t::non_const_value_type;
       using mem_space = typename op_t::memory_space;
@@ -154,7 +158,7 @@ struct KokkosBackend {
                            return vector_t("range_vector", range_size(op));));
     } else {
       static_assert(dependent_false_v<LinearOp>,
-                    "KokkosBackend::make_range_vector requires DenseMatView or op.make_range_vector().");
+                    "KokkosBackend::make_range_vector requires a matrix view or op.make_range_vector().");
     }
   }
 
@@ -180,43 +184,42 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
-  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::MatView<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
-    return op.extent(1);
+    return impl::mat_view_num_cols(op);
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return op.domain_size();
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp&) {
-    MUNDY_THROW_REQUIRE(
-        false, std::logic_error,
-        "KokkosBackend::domain_size: op must be a rank-2 Kokkos::View or provide size_t domain_size().");
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "KokkosBackend::domain_size: op must be a matrix view or provide size_t domain_size().");
     return 0;
   }
 
   template <class LinearOp>
-  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::MatView<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
-    return op.extent(0);
+    return impl::mat_view_num_rows(op);
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return op.range_size();
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp&) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
-                        "KokkosBackend::range_size: op must be a rank-2 Kokkos::View or provide size_t range_size().");
+                        "KokkosBackend::range_size: op must be a matrix view or provide size_t range_size().");
     return 0;
   }
 
@@ -237,41 +240,37 @@ struct KokkosBackend {
   }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
-  // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
+  // Path 1: If op is a matrix view, dense or sparse, multiply by it.
   // y = A*x
   template <class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::MatView<LinearOp>)
   static void apply(const LinearOp& A, const XVector& x, YVector& y) {
     using value_type = impl::vector_value_type<YVector>;
-    MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
-    MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
-    KokkosBlas::gemv(exec_space{}, "N", value_type(1), A, x, value_type(0), y);
+    apply_mat_view(value_type(1), A, x, value_type(0), y);
   }
 
-  // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
+  // Path 1: If op is a matrix view, dense or sparse, multiply by it.
   // y = alpha * A * x + beta * y
   template <class Scalar, class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::MatView<LinearOp>)
   static void apply(Scalar alpha, const LinearOp& A, const XVector& x, Scalar beta, YVector& y) {
-    MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
-    MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
-    KokkosBlas::gemv(exec_space{}, "N", alpha, A, x, beta, y);
+    apply_mat_view(alpha, A, x, beta, y);
   }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
   // Path 2: If op has member `apply(x,y)`
   template <class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     op.apply(x, y);
   }
 
   // Path 3: Otherwise, runtime error.
   template <typename LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
-                        "KokkosBackend::apply: op must be a rank-2 Kokkos::View or provide void apply(x,y).");
+                        "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y).");
   }
 
   /// \brief Dispatch to the matching apply_impl overload below, invalidating the workspace exactly once first.
@@ -281,17 +280,17 @@ struct KokkosBackend {
     apply_impl(op, x, y, workspace);
   }
 
-  // Scaled apply for non-dense-view ops: y := alpha * op(x) + beta * y.
+  // Scaled apply for ops that are not matrix views: y := alpha * op(x) + beta * y.
   // Path 1: op provides its own fused apply(alpha, x, beta, y).
   template <class Scalar, class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y) {
     op.apply(alpha, x, beta, y);
   }
 
   // Path 2: no fused member -- realize it generically from the plain apply plus axpby.
   template <class Scalar, class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp);
@@ -301,9 +300,9 @@ struct KokkosBackend {
   // Scaled apply with workspace: y := alpha * op(x) + beta * y, threading the operator's workspace so a scaled
   // apply reaches the same cached scratch as apply(op, x, y, workspace). Mirrors the unworkspaced scaled apply.
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
-  // Path 0: dense rank-2 View -> gemv; a dense view carries no workspace.
+  // Path 0: a matrix view carries no workspace.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::MatView<LinearOp>)
   static void apply(Scalar alpha, const LinearOp& A, const XVector& x, Scalar beta, YVector& y, Workspace&) {
     apply(alpha, A, x, beta, y);
   }
@@ -311,7 +310,7 @@ struct KokkosBackend {
 
   // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
     impl::workspace_invalidate(workspace);
     op.apply(alpha, x, beta, y);
@@ -319,7 +318,7 @@ struct KokkosBackend {
 
   // Path 2: no fused member -- realize it from the workspace-threaded plain apply plus axpby.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp, workspace);
@@ -328,22 +327,35 @@ struct KokkosBackend {
 
  private:
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  // y := alpha * A * x + beta * y for a matrix view A, by gemv if dense and spmv if sparse.
+  template <class Scalar, class Matrix, class XVector, class YVector>
+  static void apply_mat_view(Scalar alpha, const Matrix& A, const XVector& x, Scalar beta, YVector& y) {
+    MUNDY_THROW_ASSERT(domain_size(A) == x.extent(0), std::invalid_argument,
+                       "KokkosBackend::apply: A's column count must equal x's size.");
+    MUNDY_THROW_ASSERT(range_size(A) == y.extent(0), std::invalid_argument,
+                       "KokkosBackend::apply: A's row count must equal y's size.");
+    if constexpr (impl::DenseMatView<Matrix>) {
+      KokkosBlas::gemv(exec_space{}, "N", alpha, A, x, beta, y);
+    } else {
+      KokkosSparse::spmv(exec_space{}, "N", alpha, A, x, beta, y);
+    }
+  }
+
   template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::MatView<LinearOp>)
   static void apply_impl(const LinearOp& A, const XVector& x, YVector& y, Workspace&) {
     apply(A, x, y);
   }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
-                 impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
   static void apply_impl(const LinearOp& op, const XVector& x, YVector& y, Workspace& workspace) {
     op.apply(x, y, workspace);
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> &&
                  !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
                  impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply_impl(const LinearOp& op, const XVector& x, YVector& y, Workspace&) {
@@ -351,13 +363,12 @@ struct KokkosBackend {
   }
 
   template <typename LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
+  MUNDY_REQUIRES(!impl::MatView<LinearOp> &&
                  !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
                  !impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply_impl(const LinearOp&, const XVector&, YVector&, Workspace&) {
-    MUNDY_THROW_REQUIRE(
-        false, std::logic_error,
-        "KokkosBackend::apply: op must be a rank-2 Kokkos::View or provide void apply(x,y[,workspace]).");
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y[,workspace]).");
   }
 
  public:

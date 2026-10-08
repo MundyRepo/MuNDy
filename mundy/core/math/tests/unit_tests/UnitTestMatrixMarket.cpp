@@ -19,7 +19,8 @@
 // @HEADER
 
 /// \file UnitTestMatrixMarket.cpp
-/// \brief Matrix Market array files (matrix_market.hpp): exact round trips, the file text, and rejected files.
+/// \brief Matrix Market array and coordinate files (matrix_market.hpp): exact round trips, the file text, and rejected
+/// files.
 
 // External
 #include <gtest/gtest.h>
@@ -39,11 +40,13 @@
 #include <vector>       // for std::vector
 
 // Mundy
+#include <MundyMath_config.hpp>            // for HAVE_MUNDYMATH_KOKKOSKERNELS
 #include <mundy_math/Matrix.hpp>           // for mundy::Matrix, mundy::get_matrix
 #include <mundy_math/Vector.hpp>           // for mundy::Vector, mundy::get_vector
 #include <mundy_math/cmath.hpp>            // for mundy::bit_cast
 #include <mundy_math/matrix_market.hpp>    // for mundy::write_matrix_market, mundy::read_matrix_market
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, MundyMathBackend}
+#include <mundy_math/sparse_matrix.hpp>    // for mundy::impl::{SparseEntry, make_sparse_matrix}
 
 namespace mundy {
 
@@ -343,6 +346,112 @@ TEST(MatrixMarket, MundyTypesRequireTheFileExtents) {
 }
 //@}
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+//! \name Sparse matrices
+//@{
+
+/// \brief A sparse matrix of doubles in Space's memory.
+template <class Space>
+using sparse_matrix_t =
+    KokkosSparse::CrsMatrix<double, int, Kokkos::Device<Space, typename Space::memory_space>, void, size_t>;
+
+/// \brief A rows x cols sparse matrix in Space's memory storing entries, ordered by row and then column.
+template <class Space>
+sparse_matrix_t<Space> make_sparse(size_t rows, size_t cols, const std::vector<impl::SparseEntry<double>>& entries) {
+  return impl::make_sparse_matrix<sparse_matrix_t<Space>>(rows, cols, entries);
+}
+
+// A 5 x 4 matrix storing every hard value, -0 included, with row 2 empty.
+template <class Space>
+void expect_sparse_round_trip(const std::string& filename) {
+  const std::vector<double> values = hard_values<double>();
+  const size_t positions[12][2] = {{0, 0}, {0, 2}, {0, 3}, {1, 1}, {1, 3}, {3, 0},
+                                   {3, 1}, {3, 2}, {4, 0}, {4, 1}, {4, 2}, {4, 3}};
+  std::vector<impl::SparseEntry<double>> entries;
+  for (size_t k = 0; k < values.size(); ++k) {
+    entries.push_back({positions[k][0], positions[k][1], values[k]});
+  }
+  const sparse_matrix_t<Space> written = make_sparse<Space>(5, 4, entries);
+  write_matrix_market(filename, written);
+  sparse_matrix_t<Space> read;
+  read_matrix_market(filename, read);
+
+  ASSERT_EQ(read.numRows(), 5);
+  ASSERT_EQ(read.numCols(), 4);
+  ASSERT_EQ(read.nnz(), values.size());
+  const auto row_map = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, read.graph.row_map);
+  const auto cols = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, read.graph.entries);
+  const auto read_values = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, read.values);
+  const size_t expected_row_map[6] = {0, 3, 5, 5, 8, 12};
+  for (size_t i = 0; i < 6; ++i) {
+    EXPECT_EQ(row_map(i), expected_row_map[i]) << "row offset " << i;
+  }
+  for (size_t k = 0; k < values.size(); ++k) {
+    EXPECT_EQ(static_cast<size_t>(cols(k)), positions[k][1]) << "entry " << k;
+    EXPECT_TRUE(same_bits(read_values(k), values[k]))
+        << "entry " << k << ": wrote " << values[k] << ", read " << read_values(k);
+  }
+  std::remove(filename.c_str());
+}
+
+TEST(MatrixMarket, SparseMatricesRoundTripExactly) {
+  expect_sparse_round_trip<Kokkos::DefaultHostExecutionSpace>("MatrixMarket_sparse_host.mtx");
+  expect_sparse_round_trip<Kokkos::DefaultExecutionSpace>("MatrixMarket_sparse_device.mtx");
+}
+
+TEST(MatrixMarket, WritesTheStandardCoordinateFormat) {
+  // The banner, the extents and stored-entry count, then one "row col value" line per stored entry, one-based.
+  const std::string filename = "MatrixMarket_coordinate_format.mtx";
+  write_matrix_market(filename, make_sparse<Kokkos::DefaultHostExecutionSpace>(2, 3, {{0, 0, 1.5}, {1, 2, -2.0}}));
+  EXPECT_EQ(read_text(filename), "%%MatrixMarket matrix coordinate real general\n2 3 2\n1 1 1.5\n2 3 -2\n");
+  std::remove(filename.c_str());
+}
+
+TEST(MatrixMarket, ReadsCoordinateFilesFromOtherWriters) {
+  // Any case in the banner, comments, blank lines, integer entries, a leading '+', and entries in any order.
+  const std::string filename = "MatrixMarket_coordinate_other_writer.mtx";
+  write_text(filename,
+             "%%MATRIXMARKET Matrix Coordinate Integer General\n% written by hand\n\n3 3 4\n 3 1   +5\n1 2 -7\n"
+             "% interlude\n2 2 1\n1 1 2\n");
+  sparse_matrix_t<Kokkos::DefaultHostExecutionSpace> matrix;
+  read_matrix_market(filename, matrix);
+  ASSERT_EQ(matrix.numRows(), 3);
+  ASSERT_EQ(matrix.numCols(), 3);
+  ASSERT_EQ(matrix.nnz(), 4u);
+  const size_t expected_row_map[4] = {0, 2, 3, 4};
+  const int expected_cols[4] = {0, 1, 1, 0};
+  const double expected_values[4] = {2.0, -7.0, 1.0, 5.0};
+  for (size_t i = 0; i < 4; ++i) {
+    EXPECT_EQ(matrix.graph.row_map(i), expected_row_map[i]) << "row offset " << i;
+    EXPECT_EQ(matrix.graph.entries(i), expected_cols[i]) << "entry " << i;
+    EXPECT_EQ(matrix.values(i), expected_values[i]) << "entry " << i;
+  }
+  std::remove(filename.c_str());
+}
+
+TEST(MatrixMarket, RejectsInvalidCoordinateFiles) {
+  const std::string filename = "MatrixMarket_invalid_coordinate.mtx";
+  sparse_matrix_t<Kokkos::DefaultHostExecutionSpace> matrix;
+  const auto expect_rejected = [&](const std::string& text, const std::string& why) {
+    write_text(filename, text);
+    EXPECT_THROW(read_matrix_market(filename, matrix), std::runtime_error) << why;
+  };
+  const std::string banner = "%%MatrixMarket matrix coordinate real general\n";
+  expect_rejected("%%MatrixMarket matrix array real general\n1 1\n1\n", "the dense array format");
+  expect_rejected("%%MatrixMarket matrix coordinate real symmetric\n2 2 1\n1 1 1\n", "a symmetric file");
+  expect_rejected("%%MatrixMarket matrix coordinate pattern general\n2 2 1\n1 1\n", "a pattern file");
+  expect_rejected(banner + "2 2\n1 1 1\n", "an extents line without nnz");
+  expect_rejected(banner + "2 2 2\n1 1 1\n", "too few entries");
+  expect_rejected(banner + "2 2 1\n1 1 1\n2 2 1\n", "too many entries");
+  expect_rejected(banner + "2 2 2\n1 1 1\n1 1 2\n", "an entry listed twice");
+  expect_rejected(banner + "2 2 1\n0 1 1\n", "a row index below one");
+  expect_rejected(banner + "2 2 1\n1 3 1\n", "a column index beyond the columns");
+  expect_rejected(banner + "2 2 1\n1 1 one\n", "an entry that is not a number");
+  std::remove(filename.c_str());
+}
+//@}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+
 //! \name Linear operators
 //@{
 
@@ -400,6 +509,22 @@ TEST(MatrixMarket, OperatorsWriteTheirMatrix) {
       EXPECT_EQ(stencil(i, j), j == i ? -1.0 : (j == i + 1 ? 1.0 : 0.0)) << "entry (" << i << ", " << j << ")";
     }
   }
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  // A sparse matrix, through the Kokkos backend on the default execution space
+  write_matrix_market<KokkosBackend<Kokkos::DefaultExecutionSpace>>(
+      filename, make_sparse<Kokkos::DefaultExecutionSpace>(2, 3, {{0, 0, 1.5}, {1, 2, -2.0}}));
+  Kokkos::View<double**, Kokkos::HostSpace> dense("dense", 0, 0);
+  read_matrix_market(filename, dense);
+  ASSERT_EQ(dense.extent(0), 2u);
+  ASSERT_EQ(dense.extent(1), 3u);
+  for (size_t i = 0; i < 2; ++i) {
+    for (size_t j = 0; j < 3; ++j) {
+      EXPECT_EQ(dense(i, j), i == 0 && j == 0 ? 1.5 : (i == 1 && j == 2 ? -2.0 : 0.0))
+          << "entry (" << i << ", " << j << ")";
+    }
+  }
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
   std::remove(filename.c_str());
 }
 //@}

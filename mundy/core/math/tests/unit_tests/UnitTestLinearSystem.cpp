@@ -28,13 +28,16 @@
 #include <cstdint>    // for uint64_t
 #include <limits>     // for std::numeric_limits
 #include <stdexcept>  // for std::runtime_error
+#include <type_traits>  // for std::remove_cvref_t
 
 // Mundy
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_KOKKOSKERNELS
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/linear_system.hpp>
 #include <mundy_math/preconditioners.hpp>
 #include <mundy_math/solver_backends.hpp>
+#include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
 
 namespace mundy {
 
@@ -453,8 +456,9 @@ struct TridiagKokkosOp {
   }
 };
 
+// The tridiagonal [2, -1, 0; -1, 2, -1; 0, -1, 2] as an operator that applies itself and, with KokkosKernels, as a
+// dense and a sparse matrix.
 TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
-  const TridiagKokkosOp A;
   view_t b(Kokkos::view_alloc(Kokkos::WithoutInitializing, "b"), 3);
   auto b_host = Kokkos::create_mirror_view(b);
   // b = A * (1, 0, 1)
@@ -463,37 +467,60 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
   b_host(2) = -0.0 + 2.0 * 1.0;
   Kokkos::deep_copy(b, b_host);
 
-  view_t x0(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x0"), 3);
-  Kokkos::deep_copy(x0, 0.0);
+  const auto check = [&](const auto& A, const char* kind) {
+    using op_t = std::remove_cvref_t<decltype(A)>;
+    view_t x0(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x0"), 3);
+    Kokkos::deep_copy(x0, 0.0);
 
-  auto prob = LinearSystem(kokkos_backend_t{}, TridiagKokkosOp(A), view_t(b));
-  auto state = CGState(view_t(x0), A.make_range_vector(), A.make_range_vector(), A.make_range_vector());
-  auto strat = CGStrategy(L2Residual{}, CGConfig<double>{});
+    auto prob = LinearSystem(kokkos_backend_t{}, op_t(A), view_t(b));
+    auto state = CGState(view_t(x0), kokkos_backend_t::make_range_vector(A), kokkos_backend_t::make_range_vector(A),
+                         kokkos_backend_t::make_range_vector(A));
+    auto strat = CGStrategy(L2Residual{}, CGConfig<double>{});
 
-  const auto result = solve_linear_system(prob, strat, state);
-  EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, 3u);
+    const auto result = solve_linear_system(prob, strat, state);
+    EXPECT_TRUE(result.converged) << kind;
+    EXPECT_LE(result.num_iters, 3u) << kind;
 
-  auto x_host = Kokkos::create_mirror_view(state.x());
-  Kokkos::deep_copy(x_host, state.x());
-  EXPECT_NEAR(x_host(0), 1.0, 1e-8);
-  EXPECT_NEAR(x_host(1), 0.0, 1e-8);
-  EXPECT_NEAR(x_host(2), 1.0, 1e-8);
+    auto x_host = Kokkos::create_mirror_view(state.x());
+    Kokkos::deep_copy(x_host, state.x());
+    EXPECT_NEAR(x_host(0), 1.0, 1e-8) << kind;
+    EXPECT_NEAR(x_host(1), 0.0, 1e-8) << kind;
+    EXPECT_NEAR(x_host(2), 1.0, 1e-8) << kind;
 
-  // Jacobi-preconditioned, with A's diagonal (2, 2, 2)
-  view_t d("d", 3);
-  Kokkos::deep_copy(d, 2.0);
-  auto pcg_state = CGState(view_t("x", 3), A.make_range_vector(), A.make_range_vector(), A.make_range_vector());
-  const auto pcg_result = solve_linear_system(
-      LinearSystem(kokkos_backend_t{}, TridiagKokkosOp(A), view_t(b)),
-      CGStrategy(L2Residual{}, CGConfig<double>{}, make_jacobi_preconditioner<kokkos_backend_t>(d)), pcg_state);
-  EXPECT_TRUE(pcg_result.converged);
-  EXPECT_LE(pcg_result.num_iters, 3u);
+    // Jacobi-preconditioned, with A's diagonal (2, 2, 2)
+    view_t d("d", 3);
+    Kokkos::deep_copy(d, 2.0);
+    auto pcg_state = CGState(view_t("x", 3), kokkos_backend_t::make_range_vector(A),
+                             kokkos_backend_t::make_range_vector(A), kokkos_backend_t::make_range_vector(A));
+    const auto pcg_result = solve_linear_system(
+        LinearSystem(kokkos_backend_t{}, op_t(A), view_t(b)),
+        CGStrategy(L2Residual{}, CGConfig<double>{}, make_jacobi_preconditioner<kokkos_backend_t>(d)), pcg_state);
+    EXPECT_TRUE(pcg_result.converged) << kind;
+    EXPECT_LE(pcg_result.num_iters, 3u) << kind;
 
-  const auto pcg_x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, pcg_state.x());
-  EXPECT_NEAR(pcg_x_host(0), 1.0, 1e-8);
-  EXPECT_NEAR(pcg_x_host(1), 0.0, 1e-8);
-  EXPECT_NEAR(pcg_x_host(2), 1.0, 1e-8);
+    const auto pcg_x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, pcg_state.x());
+    EXPECT_NEAR(pcg_x_host(0), 1.0, 1e-8) << kind;
+    EXPECT_NEAR(pcg_x_host(1), 0.0, 1e-8) << kind;
+    EXPECT_NEAR(pcg_x_host(2), 1.0, 1e-8) << kind;
+  };
+  check(TridiagKokkosOp{}, "applies itself");
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+  using sparse_matrix_t = KokkosSparse::CrsMatrix<
+      double, int, Kokkos::Device<Kokkos::DefaultExecutionSpace, Kokkos::DefaultExecutionSpace::memory_space>, void,
+      size_t>;
+  const dense_matrix_t dense("dense", 3, 3);
+  const auto dense_host = Kokkos::create_mirror_view(dense);
+  for (size_t i = 0; i < 3; ++i) {
+    dense_host(i, i) = 2.0;
+    if (i > 0) dense_host(i, i - 1) = -1.0;
+    if (i + 1 < 3) dense_host(i, i + 1) = -1.0;
+  }
+  Kokkos::deep_copy(dense, dense_host);
+  check(dense, "dense");
+  check(make_sparse_matrix<sparse_matrix_t>(dense), "sparse");
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 
 // An inverse holds no solve history: each solve iterates in its out from the guess it holds. Into a zeroed out it is a

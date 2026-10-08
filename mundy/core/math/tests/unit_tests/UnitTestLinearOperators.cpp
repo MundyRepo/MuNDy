@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <Kokkos_Core.hpp>
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_KOKKOSKERNELS
 
 // Mundy
 #include <mundy_math/Matrix.hpp>
@@ -30,6 +31,7 @@
 #include <mundy_math/Vector3.hpp>
 #include <mundy_math/linear_ops.hpp>
 #include <mundy_math/solver_backends.hpp>
+#include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
 
 namespace mundy {
 
@@ -398,6 +400,59 @@ TEST(LinearOperators, ConcatOpsOnMundyMathBackend) {
   expect_case_on_host_and_device(ConcatRangeCase{}, Vector3d{6.0, 12.0, 18.0});
   expect_case_on_host_and_device(NestedConcatDomainCase{}, Vector3d{15.0, 14.0, 13.0});
 }
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+using sparse_matrix_t =
+    KokkosSparse::CrsMatrix<double, int,
+                            Kokkos::Device<Kokkos::DefaultExecutionSpace, Kokkos::DefaultExecutionSpace::memory_space>,
+                            void, size_t>;
+
+/// \brief A rows x cols dense matrix with the given row-major entries.
+dense_matrix_t make_dense_matrix(size_t rows, size_t cols, std::initializer_list<double> row_major) {
+  dense_matrix_t A("A", rows, cols);
+  const auto A_host = Kokkos::create_mirror_view(A);
+  auto entry = row_major.begin();
+  for (size_t i = 0; i < rows; ++i) {
+    for (size_t j = 0; j < cols; ++j) {
+      A_host(i, j) = *entry++;
+    }
+  }
+  Kokkos::deep_copy(A, A_host);
+  return A;
+}
+
+// The MundyMath backend's Concat cases through the Kokkos backend, applied to x = (1, -2, 3), with every block a dense
+// and then a sparse matrix. Entries are integers and halves, so every sum is exact.
+TEST(LinearOperators, MatrixViewsCompose) {
+  const dense_matrix_t A1 = make_dense_matrix(3, 2, {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+  const dense_matrix_t A2 = make_dense_matrix(3, 1, {7.0, 8.0, 9.0});
+  const dense_matrix_t A1T = make_dense_matrix(2, 3, {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+  const dense_matrix_t A2T = make_dense_matrix(1, 3, {7.0, 8.0, 9.0});
+  const dense_matrix_t A = make_dense_matrix(3, 3, {1.0, 2.0, 7.0, 3.0, 4.0, 8.0, 5.0, 6.0, 9.0});  // [A1 | A2]
+  const view_t x = make_view({1.0, -2.0, 3.0});
+
+  const auto check = [&](const auto& a1, const auto& a2, const auto& a1t, const auto& a2t, const auto& a,
+                         const char* kind) {
+    const auto applied = [&](const auto& op) {
+      view_t y = backend_t::make_range_vector(op);
+      backend_t::apply(op, x, y);
+      return to_host(y);
+    };
+    EXPECT_EQ(applied(make_concat_domain_op<backend_t>(a1, a2)), (std::vector<double>{18.0, 19.0, 20.0})) << kind;
+    EXPECT_EQ(applied(make_concat_range_op<backend_t>(a1t, a2t)), (std::vector<double>{6.0, 12.0, 18.0})) << kind;
+    EXPECT_EQ(applied(make_concat_domain_op<backend_t>(make_sum_op<backend_t>(a1, a1), a2)),
+              (std::vector<double>{15.0, 14.0, 13.0}))
+        << kind;
+    EXPECT_EQ(applied(make_scaled_op<backend_t>(2.0, a)), (std::vector<double>{36.0, 38.0, 40.0})) << kind;
+    EXPECT_EQ(applied(make_shifted_op<backend_t>(0.5, a)), (std::vector<double>{17.5, 20.0, 18.5})) << kind;
+  };
+  check(A1, A2, A1T, A2T, A, "dense");
+  check(make_sparse_matrix<sparse_matrix_t>(A1), make_sparse_matrix<sparse_matrix_t>(A2),
+        make_sparse_matrix<sparse_matrix_t>(A1T), make_sparse_matrix<sparse_matrix_t>(A2T),
+        make_sparse_matrix<sparse_matrix_t>(A), "sparse");
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 TEST(LinearOperators, ConcatDomainOpSplitsInputAndSumsContributions) {
   // [op1 | op2]: op1 has domain 2 -> writes rows {0,1}; op2 has domain 1 -> writes row {2}; shared range 3.
