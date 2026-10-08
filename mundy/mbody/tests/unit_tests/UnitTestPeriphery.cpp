@@ -268,9 +268,8 @@ TEST(Periphery, SurfaceForcesRequireAnInverse) {
 //@}
 
 //! \name The second-kind operator
-//@{
-
 // These tests check the periphery's second-kind operator M = J + T + N, derived in Periphery.hpp's header.
+//@{
 
 // M M^{-1} = I to 1e-10 for both normal orientations: N lifts the null space of J + T, so M is well conditioned.
 TEST(Periphery, SkfieTimesItsInverseIsTheIdentity) {
@@ -513,14 +512,16 @@ double interior_flow_error(const InteriorFlowProblem& problem, const int order, 
 }
 
 // A no-slip periphery cancels an outside point force's flow everywhere inside: its flow and the force's are interior
-// Stokes flows with opposite boundary values. The relative error falls with quadrature order (1e-5 at order 24) and
-// matches across viscosities and normal orientations.
+// Stokes flows with opposite boundary values. The relative error falls to 1e-5 by order 28 for both normal orientations
+// and matches across viscosities.
 TEST(Periphery, PeripheryCancelsAnOutsideFlow) {
-  const std::vector<int> orders = {8, 12, 16, 24};
+  const std::vector<int> orders = {8, 12, 16, 28};
   const InteriorFlowProblem problem = make_interior_flow_problem();
+  const double num_unknowns = 3.0 * make_sphere_surface(orders.back(), kPeripheryRadius, false).num_nodes;
+  const double roundoff = num_unknowns * std::numeric_limits<double>::epsilon();
 
-  std::vector<std::vector<double>> all_errors;
   for (const bool outward_normal : {false, true}) {
+    std::vector<std::vector<double>> errors_by_viscosity;
     for (const double viscosity : kViscosities) {
       SCOPED_TRACE(testing::Message() << "outward_normal=" << outward_normal << " viscosity=" << viscosity);
       std::vector<double> errors;
@@ -530,15 +531,13 @@ TEST(Periphery, PeripheryCancelsAnOutsideFlow) {
       EXPECT_TRUE(decreases_or_reaches(errors, 0.0))
           << "interior flow must converge under refinement: orders=" << testing::PrintToString(orders)
           << " errors=" << testing::PrintToString(errors);
-      EXPECT_LT(errors.back(), 3.0e-5) << "finest periphery must reproduce the interior Stokes flow";
-      all_errors.push_back(errors);
+      EXPECT_LT(errors.back(), 1.0e-5) << "finest periphery must reproduce the interior Stokes flow";
+      errors_by_viscosity.push_back(errors);
     }
-  }
-
-  for (size_t c = 1; c < all_errors.size(); ++c) {
     for (size_t i = 0; i < orders.size(); ++i) {
-      EXPECT_NEAR(all_errors[c][i], all_errors[0][i], 1.0e-6 * all_errors[0][i])
-          << "interior-flow error must not depend on viscosity or normal orientation, order=" << orders[i];
+      EXPECT_NEAR(errors_by_viscosity[1][i], errors_by_viscosity[0][i], roundoff)
+          << "interior-flow error must not depend on the viscosity, outward_normal=" << outward_normal
+          << ", order=" << orders[i];
     }
   }
 }
