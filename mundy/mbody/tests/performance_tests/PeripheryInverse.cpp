@@ -24,7 +24,7 @@
 /// For each sphere-quadrature size it times, on the same geometry:
 ///   - direct build : fill the dense self-interaction matrix and invert it (KokkosBlas::gesv)
 ///   - direct solve : apply the stored inverse (gemv)
-///   - matrix-free  : solve M f = u with Belos GMRES over the matrix-free apply_skfie (no dense matrix)
+///   - matrix-free  : solve M q = u with Belos GMRES over the matrix-free apply_skfie (no dense matrix)
 /// and reports the GMRES iteration count. The two regimes the numbers speak to:
 ///   - repeated solves, fixed geometry: direct amortizes its one-time build, so "direct solve" (a gemv) is the
 ///     per-solve cost to beat.
@@ -180,12 +180,12 @@ void bench_size(int order, const Options& opts, RowMap& rows) {
   periphery.set_belos_config(cfg).build_matrix_free_inverse();
 
   dev_view_t u = make_random_slip(num_nodes, 20260721u + static_cast<unsigned>(num_nodes));
-  dev_view_t f(Kokkos::view_alloc(Kokkos::WithoutInitializing, "f"), 3 * num_nodes);
+  dev_view_t q(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), 3 * num_nodes);
 
   // One matrix-free solve outside timing to record the iteration count.
   periphery.set_inverse_method(InverseMethod::MatrixFreeGMRES);
-  Kokkos::deep_copy(f, 0.0);
-  periphery.compute_surface_forces(u, f);
+  Kokkos::deep_copy(q, 0.0);
+  periphery.compute_surface_density(u, q);
   const unsigned gmres_iters = periphery.get_last_matrix_free_result().num_iters;
 
   auto bench = make_bench(num_nodes, opts);
@@ -197,18 +197,18 @@ void bench_size(int order, const Options& opts, RowMap& rows) {
 
   periphery.set_inverse_method(InverseMethod::Direct);
   bench.run(kOpLabels[kDirectSolve], [&] {
-    Kokkos::deep_copy(f, 0.0);
-    periphery.compute_surface_forces(u, f);
+    Kokkos::deep_copy(q, 0.0);
+    periphery.compute_surface_density(u, q);
     Kokkos::fence();
-    ankerl::nanobench::doNotOptimizeAway(f);
+    ankerl::nanobench::doNotOptimizeAway(q);
   });
 
   periphery.set_inverse_method(InverseMethod::MatrixFreeGMRES);
   bench.run(kOpLabels[kMatrixFree], [&] {
-    Kokkos::deep_copy(f, 0.0);
-    periphery.compute_surface_forces(u, f);
+    Kokkos::deep_copy(q, 0.0);
+    periphery.compute_surface_density(u, q);
     Kokkos::fence();
-    ankerl::nanobench::doNotOptimizeAway(f);
+    ankerl::nanobench::doNotOptimizeAway(q);
   });
 
   if (opts.simple) {

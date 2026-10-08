@@ -1571,14 +1571,14 @@ class PeripheryT {
   ///
   /// \param[in] external_flow_velocity The external flow velocity (size num_nodes x 3)
   /// \param[in,out] surface_density The density q is added to (size num_nodes x 3)
-  PeripheryT& compute_surface_forces(
+  PeripheryT& compute_surface_density(
       const Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>& external_flow_velocity,
       Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>& surface_density) {
     // Both paths accumulate surface_density += -M^{-1} u_slip: the negative balances the imposed slip velocity, and
     // the result is added onto whatever surface_density already holds.
     if (inverse_method_ == InverseMethod::Direct) {
       MUNDY_THROW_REQUIRE(is_inverse_self_interaction_matrix_set_, std::runtime_error,
-                          "compute_surface_forces: build_inverse_self_interaction_matrix() or "
+                          "compute_surface_density: build_inverse_self_interaction_matrix() or "
                           "set_inverse_self_interaction_matrix() must be called before using the direct inverse.");
       KokkosBlas::gemv(DeviceExecutionSpace(), "N", -1.0, M_inv_, external_flow_velocity, 1.0, surface_density);
       return *this;
@@ -1587,24 +1587,24 @@ class PeripheryT {
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
     // MatrixFreeGMRES: solve M q = u_slip for M^{-1} u_slip, then accumulate its negative into surface_density.
     MUNDY_THROW_REQUIRE(is_matrix_free_inverse_set_, std::runtime_error,
-                        "compute_surface_forces: build_matrix_free_inverse() must be called before using the "
+                        "compute_surface_density: build_matrix_free_inverse() must be called before using the "
                         "matrix-free inverse.");
     belos_inv_op_->apply(external_flow_velocity, mf_solution_);
     auto solution = mf_solution_;
     auto density = surface_density;
     Kokkos::parallel_for(
-        "compute_surface_forces_accumulate", Kokkos::RangePolicy<DeviceExecutionSpace>(0, density.extent(0)),
+        "compute_surface_density_accumulate", Kokkos::RangePolicy<DeviceExecutionSpace>(0, density.extent(0)),
         KOKKOS_LAMBDA(const size_t i) { density(i) -= solution(i); });
     return *this;
 #else
     MUNDY_THROW_REQUIRE(false, std::logic_error,
-                        "compute_surface_forces: MatrixFreeGMRES requires the Belos and Tpetra TPLs, which are not "
+                        "compute_surface_density: MatrixFreeGMRES requires the Belos and Tpetra TPLs, which are not "
                         "enabled in this build.");
     return *this;
 #endif
   }
 
-  /// \brief Select how compute_surface_forces inverts M (direct dense inverse vs. matrix-free GMRES).
+  /// \brief Select how compute_surface_density inverts M (direct dense inverse vs. matrix-free GMRES).
   PeripheryT& set_inverse_method(InverseMethod method) {
     inverse_method_ = method;
     return *this;
@@ -1647,7 +1647,7 @@ class PeripheryT {
     Kokkos::deep_copy(mf_surface_normals_, surface_normals_);
     Kokkos::deep_copy(mf_quadrature_weights_, quadrature_weights_);
 
-    // M^{-1} u, kept in the periphery's device space so the accumulate in compute_surface_forces stays in one space.
+    // M^{-1} u, kept in the periphery's device space so the accumulate in compute_surface_density stays in one space.
     // Each solve starts from it, so it starts at zero.
     mf_solution_ = Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>("mf_solution", 3 * num_surface_nodes_);
 
@@ -1739,7 +1739,7 @@ class PeripheryT {
   Kokkos::View<double**, Kokkos::LayoutLeft, DeviceMemorySpace>
       M_inv_;  //!< The inverse of the self-interaction matrix (device)
 
-  InverseMethod inverse_method_ = InverseMethod::Direct;  //!< Which inverse compute_surface_forces uses
+  InverseMethod inverse_method_ = InverseMethod::Direct;  //!< Which inverse compute_surface_density uses
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
   // BelosSolveSession requires the backend execution space to equal the Tpetra default Node execution space, so the
