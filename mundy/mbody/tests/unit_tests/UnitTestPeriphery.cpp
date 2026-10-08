@@ -256,13 +256,13 @@ TEST(Periphery, FlatPointerInverseIsReadRowMajor) {
   EXPECT_EQ(num_mismatches, 0u) << "M_inv(i, j) must equal M_inv_flat[i * 3N + j]";
 }
 
-// compute_surface_forces throws before an inverse exists.
-TEST(Periphery, SurfaceForcesRequireAnInverse) {
+// compute_surface_density throws before an inverse exists.
+TEST(Periphery, SurfaceDensityRequiresAnInverse) {
   const size_t num_nodes = 18;
   TestPeriphery periphery(num_nodes, kViscosity);
   DeviceVector slip("slip", 3 * num_nodes);
-  DeviceVector surface_forces("surface_forces", 3 * num_nodes);
-  EXPECT_THROW(periphery.compute_surface_forces(slip, surface_forces), std::runtime_error);
+  DeviceVector surface_density("surface_density", 3 * num_nodes);
+  EXPECT_THROW(periphery.compute_surface_density(slip, surface_density), std::runtime_error);
 }
 
 //@}
@@ -494,11 +494,11 @@ double interior_flow_error(const InteriorFlowProblem& problem, const int order, 
   DeviceVector slip("slip", 3 * surface.num_nodes);
   apply_stokes_kernel(TestExecSpace{}, viscosity, problem.source_position, surface.points, problem.source_force, slip);
   TestPeriphery periphery = make_periphery(surface, viscosity);
-  DeviceVector surface_forces("surface_forces", 3 * surface.num_nodes);
-  periphery.compute_surface_forces(slip, surface_forces);
+  DeviceVector surface_density("surface_density", 3 * surface.num_nodes);
+  periphery.compute_surface_density(slip, surface_density);
   DeviceVector u_h("u_h", 3 * num_bulk_points);
   apply_stokes_double_layer_kernel(TestExecSpace{}, viscosity, surface.num_nodes, num_bulk_points, surface.points,
-                                   problem.bulk_points, surface.normals, surface.weights, surface_forces, u_h);
+                                   problem.bulk_points, surface.normals, surface.weights, surface_density, u_h);
 
   const auto h_exact = to_host(u_exact);
   const auto h_u_h = to_host(u_h);
@@ -556,12 +556,12 @@ DeviceVector periphery_response(TestPeriphery& periphery, const DeviceVector& po
   DeviceVector slip("slip", 3 * num_nodes);
   apply_rpyc_kernel(TestExecSpace{}, viscosity, positions, periphery.get_surface_positions(), radii, node_radii, forces,
                     slip);
-  DeviceVector surface_forces("surface_forces", 3 * num_nodes);
-  periphery.compute_surface_forces(slip, surface_forces);
+  DeviceVector surface_density("surface_density", 3 * num_nodes);
+  periphery.compute_surface_density(slip, surface_density);
   DeviceVector velocities("velocities", positions.extent(0));
   apply_stokes_double_layer_kernel(TestExecSpace{}, viscosity, num_nodes, radii.extent(0),
                                    periphery.get_surface_positions(), positions, periphery.get_surface_normals(),
-                                   periphery.get_quadrature_weights(), surface_forces, velocities);
+                                   periphery.get_quadrature_weights(), surface_density, velocities);
   return velocities;
 }
 
@@ -715,8 +715,8 @@ TEST(Periphery, MatrixFreeMatchesDirectInverse) {
 
     SolvePeriphery direct = make_periphery(surface, kViscosity);
     direct.set_inverse_method(InverseMethod::Direct);
-    SolveVector f_direct("f_direct", 3 * surface.num_nodes);
-    direct.compute_surface_forces(slip, f_direct);
+    SolveVector q_direct("q_direct", 3 * surface.num_nodes);
+    direct.compute_surface_density(slip, q_direct);
 
     SolvePeriphery matrix_free(surface.num_nodes, kViscosity);
     matrix_free.set_surface_positions(surface.points)
@@ -725,12 +725,12 @@ TEST(Periphery, MatrixFreeMatchesDirectInverse) {
         .set_belos_config(make_gmres_config())
         .set_inverse_method(InverseMethod::MatrixFreeGMRES)
         .build_matrix_free_inverse();
-    SolveVector f_matrix_free("f_matrix_free", 3 * surface.num_nodes);
-    matrix_free.compute_surface_forces(slip, f_matrix_free);
+    SolveVector q_matrix_free("q_matrix_free", 3 * surface.num_nodes);
+    matrix_free.compute_surface_density(slip, q_matrix_free);
 
     const BelosResult<double>& result = matrix_free.get_last_matrix_free_result();
     EXPECT_TRUE(result.converged) << "GMRES failed to converge: " << result;
-    EXPECT_LT(max_relative_difference(f_direct, f_matrix_free), 1.0e-6) << "matrix-free vs direct, GMRES: " << result;
+    EXPECT_LT(max_relative_difference(q_direct, q_matrix_free), 1.0e-6) << "matrix-free vs direct, GMRES: " << result;
   }
 }
 
@@ -1173,13 +1173,13 @@ TEST(Periphery, MobilitySystemMatchesBuildingBlocks) {
     SolveVector slip("slip", 3 * num_nodes);
     apply_rpy_kernel(SolveExecSpace{}, kViscosity, positions, periphery->get_surface_positions(), radii,
                      SolveVector("node_radii", num_nodes), forces, slip);
-    SolveVector surface_forces("surface_forces", 3 * num_nodes);
-    periphery->compute_surface_forces(slip, surface_forces);
+    SolveVector surface_density("surface_density", 3 * num_nodes);
+    periphery->compute_surface_density(slip, surface_density);
     SolveVector expected("expected", 3);
     Kokkos::deep_copy(expected, dry_drag);
     apply_stokes_double_layer_kernel(SolveExecSpace{}, kViscosity, num_nodes, 1, periphery->get_surface_positions(),
                                      positions, periphery->get_surface_normals(), periphery->get_quadrature_weights(),
-                                     surface_forces, expected);
+                                     surface_density, expected);
     EXPECT_LT(max_relative_difference(expected, velocity), 1.0e-12)
         << "MobilitySystem RPY sphere velocity != drag + periphery response";
   }
