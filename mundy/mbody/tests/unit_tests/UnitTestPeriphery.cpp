@@ -1226,6 +1226,9 @@ TEST(Periphery, MobilitySystemRejectsInvalidInputs) {
       .set_quadrature_weights(surface.weights);
   mobility.set_periphery(periphery).set_bodies(wired, three_b, three_c);
   EXPECT_THROW(mobility.solve(), std::runtime_error);
+
+  // A periphery of another viscosity, whose M^{-1} carries that viscosity.
+  EXPECT_THROW(MobilitySystem<SolveExecSpace>(1.0).set_periphery(periphery), std::invalid_argument);
 }
 
 //@}
