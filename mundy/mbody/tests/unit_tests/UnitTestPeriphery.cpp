@@ -38,6 +38,7 @@
 #include <array>      // for std::array
 #include <cmath>      // for std::abs, std::sqrt, std::log, std::sin, std::cos
 #include <cstdio>     // for std::remove
+#include <limits>     // for std::numeric_limits
 #include <memory>     // for std::make_shared
 #include <numeric>    // for std::accumulate
 #include <stdexcept>  // for std::invalid_argument, std::runtime_error
@@ -87,11 +88,8 @@ auto to_host(const View& view) {
 //! \name Constants
 //@{
 
-// Every term of the periphery's operators carries 1 / viscosity, so a coefficient that silently assumes a unit
-// viscosity is invisible at viscosity 1. The tests use this non-unit viscosity, alone or beside 1.
 constexpr double kViscosity = 0.5305;
 constexpr std::array<double, 2> kViscosities = {1.0, kViscosity};
-
 constexpr double kPeripheryRadius = 13.5;  //!< The radius of the periphery the operator tests use
 constexpr double kPi = Kokkos::numbers::pi_v<double>;
 
@@ -156,7 +154,7 @@ std::vector<double> make_random_values(const size_t n, const size_t seed) {
 //! \name Comparisons
 //@{
 
-/// \brief max_i |a_i - b_i| / max_i |a_i|: how far b is from a, relative to a's largest entry.
+/// \brief max_i |a_i - b_i| / max_i |a_i|.
 template <class ViewA, class ViewB>
 double max_relative_difference(const ViewA& a_view, const ViewB& b_view) {
   const auto a = to_host(a_view);
@@ -203,8 +201,8 @@ size_t count_value_differences(const MatrixA& a_view, const MatrixB& b_view) {
   return differences;
 }
 
-// The file setters read Matrix Market files exactly: a periphery set from files matches one set from views bit for bit,
-// a written inverse reads back bit for bit, and a file of the wrong length is rejected.
+// The file setters are exact: files reproduce the view setters' inverse bit for bit, and a file of the wrong length
+// throws.
 TEST(Periphery, FileSettersMatchViewSetters) {
   const auto surface = make_sphere_surface(6, 1.7, /*outward_normal=*/false);
   const std::string prefix = "FileSettersMatchViewSetters_";
@@ -258,7 +256,7 @@ TEST(Periphery, FlatPointerInverseIsReadRowMajor) {
   EXPECT_EQ(num_mismatches, 0u) << "M_inv(i, j) must equal M_inv_flat[i * 3N + j]";
 }
 
-// compute_surface_forces throws, rather than silently returning, before the inverse exists.
+// compute_surface_forces throws before an inverse exists.
 TEST(Periphery, SurfaceForcesRequireAnInverse) {
   const size_t num_nodes = 18;
   TestPeriphery periphery(num_nodes, kViscosity);
@@ -272,11 +270,9 @@ TEST(Periphery, SurfaceForcesRequireAnInverse) {
 //! \name The second-kind operator
 //@{
 
-// The periphery's second-kind operator M = J + T + N on its own, apart from any mobility. Its terms and the
-// singularity subtraction behind them are derived in Periphery.hpp's header.
+// These tests check the periphery's second-kind operator M = J + T + N, derived in Periphery.hpp's header.
 
-// fill_skfie_matrix's M times invert's M^{-1} is the identity, for both normal orientations. M is a second-kind
-// operator whose null space N lifts, so it is well conditioned and the product is the identity to 1e-10.
+// M M^{-1} = I to 1e-10 for both normal orientations: N lifts the null space of J + T, so M is well conditioned.
 TEST(Periphery, SkfieTimesItsInverseIsTheIdentity) {
   for (const bool outward_normal : {false, true}) {
     const auto surface = make_sphere_surface(12, 12.34, outward_normal);
@@ -362,12 +358,11 @@ ConstantDensityErrors constant_density_errors(const int order, const double visc
   return errors;
 }
 
-// A constant density c makes the subtracted integrand vanish, so each singularity-subtracted operator returns exactly
-// its analytic target term: (sigma / viscosity) c for the periphery (N c = 0 because sum_s w_s n_s = 0 on the sphere
-// rule) and 0 for the exterior trace. The difference form is algebraically exact for a constant density, so only
-// roundoff remains, below 1e-11 / viscosity. The bare punctured sum T c only approximates PV T[1] = sigma / (2
-// viscosity) (its kernel is O(1/r) at the omitted node), so its area-weighted mean is only checked to converge and to
-// come within 10%.
+// A constant density c makes the subtracted integrand vanish, so M and the exterior trace return their jumps to
+// roundoff, with sigma = +1 for outward normals and -1 for inward:
+//    M c = (sigma / viscosity) c,    exterior trace of c = 0.
+// The bare punctured sum T c only approximates its principal value, (sigma / (2 viscosity)) c, so it is checked only to
+// converge toward it and to come within 10%.
 TEST(Periphery, SkfieMapsAConstantDensityToItsJump) {
   const std::vector<int> orders = {4, 8, 16};
   for (const bool outward_normal : {false, true}) {
@@ -390,9 +385,9 @@ TEST(Periphery, SkfieMapsAConstantDensityToItsJump) {
   }
 }
 
-// The dense and matrix-free paths implement the same operators: fill_skfie_matrix = apply_skfie, and the dense interior
-// trace is the exterior trace plus its analytic target term, (J + T)_interior q = (J + T)_exterior q + (sigma /
-// viscosity) q. Each pair sums the same terms in a different order, so they agree to 1e-12.
+// The dense and matrix-free operators agree to roundoff: fill_skfie_matrix with apply_skfie, and the dense interior
+// trace with the exterior trace plus its jump:
+//    (J + T)_interior q = (J + T)_exterior q + (sigma / viscosity) q.
 TEST(Periphery, SkfieDenseMatchesMatrixFree) {
   for (const bool outward_normal : {false, true}) {
     for (const int order : {4, 8, 12}) {
@@ -412,8 +407,8 @@ TEST(Periphery, SkfieDenseMatchesMatrixFree) {
       EXPECT_LT(max_relative_difference(u_dense, u_matrix_free), 1.0e-12) << "fill_skfie_matrix vs apply_skfie";
 
       DeviceMatrix T("T", n, n);
-      fill_stokes_double_layer_matrix(TestExecSpace{}, kViscosity, surface.num_nodes, surface.num_nodes,
-                                      surface.points, surface.points, surface.normals, surface.weights, T);
+      fill_stokes_double_layer_matrix(TestExecSpace{}, kViscosity, surface.num_nodes, surface.num_nodes, surface.points,
+                                      surface.points, surface.normals, surface.weights, T);
       add_singularity_subtraction(TestExecSpace{}, kViscosity, T, outward_normal);
       DeviceVector u_interior("u_interior", n);
       DeviceVector u_exterior("u_exterior", n);
@@ -428,8 +423,7 @@ TEST(Periphery, SkfieDenseMatchesMatrixFree) {
   }
 }
 
-// A declared normal orientation that contradicts the geometry throws: the analytic target coefficient
-// sigma / viscosity would otherwise have the wrong sign.
+// A declared normal orientation that contradicts the geometry throws, since it would flip the sign of the jump.
 TEST(Periphery, SkfieRejectsMismatchedNormals) {
   for (const bool outward_normal : {false, true}) {
     SCOPED_TRACE(testing::Message() << "outward_normal=" << outward_normal);
@@ -448,7 +442,7 @@ TEST(Periphery, SkfieRejectsMismatchedNormals) {
                              q, u, wrong),
                  std::invalid_argument);
 
-    // add_singularity_subtraction cannot see the normals; it checks the flag against the sign of sum_t tr(W_t).
+    // add_singularity_subtraction cannot see the normals; it infers their orientation from T's block row sums.
     fill_stokes_double_layer_matrix(TestExecSpace{}, kViscosity, num_nodes, num_nodes, surface.points, surface.points,
                                     surface.normals, surface.weights, M);
     EXPECT_THROW(add_singularity_subtraction(TestExecSpace{}, kViscosity, M, wrong), std::invalid_argument);
@@ -465,7 +459,7 @@ TEST(Periphery, SkfieRejectsMismatchedNormals) {
   }
 }
 
-/// \brief A Stokeslet outside the periphery of radius kPeripheryRadius and 50 points inside it, within 0.6 R.
+/// \brief A point force outside the periphery and 50 points inside it, within 0.6 R.
 struct InteriorFlowProblem {
   DeviceVector source_position;  //!< 3
   DeviceVector source_force;     //!< 3
@@ -518,11 +512,10 @@ double interior_flow_error(const InteriorFlowProblem& problem, const int order, 
   return std::sqrt(error) / std::sqrt(exact_norm);
 }
 
-// The periphery reproduces an exact interior Stokes flow: a Stokeslet outside the cavity, imposed as the slip and
-// evaluated at interior points (compute_surface_forces returns -M^{-1} u, so the evaluated flow is -u_exact). The error
-// falls at every order to below 3e-5 at order 24, and it does not depend on the viscosity or the normal orientation
-// (to 1e-6 of itself).
-TEST(Periphery, PeripheryReproducesInteriorStokesFlow) {
+// A no-slip periphery cancels an outside point force's flow everywhere inside: its flow and the force's are interior
+// Stokes flows with opposite boundary values. The relative error falls with quadrature order (1e-5 at order 24) and
+// matches across viscosities and normal orientations.
+TEST(Periphery, PeripheryCancelsAnOutsideFlow) {
   const std::vector<int> orders = {8, 12, 16, 24};
   const InteriorFlowProblem problem = make_interior_flow_problem();
 
@@ -556,9 +549,6 @@ TEST(Periphery, PeripheryReproducesInteriorStokesFlow) {
 //@{
 
 /// \brief The flow the periphery induces at RPYC spheres to cancel their flow on it.
-///
-/// The spheres' RPYC flow at the periphery's nodes (radius 0) is the slip; compute_surface_forces returns the surface
-/// forces that cancel it, and their double layer is evaluated at the spheres.
 DeviceVector periphery_response(TestPeriphery& periphery, const DeviceVector& positions, const DeviceVector& radii,
                                 const DeviceVector& forces) {
   const size_t num_nodes = periphery.get_num_nodes();
@@ -577,8 +567,6 @@ DeviceVector periphery_response(TestPeriphery& periphery, const DeviceVector& po
 }
 
 /// \brief The periphery's correction C to the 3x3 mobility of one sphere of the given radius at position.
-///
-/// Column k is the periphery_response to a unit force e_k, so the sphere's dry drag is excluded.
 Matrix3d sphere_periphery_correction(TestPeriphery& periphery, const double sphere_radius, const Vector3d& position) {
   const DeviceVector positions = to_device({position[0], position[1], position[2]});
   const DeviceVector radii = to_device({sphere_radius});
@@ -594,60 +582,54 @@ Matrix3d sphere_periphery_correction(TestPeriphery& periphery, const double sphe
   return correction;
 }
 
-// The periphery's correction C to the mobility of a small sphere (radius 0.1) inside it, at order 24:
-//   - By Lorentz reciprocity the confined mobility is symmetric, so C's antisymmetric part is discretization error,
-//     below 2e-5 of C off center.
-//   - At the center, C = -3 / (8 pi viscosity R) I to leading order in a / R (Happel & Brenner Eq. 4-22.11); the
-//     O((a / R)^2) remainder is ~5e-5 here, hence 2e-4.
-//   - viscosity C does not depend on the viscosity, to 1e-10 of its norm.
-//   - C does not depend on which way the periphery normals point (see the last check).
-TEST(Periphery, SphereMobilityCorrectionIsSymmetric) {
-  const double sphere_radius = 0.1;
+// The correction C that a periphery of radius R adds to the mobility of a sphere of radius a converges.
+//
+// At the center, it converges to its known value, the image of the sphere's flow:
+//    -3 / (8 pi viscosity R) (1 - 5 a^2 / (9 R^2)) I.
+// Halfway to the wall, where we have no closed form, it converges to a symmetric matrix (Lorentz reciprocity)
+// independent of the normals' orientation. Each error falls with order to below the a^2 term, the finest effect
+// resolved, and C scales as 1 / viscosity to roundoff.
+TEST(Periphery, SphereMobilityCorrectionConverges) {
+  const double a = 0.5;  // large enough for its a^2 term to stand out from the discretization error
+  const double R = kPeripheryRadius;
+  const double leading = -3.0 / (8.0 * kPi * kViscosity * R);          // the image of a point force
+  const double exact = leading * (1.0 - 5.0 * a * a / (9.0 * R * R));  // plus the image of the RPY flow's a^2 term
+  const double a2_term = std::abs(exact - leading) / std::abs(exact);
   const Vector3d center(0.0, 0.0, 0.0);
-  const Vector3d off_center = Vector3d(1.0, 2.0, 3.0) * (0.5 * kPeripheryRadius / std::sqrt(14.0));
+  const Vector3d off_center = Vector3d(1.0, 2.0, 3.0) * (0.5 * R / std::sqrt(14.0));
 
-  std::vector<Matrix3d> scaled_corrections;  // viscosity C off center
-  for (const double viscosity : kViscosities) {
-    SCOPED_TRACE(testing::Message() << "viscosity=" << viscosity);
-    TestPeriphery periphery = make_periphery(make_sphere_surface(24, kPeripheryRadius, false), viscosity);
-
-    const double c_exact = -3.0 / (8.0 * kPi * viscosity * kPeripheryRadius);
-    const Matrix3d C0 = sphere_periphery_correction(periphery, sphere_radius, center);
+  std::vector<double> center_errors;
+  std::vector<double> asymmetries;
+  std::vector<double> orientation_differences;
+  for (const int order : {8, 12, 16}) {
+    TestPeriphery inward = make_periphery(make_sphere_surface(order, R, false), kViscosity);
+    TestPeriphery outward = make_periphery(make_sphere_surface(order, R, true), kViscosity);
+    const Matrix3d C0 = sphere_periphery_correction(inward, a, center);
     double center_error = 0.0;
     for (size_t i = 0; i < 3; ++i) {
       for (size_t j = 0; j < 3; ++j) {
-        center_error = std::max(center_error, std::abs(C0(i, j) - (i == j ? c_exact : 0.0)) / std::abs(c_exact));
+        center_error = std::max(center_error, std::abs(C0(i, j) - (i == j ? exact : 0.0)) / std::abs(exact));
       }
     }
-    EXPECT_LT(center_error, 2.0e-4) << "center correction must match -3 / (8 pi viscosity R) I";
-
-    const Matrix3d C1 = sphere_periphery_correction(periphery, sphere_radius, off_center);
-    EXPECT_LT(frobenius_norm(C1 - transpose(C1)) / frobenius_norm(C1), 2.0e-5)
-        << "off-center correction must be symmetric";
-    scaled_corrections.push_back(viscosity * C1);
+    center_errors.push_back(center_error);
+    const Matrix3d C1 = sphere_periphery_correction(inward, a, off_center);
+    const Matrix3d C2 = sphere_periphery_correction(outward, a, off_center);
+    asymmetries.push_back(frobenius_norm(C1 - transpose(C1)) / frobenius_norm(C1));
+    orientation_differences.push_back(frobenius_norm(C2 - C1) / frobenius_norm(C1));
+  }
+  for (const auto& [name, errors] : {std::pair{"center error", center_errors}, std::pair{"asymmetry", asymmetries},
+                                     std::pair{"inward vs outward", orientation_differences}}) {
+    EXPECT_TRUE(decreases_or_reaches(errors, 0.0)) << name << ": " << testing::PrintToString(errors);
+    EXPECT_LT(errors.back(), a2_term) << name << " must resolve the a^2 term";
   }
 
-  const double reference_norm = frobenius_norm(scaled_corrections[0]);
-  for (size_t i = 0; i < 3; ++i) {
-    for (size_t j = 0; j < 3; ++j) {
-      EXPECT_NEAR(scaled_corrections[1](i, j), scaled_corrections[0](i, j), 1.0e-10 * reference_norm)
-          << "viscosity C must not depend on the viscosity, entry (" << i << ", " << j << ")";
-    }
-  }
-
-  // J + T flips with the normals but N does not, so inward and outward normals agree to the discrete flux
-  // sum_s w_s n_s . u_s of the slip data, which is small but not zero: hence 1e-8, above roundoff.
-  TestPeriphery inward = make_periphery(make_sphere_surface(16, kPeripheryRadius, false), kViscosity);
-  TestPeriphery outward = make_periphery(make_sphere_surface(16, kPeripheryRadius, true), kViscosity);
-  const Matrix3d C_inward = sphere_periphery_correction(inward, sphere_radius, off_center);
-  const Matrix3d C_outward = sphere_periphery_correction(outward, sphere_radius, off_center);
-  const double norm = frobenius_norm(C_inward);
-  for (size_t i = 0; i < 3; ++i) {
-    for (size_t j = 0; j < 3; ++j) {
-      EXPECT_NEAR(C_outward(i, j), C_inward(i, j), 1.0e-8 * norm)
-          << "inward and outward periphery normals must give the same mobility, entry (" << i << ", " << j << ")";
-    }
-  }
+  TestPeriphery unit = make_periphery(make_sphere_surface(8, R, false), 1.0);
+  TestPeriphery non_unit = make_periphery(make_sphere_surface(8, R, false), kViscosity);
+  const Matrix3d C_unit = sphere_periphery_correction(unit, a, off_center);
+  const Matrix3d C_non_unit = kViscosity * sphere_periphery_correction(non_unit, a, off_center);
+  const double roundoff = 3.0 * static_cast<double>(unit.get_num_nodes()) * std::numeric_limits<double>::epsilon();
+  EXPECT_LT(frobenius_norm(C_non_unit - C_unit) / frobenius_norm(C_unit), roundoff)
+      << "viscosity C must not depend on the viscosity";
 }
 
 //@}
@@ -657,8 +639,7 @@ TEST(Periphery, SphereMobilityCorrectionIsSymmetric) {
 //! \name Belos solves
 //@{
 
-// The matrix-free inverse and the body solves run Belos, which solves on Tpetra's node space. In the CUDA and OpenMP
-// builds that is TestExecSpace.
+// Belos solves on Tpetra's node space, which is TestExecSpace in the CUDA and OpenMP builds.
 using SolveExecSpace = Tpetra::Map<>::node_type::execution_space;
 using SolvePeriphery = PeripheryT<SolveExecSpace>;
 using SolveVector = Kokkos::View<double*, Kokkos::LayoutLeft, SolveExecSpace::memory_space>;
@@ -725,9 +706,8 @@ BodySolve run_confined_body_solve(const SolvePeriphery& periphery, const BodySet
 //! \name The matrix-free inverse
 //@{
 
-// The matrix-free GMRES inverse recovers the same surface forces as the dense direct inverse: both invert the same
-// second-kind operator M, so InverseMethod::MatrixFreeGMRES and InverseMethod::Direct agree on f = -M^{-1} u for an
-// arbitrary slip u. M is well conditioned, so a 1e-10 GMRES residual keeps them well within 1e-6.
+// The matrix-free GMRES inverse matches the dense direct inverse well within 1e-6: both invert the same
+// well-conditioned M, and GMRES solves to a 1e-10 residual.
 TEST(Periphery, MatrixFreeMatchesDirectInverse) {
   for (const bool outward_normal : {false, true}) {
     SCOPED_TRACE(testing::Message() << "outward_normal=" << outward_normal);
@@ -755,8 +735,7 @@ TEST(Periphery, MatrixFreeMatchesDirectInverse) {
   }
 }
 
-// build_matrix_free_inverse checks the declared normal orientation against the geometry, so a mismatch fails at build
-// time rather than inside the first GMRES apply.
+// A mismatched normal orientation throws when the matrix-free inverse is built, not inside its first GMRES apply.
 TEST(Periphery, MatrixFreeInverseRejectsMismatchedNormals) {
   for (const bool outward_normal : {false, true}) {
     const auto surface = make_sphere_surface<SolveExecSpace>(6, kPeripheryRadius, outward_normal);
@@ -773,11 +752,10 @@ TEST(Periphery, MatrixFreeInverseRejectsMismatchedNormals) {
 //! \name Motile bodies
 //@{
 
-// Resolved rigid bodies, each with its own surface quadrature, among RPY spheres, solved as one block system by
-// matrix-free GMRES (see Periphery.hpp's header).
+// Resolved rigid bodies among RPY spheres are solved as one block system by matrix-free GMRES.
 
-// set_orientation stores (w, x, y, z), and place_body_in_lab_frame rotates the reference frame by that quaternion: a
-// quarter turn about z maps (1, 0, 0) to (0, 1, 0) and (0, 1, 0) to (-1, 0, 0) before translating by the center.
+// set_orientation stores (w, x, y, z), and place_body_in_lab_frame rotates by it, then translates: a quarter turn about
+// z maps x to y and y to -x.
 TEST(Periphery, PlaceBodyInLabFrameAppliesOrientation) {
   MotileBody<SolveExecSpace> body;
   body.num_quadrature_points = 2;
@@ -812,19 +790,16 @@ TEST(Periphery, PlaceBodyInLabFrameAppliesOrientation) {
   }
 }
 
-// A lone body under a prescribed force and torque moves at the Stokes drag: U = F / (6 pi viscosity a) and
-// Omega = tau / (8 pi viscosity a^3). The completed double layer represents rigid translation and rotation exactly, and
-// the body's self-block (-1 / (2 viscosity) I + T_b) scales as 1 / viscosity, so the drag is exact (to 1e-8, above the
-// GMRES tolerance) at any viscosity. An offset center and a quarter turn about z also exercise place_body_in_lab_frame,
-// since a sphere's drag depends on neither.
+// A lone sphere of radius a moves at the Stokes drag, whatever its viscosity, position, and orientation:
+//    U = F / (6 pi viscosity a),    Omega = tau / (8 pi viscosity a^3).
+// The completed double layer represents rigid motion exactly, so only the GMRES tolerance remains.
 TEST(Periphery, FreeBodyMatchesStokesDrag) {
   const double a = 1.0;
   const double c = std::sqrt(0.5);
   for (const double viscosity : kViscosities) {
     SCOPED_TRACE(testing::Message() << "viscosity=" << viscosity);
-    const BodySet<SolveExecSpace> bodies =
-        make_sphere_body_set<SolveExecSpace>(8, a, Vector3d(0.3, -0.2, 0.5), Quaterniond(c, 0.0, 0.0, c),
-                                             Vector3d(1.0, 0.0, 0.0), Vector3d(0.0, 0.0, 1.0));
+    const BodySet<SolveExecSpace> bodies = make_sphere_body_set<SolveExecSpace>(
+        8, a, Vector3d(0.3, -0.2, 0.5), Quaterniond(c, 0.0, 0.0, c), Vector3d(1.0, 0.0, 0.0), Vector3d(0.0, 0.0, 1.0));
     const BodySolve solve = run_body_solve(bodies, SphereSet<SolveExecSpace>{}, viscosity, make_gmres_config());
     EXPECT_TRUE(solve.result.converged) << "GMRES did not converge: " << solve.result;
 
@@ -849,24 +824,16 @@ SphereSet<SolveExecSpace> make_rpy_source(const Vector3d& center, const double r
                                    to_device<SolveExecSpace>({force[0], force[1], force[2]}), SphereInteraction::RPY);
 }
 
-// Faxen's law is exact for a rigid sphere in a Stokes ambient: a force- and torque-free sphere of radius a in a flow
-// u_ext translates at U = (1 + a^2 / 6 grad^2) u_ext(X), exactly, for any singularity outside the sphere. Driving
-// with a point force (source radius 0) makes u_ext a pure Stokeslet G F, so the exact response is
-// U = (1 + a^2 / 6 grad^2) G F = M(r; 0, a) F, the RPY mobility with a point source. It carries no finite-source
-// cross-term and so is an exact reference. (A finite source radius would add an O(a^2 a_src^2) grad^4 G term that RPY
-// drops, so the BIE would converge to a value offset from M(r; a_src, a): correct physics, wrong reference.)
-//
-// The completed double-layer BIE reaches U by an independent route: it samples u_ext on the body's surface and solves
-// the block system for U. Refining the surface quadrature must collapse its velocity onto M(r; 0, a) F: the error falls
-// at every order until it reaches the solver floor (5x the GMRES tolerance), ends below 100x the GMRES tolerance, and
-// falls by at least three decades across the sweep, which a flat error curve (e.g. an approximate rsqrt flooring the
-// kernels) fails even when it passes a loose single tolerance. The source sits at r = 3, close enough that the lowest
-// orders carry visible error.
+// A force- and torque-free sphere of radius a at distance r from a point force F moves at exactly the Faxen velocity,
+// the RPY mobility:
+//    U = (1 + a^2 / 6 grad^2) G F = M(r; 0, a) F.
+// The body solve must converge to it: the error falls at every order until the solver floor, and by at least three
+// decades in all.
 TEST(Periphery, ForceFreeBodyConvergesToTheFaxenVelocity) {
   const double a = 1.0;
   const SphereSet<SolveExecSpace> source = make_rpy_source(Vector3d(3.0, 0.0, 0.0), 0.0, Vector3d(0.0, 1.0, 0.0));
 
-  // U = M(r; 0, a) F: one RPY evaluation from the source to a radius-a target at the body's center, the origin.
+  // The Faxen velocity M(r; 0, a) F: the source's RPY flow at a radius-a target at the body's center.
   SolveVector expected("expected", 3);
   apply_rpy_kernel(SolveExecSpace{}, kViscosity, source.positions, to_device<SolveExecSpace>({0.0, 0.0, 0.0}),
                    source.radii, to_device<SolveExecSpace>({a}), source.forces, expected);
@@ -892,11 +859,8 @@ TEST(Periphery, ForceFreeBodyConvergesToTheFaxenVelocity) {
   EXPECT_LT(errors.back(), errors.front() / 1.0e3) << "refinement must collapse the error by at least three decades";
 }
 
-// The block system is linear in the loads (F_b, tau_b, F_source), so its solutions superpose: the response to the
-// body's force and torque alone plus the response to the ambient flow alone equals the response to both, to 100x the
-// GMRES tolerance. This is not a physics check: it guards the right-hand side's assembly, which accumulates the body's
-// Stokeslet and rotlet and the spheres' RPY flow into shared buffers, where a missed zero or an overwrite (rather than
-// +=) breaks it.
+// The block system is linear in its loads, so the responses to the body's load and to the ambient flow add up to the
+// response to both. This guards the right-hand side's assembly against a missed zero or an overwrite.
 TEST(Periphery, BodyAndAmbientFlowsSuperpose) {
   const BelosConfig<double> cfg = make_gmres_config();
   BodySet<SolveExecSpace> bodies = make_sphere_body_set<SolveExecSpace>(8, 1.0, Vector3d(0.0, 0.0, 0.0), kNoRotation);
@@ -932,8 +896,6 @@ struct CavityResponse {
 };
 
 /// \brief The CavityResponse of a sphere of radius a under force and torque, with sphere and cavity of order `order`.
-///
-/// The unbounded solve isolates the body's own quadrature error from the wall-coupling error.
 CavityResponse run_cavity(const double viscosity, const double a, const int order, const BelosConfig<double>& cfg,
                           const Vector3d& force, const Vector3d& torque) {
   const SolvePeriphery cavity =
@@ -948,29 +910,13 @@ CavityResponse run_cavity(const double viscosity, const double a, const int orde
   return {rigid_velocity(bodies, unbounded.x, 0), rigid_velocity(bodies, confined.x, 0)};
 }
 
-// A rigid sphere of radius a at the center of a stationary spherical cavity of radius b, with lambda = a / b, moves at
-// the exact mobilities of Happel & Brenner, Low Reynolds Number Hydrodynamics:
-//   - in translation (Sec. 4-22, Eq. 4-22.11),
-//       U = F / (6 pi viscosity a) (1 - 9 lambda / 4 + 5 lambda^3 / 2 - 9 lambda^5 / 4 + lambda^6) / (1 - lambda^5),
-//     or equivalently F = 6 pi viscosity a U (1 - lambda^5) / (1 - 9 lambda / 4 + 5 lambda^3 / 2 - 9 lambda^5 / 4
-//     + lambda^6);
-//   - in rotation (Sec. 7-8, Eqs. 7-8.18 to 7-8.20), Omega = T / (8 pi viscosity a^3) (1 - lambda^3), or equivalently
-//     the torque that maintains Omega is T = 8 pi viscosity a^3 Omega / (1 - lambda^3), the hydrodynamic torque is
-//     T_hydro = -8 pi viscosity a^3 Omega / (1 - lambda^3), and as lambda -> 0 this is the rotational Stokes law
-//     T = 8 pi viscosity a^3 Omega.
-// Each solve applies a force along x and a torque about z together. The sphere rule is mirror symmetric under y -> -y,
-// which keeps the force and U_x but reverses the torque and Omega_z, so translation and rotation do not couple.
-//
-// The unbounded drag is exact at every order (the completed double layer represents rigid motion exactly), to 1e-8, so
-// all of the confined error is wall coupling:
-//   - The confined translation converges algebraically, since the subtracted integrand is bounded but not smooth at the
-//     target, but faster than 1 / order^2, because the jump term is analytic: its error falls at every order, reaches
-//     1e-4, and has an observed rate above 2 between the middle and finest orders. Every operator in the coupled solve
-//     scales as 1 / viscosity, so this error does not depend on the viscosity (to 1% of itself).
-//   - The confined rotation converges spectrally: the rotlet slip is a rigid rotation, for which the subtracted
-//     integrand vanishes identically (K(x, y) v is proportional to r (r . v), and v = -Omega x r is orthogonal to r).
-//     Its error falls at every order until the solver floor (5x the GMRES tolerance) and ends below 100x the GMRES
-//     tolerance.
+// A sphere of radius a at the center of a spherical cavity of radius b, with lambda = a / b, moves at Happel &
+// Brenner's exact mobilities (Eqs. 4-22.11 and 7-8.18):
+//    U = F / (6 pi viscosity a) (1 - 9 lambda / 4 + 5 lambda^3 / 2 - 9 lambda^5 / 4 + lambda^6) / (1 - lambda^5),
+//    Omega = T / (8 pi viscosity a^3) (1 - lambda^3).
+// The unbounded drag is exact, so all of the error is wall coupling. Translation converges faster than 1 / order^2,
+// independent of the viscosity. Rotation converges to the solver floor, since the subtraction cancels its rigid slip
+// exactly.
 TEST(Periphery, BodyInSphericalCavityMatchesHappelAndBrenner) {
   const double a = 1.0;
   const double lambda = a / kCavityRadius;  // 0.2
@@ -1060,9 +1006,6 @@ WilsonVelocities expected_rpy_wilson_velocities(const double viscosity, const do
 }
 
 /// \brief The WilsonVelocities at separation s, with each sphere an RPY point sphere or a resolved inclusion.
-///
-/// RPY spheres carry their mutual RPY flow and self-drag; inclusions are bodies in the block solve, whose flow
-/// evaluate_sphere_flow adds at the RPY spheres.
 WilsonVelocities run_wilson(const double viscosity, const double r, const double f1, const double s, const int order,
                             const BelosConfig<double>& cfg, const std::array<SphereType, 3>& types) {
   const std::array<Vector3d, 3> centers = wilson_triangle(s, r);
@@ -1123,22 +1066,9 @@ WilsonVelocities run_wilson(const double viscosity, const double r, const double
   return {-velocities[0][1], -velocities[1][1], velocities[2][0]};
 }
 
-// Wilson (2013), Stokes flow past three spheres, gives the most accurate pseudo-analytic velocities of three spheres of
-// radius r at the corners of an equilateral triangle of side s r in the x-y plane, under a force on s1 alone:
-//
-//            o s1        s1 = (0, 0, 0),
-//           / \          s2 = (-s r / 2, -sqrt(3) / 2 s r, 0),
-//       s2 o---o s3      s3 = (s r / 2, -sqrt(3) / 2 s r, 0),
-//
-// with f_s1 = (0, -6 pi viscosity r, 0) and f_s2 = f_s3 = 0, so the bare velocity of s1 is 1 along -y. U1 and U2 are
-// the velocities of s1 and s2 along -y, and U3 is that of s3 along x.
-//
-// Each sphere is independently an RPY point sphere (R) or a resolved rigid inclusion (I). As more spheres are resolved
-// the velocities approach Wilson's, and with all three resolved they match to quadrature accuracy:
-//   RRR  point RPY, which misses the back-reaction on the forced sphere (U1 = 1);
-//   RIR  one passive inclusion, whose resolved stresslet slows the forced sphere;
-//   IRR  the forced sphere resolved, which feels no back-reaction from force-free RPY neighbors (bare drag);
-//   III  all resolved, which reproduces Wilson's reference to quadrature accuracy.
+// Three spheres sit at the corners of an equilateral triangle, with a force on one (Wilson 2013, Stokes flow past three
+// spheres). With each sphere an RPY point (R) or a resolved inclusion (I), all-resolved (III) matches Wilson to 1e-3,
+// all-RPY (RRR) matches the RPY tensor, and the mixed cases fall between, since RPY misses the back-reaction.
 TEST(Periphery, ThreeSpheresMatchWilson) {
   const double r = 12.34;
   const int order = 12;
@@ -1163,29 +1093,27 @@ TEST(Periphery, ThreeSpheresMatchWilson) {
     const WilsonVelocities iii =
         run_wilson(kViscosity, r, f1, s, order, cfg, {T::Inclusion, T::Inclusion, T::Inclusion});
 
-    // (a) RRR reproduces the direct RPY evaluation, which checks run_wilson's sphere-only path.
+    // RRR matches the RPY tensor.
     EXPECT_NEAR(rrr.u1, rpy.u1, 1.0e-9) << "RRR U1 == RPY";
     EXPECT_NEAR(rrr.u2, rpy.u2, 1.0e-9) << "RRR U2 == RPY";
     EXPECT_NEAR(rrr.u3, rpy.u3, 1.0e-9) << "RRR U3 == RPY";
 
-    // (b) III reproduces Wilson's reference to quadrature accuracy at every separation.
+    // III matches Wilson's values.
     EXPECT_NEAR(iii.u1, wilson[i].u1, 1.0e-3) << "III U1 == Wilson";
     EXPECT_NEAR(iii.u2, wilson[i].u2, 1.0e-3) << "III U2 == Wilson";
     EXPECT_NEAR(iii.u3, wilson[i].u3, 1.0e-3) << "III U3 == Wilson";
 
-    // (c) A force-free inclusion driven only by an RPY ambient moves at the RPY sphere velocity (Faxen's law applied to
-    //     an RPY field gives the RPY tensor): RIR's inclusion s2 matches the all-RPY velocity.
+    // A force-free inclusion in RPY flow moves at the RPY velocity (Faxen's law).
     EXPECT_NEAR(rir.u2, rpy.u2, 3.0e-3 * std::abs(rpy.u2)) << "RIR inclusion U2 == RPY";
 
-    // (d) The resolved passive inclusion slows the forced sphere: RIR's U1 lies strictly between Wilson's and the RPY
-    //     value 1, improving on RPY, which misses the back-reaction.
+    // A passive inclusion slows the forced sphere below RPY's 1, but not past Wilson's.
     EXPECT_GT(rir.u1, wilson[i].u1) << "RIR U1 above Wilson";
     EXPECT_LT(rir.u1, 1.0) << "RIR U1 below the RPY value";
 
-    // (e) The forced inclusion feels no back-reaction from force-free RPY neighbors, so it moves at the bare drag.
+    // A forced inclusion among force-free RPY spheres moves at its bare drag.
     EXPECT_NEAR(irr.u1, 1.0, 1.0e-3) << "IRR forced-inclusion bare drag";
 
-    // (f) Every configuration approaches Wilson's at the largest separation, to 1e-2.
+    // At the widest separation, every configuration approaches Wilson's.
     if (i + 1 == separations.size()) {
       const std::array<std::pair<const char*, WilsonVelocities>, 4> configurations = {
           {{"RRR", rrr}, {"RIR", rir}, {"IRR", irr}, {"III", iii}}};
@@ -1203,9 +1131,8 @@ TEST(Periphery, ThreeSpheresMatchWilson) {
 //! \name The mobility system
 //@{
 
-// MobilitySystem is a front end: its outputs equal those of the building blocks it wires together, solve_mobility for
-// a resolved body and the dry drag plus the periphery's no-slip response for a point sphere, to roundoff (1e-12), and a
-// Dry sphere moves at its bare drag even inside a periphery.
+// MobilitySystem reproduces the building blocks it wires together to roundoff, and a Dry sphere moves at its bare drag
+// even inside a periphery.
 TEST(Periphery, MobilitySystemMatchesBuildingBlocks) {
   const BelosConfig<double> cfg = make_gmres_config();
   const auto periphery = std::make_shared<SolvePeriphery>(
@@ -1265,7 +1192,7 @@ TEST(Periphery, MobilitySystemMatchesBuildingBlocks) {
   }
 }
 
-// MobilitySystem and its inputs throw on inconsistent or incomplete inputs instead of reading invalid memory.
+// MobilitySystem and its inputs throw on inconsistent or incomplete inputs.
 TEST(Periphery, MobilitySystemRejectsInvalidInputs) {
   SolveVector three_a("three_a", 3);
   SolveVector three_b("three_b", 3);
