@@ -72,16 +72,16 @@ concept VectorBackend = requires(Vector& y, const Vector& x, impl::vector_value_
 /// Both KokkosBackend and MundyMathBackend dispatch Backend::domain_size/range_size/apply to a
 /// MUNDY_THROW_REQUIRE-at-runtime fallback for any Op that isn't otherwise recognized, so those three
 /// expressions alone are well-formed (and thus satisfied) for literally any Op -- checking only them would make
-/// this concept accept non-operators. The additional clause below requires Op to actually be one of the shapes
-/// a backend can recognize (a matrix view, dense or sparse; a mundy::Matrix; or a type that provides its own apply
-/// member), so a type with none of those is correctly rejected instead of silently passing and only failing at runtime.
+/// this concept accept non-operators. The additional clause below requires Op to be one of the backend's native
+/// matrices (Backend::is_native_matrix) or a type that provides its own apply member, so a type with neither is
+/// correctly rejected instead of silently passing and only failing at runtime.
 template <class Backend, class Op, class XVector, class YVector>
 concept LinearOperator =
     requires(const Op& op, const XVector& x, YVector& y) {
       { Backend::domain_size(op) } -> std::convertible_to<size_t>;
       { Backend::range_size(op) } -> std::convertible_to<size_t>;
       { Backend::apply(op, x, y) } -> std::same_as<void>;
-    } && (impl::MatView<Op> || is_matrix_v<Op> || impl::HasApplyMember<Op, XVector, YVector> ||
+    } && (Backend::template is_native_matrix<Op> || impl::HasApplyMember<Op, XVector, YVector> ||
           impl::HasApplyMemberWithWorkspace<Op, XVector, YVector, impl::workspace_for_t<Op>>);
 
 /// \brief Concept for an operator that provides its own fused scaled-apply: y := alpha * op(x) + beta * y.
@@ -106,6 +106,15 @@ struct KokkosBackend {
   // Vector and operator sizes are runtime values.
   static constexpr bool has_static_sizes = false;
 
+  /// \brief Whether Op is one of this backend's native matrices: a dense rank-2 view or a sparse matrix.
+  template <class Op>
+  static constexpr bool is_native_matrix =
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+      impl::MatView<Op>;
+#else
+      false;
+#endif
+
  public:
   // The vector factories are host only, but may be called from KOKKOS_FUNCTION code being called on the host
   // This will cause warnings, but is otherwise perfectly valid, so we suppress the warnings for these functions
@@ -124,7 +133,7 @@ struct KokkosBackend {
   KOKKOS_INLINE_FUNCTION static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
-    } else if constexpr (impl::MatView<LinearOp>) {
+    } else if constexpr (is_native_matrix<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
       using value_type = typename op_t::non_const_value_type;
       using mem_space = typename op_t::memory_space;
@@ -145,7 +154,7 @@ struct KokkosBackend {
   KOKKOS_INLINE_FUNCTION static auto make_range_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
-    } else if constexpr (impl::MatView<LinearOp>) {
+    } else if constexpr (is_native_matrix<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
       using value_type = typename op_t::non_const_value_type;
       using mem_space = typename op_t::memory_space;
@@ -184,19 +193,19 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
-  MUNDY_REQUIRES(impl::MatView<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return impl::mat_view_num_cols(op);
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return op.domain_size();
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp&) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::domain_size: op must be a matrix view or provide size_t domain_size().");
@@ -204,19 +213,19 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
-  MUNDY_REQUIRES(impl::MatView<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return impl::mat_view_num_rows(op);
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return op.range_size();
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp&) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::range_size: op must be a matrix view or provide size_t range_size().");
@@ -243,7 +252,7 @@ struct KokkosBackend {
   // Path 1: If op is a matrix view, dense or sparse, multiply by it.
   // y = A*x
   template <class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(impl::MatView<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   static void apply(const LinearOp& A, const XVector& x, YVector& y) {
     using value_type = impl::vector_value_type<YVector>;
     apply_mat_view(value_type(1), A, x, value_type(0), y);
@@ -252,7 +261,7 @@ struct KokkosBackend {
   // Path 1: If op is a matrix view, dense or sparse, multiply by it.
   // y = alpha * A * x + beta * y
   template <class Scalar, class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(impl::MatView<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   static void apply(Scalar alpha, const LinearOp& A, const XVector& x, Scalar beta, YVector& y) {
     apply_mat_view(alpha, A, x, beta, y);
   }
@@ -260,14 +269,14 @@ struct KokkosBackend {
 
   // Path 2: If op has member `apply(x,y)`
   template <class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     op.apply(x, y);
   }
 
   // Path 3: Otherwise, runtime error.
   template <typename LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y).");
@@ -283,14 +292,14 @@ struct KokkosBackend {
   // Scaled apply for ops that are not matrix views: y := alpha * op(x) + beta * y.
   // Path 1: op provides its own fused apply(alpha, x, beta, y).
   template <class Scalar, class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y) {
     op.apply(alpha, x, beta, y);
   }
 
   // Path 2: no fused member -- realize it generically from the plain apply plus axpby.
   template <class Scalar, class LinearOp, class XVector, class YVector>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp);
@@ -302,7 +311,7 @@ struct KokkosBackend {
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
   // Path 0: a matrix view carries no workspace.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(impl::MatView<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   static void apply(Scalar alpha, const LinearOp& A, const XVector& x, Scalar beta, YVector& y, Workspace&) {
     apply(alpha, A, x, beta, y);
   }
@@ -310,7 +319,7 @@ struct KokkosBackend {
 
   // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
     impl::workspace_invalidate(workspace);
     op.apply(alpha, x, beta, y);
@@ -318,7 +327,7 @@ struct KokkosBackend {
 
   // Path 2: no fused member -- realize it from the workspace-threaded plain apply plus axpby.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp, workspace);
@@ -342,20 +351,21 @@ struct KokkosBackend {
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(impl::MatView<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   static void apply_impl(const LinearOp& A, const XVector& x, YVector& y, Workspace&) {
     apply(A, x, y);
   }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> && impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
+                 impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
   static void apply_impl(const LinearOp& op, const XVector& x, YVector& y, Workspace& workspace) {
     op.apply(x, y, workspace);
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> &&
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
                  !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
                  impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply_impl(const LinearOp& op, const XVector& x, YVector& y, Workspace&) {
@@ -363,7 +373,7 @@ struct KokkosBackend {
   }
 
   template <typename LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!impl::MatView<LinearOp> &&
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
                  !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
                  !impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply_impl(const LinearOp&, const XVector&, YVector&, Workspace&) {
@@ -502,6 +512,10 @@ struct MundyMathBackend {
   // Vector and operator sizes are compile-time constants.
   static constexpr bool has_static_sizes = true;
 
+  /// \brief Whether Op is one of this backend's native matrices: a mundy::Matrix.
+  template <class Op>
+  static constexpr bool is_native_matrix = is_matrix_v<Op>;
+
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static auto make_vector_like(const Vector& /*x*/) {
     return Vector();
@@ -525,15 +539,12 @@ struct MundyMathBackend {
   KOKKOS_INLINE_FUNCTION static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
-    } else if constexpr (requires {
-                           typename std::remove_reference_t<LinearOp>::value_type;
-                           std::remove_reference_t<LinearOp>::num_cols;
-                         }) {
+    } else if constexpr (is_native_matrix<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
       return Vector<typename op_t::value_type, op_t::num_cols>{};
     } else {
       static_assert(dependent_false_v<LinearOp>,
-                    "MundyMathBackend::make_domain_vector requires static matrix metadata or op.make_domain_vector().");
+                    "MundyMathBackend::make_domain_vector requires a native matrix or op.make_domain_vector().");
     }
   }
 
@@ -541,15 +552,12 @@ struct MundyMathBackend {
   KOKKOS_INLINE_FUNCTION static auto make_range_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
-    } else if constexpr (requires {
-                           typename std::remove_reference_t<LinearOp>::value_type;
-                           std::remove_reference_t<LinearOp>::num_rows;
-                         }) {
+    } else if constexpr (is_native_matrix<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
       return Vector<typename op_t::value_type, op_t::num_rows>{};
     } else {
       static_assert(dependent_false_v<LinearOp>,
-                    "MundyMathBackend::make_range_vector requires static matrix metadata or op.make_range_vector().");
+                    "MundyMathBackend::make_range_vector requires a native matrix or op.make_range_vector().");
     }
   }
 
@@ -564,19 +572,19 @@ struct MundyMathBackend {
   }
 
   template <class LinearOp>
-  MUNDY_REQUIRES(is_matrix_v<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     return std::remove_reference_t<LinearOp>::num_cols;
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return op.domain_size();
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "MundyMathBackend::domain_size: op must be a mundy::Matrix or provide size_t domain_size().");
@@ -584,19 +592,19 @@ struct MundyMathBackend {
   }
 
   template <class LinearOp>
-  MUNDY_REQUIRES(is_matrix_v<LinearOp>)
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     return std::remove_reference_t<LinearOp>::num_rows;
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return op.range_size();
   }
   //
   template <class LinearOp>
-  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "MundyMathBackend::range_size: op must be a mundy::Matrix or provide size_t range_size().");
@@ -613,7 +621,7 @@ struct MundyMathBackend {
   template <class LinearOp>
   KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() {
     using op_t = std::remove_cvref_t<LinearOp>;
-    if constexpr (is_matrix_v<op_t>) {
+    if constexpr (is_native_matrix<op_t>) {
       return op_t::num_cols;
     } else if constexpr (requires { op_t::static_domain_size(); }) {
       return op_t::static_domain_size();
@@ -628,7 +636,7 @@ struct MundyMathBackend {
   template <class LinearOp>
   KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() {
     using op_t = std::remove_cvref_t<LinearOp>;
-    if constexpr (is_matrix_v<op_t>) {
+    if constexpr (is_native_matrix<op_t>) {
       return op_t::num_rows;
     } else if constexpr (requires { op_t::static_range_size(); }) {
       return op_t::static_range_size();
@@ -663,8 +671,11 @@ struct MundyMathBackend {
   KOKKOS_INLINE_FUNCTION static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     if constexpr (impl::HasApplyMember<LinearOp, XVector, YVector>) {
       op.apply(x, y);
-    } else {
+    } else if constexpr (is_native_matrix<LinearOp>) {
       y = op * x;
+    } else {
+      static_assert(dependent_false_v<LinearOp>,
+                    "MundyMathBackend::apply: op must be a native matrix or provide void apply(x,y).");
     }
   }
 
@@ -722,8 +733,11 @@ struct MundyMathBackend {
       op.apply(x, y, workspace);
     } else if constexpr (impl::HasApplyMember<LinearOp, XVector, YVector>) {
       op.apply(x, y);
-    } else {
+    } else if constexpr (is_native_matrix<LinearOp>) {
       y = op * x;
+    } else {
+      static_assert(dependent_false_v<LinearOp>,
+                    "MundyMathBackend::apply: op must be a native matrix or provide void apply(x,y[,workspace]).");
     }
   }
 

@@ -94,6 +94,12 @@ static_assert(LinearOperator<kokkos_backend_t, dense_matrix_t, kokkos_vector_t, 
               "A dense matrix must satisfy LinearOperator under KokkosBackend");
 static_assert(LinearOperator<kokkos_backend_t, sparse_matrix_t, kokkos_vector_t, kokkos_vector_t>,
               "A sparse matrix must satisfy LinearOperator under KokkosBackend");
+static_assert(!LinearOperator<MundyMathBackend, dense_matrix_t, Vector3d, Vector3d>,
+              "A dense matrix must NOT satisfy LinearOperator under MundyMathBackend");
+static_assert(!LinearOperator<MundyMathBackend, sparse_matrix_t, Vector3d, Vector3d>,
+              "A sparse matrix must NOT satisfy LinearOperator under MundyMathBackend");
+static_assert(!LinearOperator<kokkos_backend_t, Matrix3d, kokkos_vector_t, kokkos_vector_t>,
+              "Matrix3d must NOT satisfy LinearOperator under KokkosBackend");
 static_assert(Preconditioner<dense_matrix_t, kokkos_backend_t, kokkos_vector_t>,
               "A dense matrix must satisfy Preconditioner under KokkosBackend");
 static_assert(Preconditioner<sparse_matrix_t, kokkos_backend_t, kokkos_vector_t>,
