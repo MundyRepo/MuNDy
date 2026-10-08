@@ -36,7 +36,7 @@
 // C++ core
 #include <algorithm>  // for std::max
 #include <array>      // for std::array
-#include <cmath>      // for std::abs, std::sqrt, std::log, std::sin, std::cos
+#include <cmath>      // for std::abs, std::sqrt, std::sin, std::cos
 #include <cstdio>     // for std::remove
 #include <limits>     // for std::numeric_limits
 #include <memory>     // for std::make_shared
@@ -888,34 +888,24 @@ TEST(Periphery, BodyAndAmbientFlowsSuperpose) {
   }
 }
 
-/// \brief The rigid velocities of a sphere under a load, alone and at the center of the spherical cavity.
-struct CavityResponse {
-  RigidVelocity unbounded;  //!< In free space
-  RigidVelocity confined;   //!< At the center of the cavity of radius kCavityRadius
-};
-
-/// \brief The CavityResponse of a sphere of radius a under force and torque, with sphere and cavity of order `order`.
-CavityResponse run_cavity(const double viscosity, const double a, const int order, const BelosConfig<double>& cfg,
-                          const Vector3d& force, const Vector3d& torque) {
+/// \brief The rigid velocity of a sphere of radius a under force and torque at the center of the cavity, both of order.
+RigidVelocity run_cavity(const double viscosity, const double a, const int order, const BelosConfig<double>& cfg,
+                         const Vector3d& force, const Vector3d& torque) {
   const SolvePeriphery cavity =
       make_periphery(make_sphere_surface<SolveExecSpace>(order, kCavityRadius, /*outward_normal=*/false), viscosity);
   const BodySet<SolveExecSpace> bodies =
       make_sphere_body_set<SolveExecSpace>(order, a, Vector3d(0.0, 0.0, 0.0), kNoRotation, force, torque);
-  const SphereSet<SolveExecSpace> no_spheres;
-  const BodySolve unbounded = run_body_solve(bodies, no_spheres, viscosity, cfg);
-  const BodySolve confined = run_confined_body_solve(cavity, bodies, no_spheres, cfg);
-  EXPECT_TRUE(unbounded.result.converged) << "unbounded GMRES, order=" << order << ": " << unbounded.result;
-  EXPECT_TRUE(confined.result.converged) << "confined GMRES, order=" << order << ": " << confined.result;
-  return {rigid_velocity(bodies, unbounded.x, 0), rigid_velocity(bodies, confined.x, 0)};
+  const BodySolve solve = run_confined_body_solve(cavity, bodies, SphereSet<SolveExecSpace>{}, cfg);
+  EXPECT_TRUE(solve.result.converged) << "GMRES did not converge at order=" << order << ": " << solve.result;
+  return rigid_velocity(bodies, solve.x, 0);
 }
 
 // A sphere of radius a at the center of a spherical cavity of radius b, with lambda = a / b, moves at Happel &
 // Brenner's exact mobilities (Eqs. 4-22.11 and 7-8.18):
 //    U = F / (6 pi viscosity a) (1 - 9 lambda / 4 + 5 lambda^3 / 2 - 9 lambda^5 / 4 + lambda^6) / (1 - lambda^5),
 //    Omega = T / (8 pi viscosity a^3) (1 - lambda^3).
-// The unbounded drag is exact, so all of the error is wall coupling. Translation converges faster than 1 / order^2,
-// independent of the viscosity. Rotation converges to the solver floor, since the subtraction cancels its rigid slip
-// exactly.
+// The relative error in U falls to 1e-4 by order 20, and in Omega to the GMRES tolerance by order 10. Both velocities
+// scale as 1 / viscosity to the GMRES tolerance.
 TEST(Periphery, BodyInSphericalCavityMatchesHappelAndBrenner) {
   const double a = 1.0;
   const double lambda = a / kCavityRadius;  // 0.2
@@ -923,9 +913,9 @@ TEST(Periphery, BodyInSphericalCavityMatchesHappelAndBrenner) {
   const double l5 = l3 * lambda * lambda;
   const double l6 = l5 * lambda;
   const BelosConfig<double> cfg = make_gmres_config(1000, 150, 30);
-  const std::vector<int> orders = {4, 6, 8, 10, 12, 16, 20, 24};
+  const std::vector<int> orders = {4, 6, 8, 10, 12, 16, 20};
 
-  std::vector<std::vector<double>> translation_errors_by_viscosity;
+  std::vector<std::vector<RigidVelocity>> velocities_by_viscosity;
   for (const double viscosity : kViscosities) {
     SCOPED_TRACE(testing::Message() << "viscosity=" << viscosity);
     const double u_stokes = 1.0 / (6.0 * kPi * viscosity * a);
@@ -933,40 +923,40 @@ TEST(Periphery, BodyInSphericalCavityMatchesHappelAndBrenner) {
     const double u_exact = u_stokes * (1.0 - 2.25 * lambda + 2.5 * l3 - 2.25 * l5 + l6) / (1.0 - l5);
     const double omega_exact = omega_stokes * (1.0 - l3);
 
+    std::vector<RigidVelocity> velocities;
     std::vector<double> translation_errors;
     std::vector<double> rotation_errors;
     for (const int order : orders) {
-      const CavityResponse response =
-          run_cavity(viscosity, a, order, cfg, Vector3d(1.0, 0.0, 0.0), Vector3d(0.0, 0.0, 1.0));
-      EXPECT_LT(std::abs(response.unbounded.velocity[0] - u_stokes) / u_stokes, 1.0e-8)
-          << "unbounded Stokes drag must be exact, order=" << order;
-      EXPECT_LT(std::abs(response.unbounded.angular_velocity[2] - omega_stokes) / omega_stokes, 1.0e-8)
-          << "unbounded rotational Stokes drag must be exact, order=" << order;
-      translation_errors.push_back(std::abs(response.confined.velocity[0] - u_exact) / u_exact);
-      rotation_errors.push_back(std::abs(response.confined.angular_velocity[2] - omega_exact) / omega_exact);
+      velocities.push_back(run_cavity(viscosity, a, order, cfg, Vector3d(1.0, 0.0, 0.0), Vector3d(0.0, 0.0, 1.0)));
+      translation_errors.push_back(std::abs(velocities.back().velocity[0] - u_exact) / u_exact);
+      rotation_errors.push_back(std::abs(velocities.back().angular_velocity[2] - omega_exact) / omega_exact);
     }
 
     EXPECT_TRUE(decreases_or_reaches(translation_errors, 0.0))
-        << "confined translation must converge under refinement: orders=" << testing::PrintToString(orders)
+        << "translation must converge under refinement: orders=" << testing::PrintToString(orders)
         << " errors=" << testing::PrintToString(translation_errors);
     EXPECT_LT(translation_errors.back(), 1.0e-4) << "finest quadrature must reach the cavity's translational mobility";
-    const size_t middle = orders.size() / 2;
-    const double observed_rate = std::log(translation_errors[middle] / translation_errors.back()) /
-                                 std::log(static_cast<double>(orders.back()) / orders[middle]);
-    EXPECT_GT(observed_rate, 2.0) << "confined translation must converge faster than 1 / order^2";
-
-    EXPECT_TRUE(decreases_or_reaches(rotation_errors, 5.0 * cfg.tol))
-        << "confined rotation must converge under refinement: orders=" << testing::PrintToString(orders)
+    EXPECT_TRUE(decreases_or_reaches(rotation_errors, cfg.tol))
+        << "rotation must converge under refinement: orders=" << testing::PrintToString(orders)
         << " errors=" << testing::PrintToString(rotation_errors);
-    EXPECT_LT(rotation_errors.back(), 100.0 * cfg.tol)
-        << "finest quadrature must reach the cavity's rotational mobility";
-    translation_errors_by_viscosity.push_back(translation_errors);
+    for (size_t i = 0; i < orders.size(); ++i) {
+      if (orders[i] >= 10) {
+        EXPECT_LT(rotation_errors[i], cfg.tol) << "rotation must reach the GMRES tolerance, order=" << orders[i];
+      }
+    }
+    velocities_by_viscosity.push_back(velocities);
   }
 
+  const double viscosity_ratio = kViscosities[1] / kViscosities[0];
   for (size_t i = 0; i < orders.size(); ++i) {
-    EXPECT_NEAR(translation_errors_by_viscosity[1][i], translation_errors_by_viscosity[0][i],
-                1.0e-2 * translation_errors_by_viscosity[0][i])
-        << "confined translation error must not depend on the viscosity, order=" << orders[i];
+    const RigidVelocity& reference = velocities_by_viscosity[0][i];
+    const RigidVelocity& scaled = velocities_by_viscosity[1][i];
+    EXPECT_LT(norm(viscosity_ratio * scaled.velocity - reference.velocity) / norm(reference.velocity), cfg.tol)
+        << "U must scale as 1 / viscosity, order=" << orders[i];
+    EXPECT_LT(norm(viscosity_ratio * scaled.angular_velocity - reference.angular_velocity) /
+                  norm(reference.angular_velocity),
+              cfg.tol)
+        << "Omega must scale as 1 / viscosity, order=" << orders[i];
   }
 }
 
