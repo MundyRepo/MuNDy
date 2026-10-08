@@ -19,12 +19,13 @@
 // @HEADER
 
 //! \file DirectSum.cpp
-/// \brief Runtime benchmark: how direct_sum scales with N, and what its panels buy.
+/// \brief Runtime benchmark: how direct_sum scales with N, and what its decompositions buy.
 ///
 /// For N = 1024, 2048, ..., 65536 points in the unit cube, each both a source and a target, times the Stokeslet direct
-/// sum with the default panel, with panels of 1, 2, 4, and 8 targets, and with a flat loop (one target per thread, no
-/// panel) written here as a baseline. Each variant fits its run times to O(1), O(n), O(n log n), O(n^2), ... and to
-/// a power law; the program exits nonzero unless direct_sum's best fit is O(n^2).
+/// sum with direct_sum's default (panels of 4 on the host, a warp of lanes per target on a device), with panels of 1,
+/// 2, 4, and 8 targets, and with a flat loop (one target per thread, no panel) written here as a baseline. Each
+/// variant fits its run times to O(1), O(n), O(n log n), O(n^2), ... and to a power law; the program exits nonzero
+/// unless direct_sum's best fit is O(n^2).
 ///
 /// Usage: DirectSum [--simple] [--max-n N]
 ///   --simple   Suppress the per-size nanobench tables and print one compact table (Gpair/s per variant and N).
@@ -49,7 +50,7 @@
 // Mundy
 #include <mundy_math/Vector.hpp>      // for mundy::Vector, mundy::dot
 #include <mundy_math/cmath.hpp>       // for mundy::rsqrt
-#include <mundy_math/direct_sum.hpp>  // for mundy::direct_sum
+#include <mundy_math/direct_sum.hpp>  // for mundy::direct_sum, mundy::impl::direct_sum_with_panels
 
 namespace {
 
@@ -113,18 +114,18 @@ view_t make_points(const size_t n, const double phase) {
 
 /// \brief The benchmarked variants, in table order.
 enum Variant { kDefault, kPanel1, kPanel2, kPanel4, kPanel8, kFlat, kNumVariants };
-const char* const kVariantNames[kNumVariants] = {"direct_sum (default panel)", "direct_sum<1>", "direct_sum<2>",
-                                                 "direct_sum<4>", "direct_sum<8>", "flat (no panel)"};
+const char* const kVariantNames[kNumVariants] = {"direct_sum (default)", "panels of 1", "panels of 2",
+                                                 "panels of 4", "panels of 8", "flat (no panel)"};
 
 /// \brief Run variant v once on n points: the full O(n^2) Stokeslet sum, finished before returning.
 void run_variant(const Variant v, const size_t n, const Stokeslet& interaction, const AddTo& accumulate) {
   const exec_space space;
   switch (v) {
     case kDefault: mundy::direct_sum(space, n, n, interaction, accumulate); break;
-    case kPanel1: mundy::direct_sum<1>(space, n, n, interaction, accumulate); break;
-    case kPanel2: mundy::direct_sum<2>(space, n, n, interaction, accumulate); break;
-    case kPanel4: mundy::direct_sum<4>(space, n, n, interaction, accumulate); break;
-    case kPanel8: mundy::direct_sum<8>(space, n, n, interaction, accumulate); break;
+    case kPanel1: mundy::impl::direct_sum_with_panels<1>(space, n, n, interaction, accumulate); break;
+    case kPanel2: mundy::impl::direct_sum_with_panels<2>(space, n, n, interaction, accumulate); break;
+    case kPanel4: mundy::impl::direct_sum_with_panels<4>(space, n, n, interaction, accumulate); break;
+    case kPanel8: mundy::impl::direct_sum_with_panels<8>(space, n, n, interaction, accumulate); break;
     default:
       Kokkos::parallel_for("DirectSum::flat", Kokkos::RangePolicy<exec_space>(space, 0, n),
                            FlatSum{interaction, accumulate, n});

@@ -19,7 +19,11 @@
 // @HEADER
 
 /// \file UnitTestDirectSum.cpp
-/// \brief The dense direct sum (direct_sum.hpp) against serial references, for every panel size, shape, and value.
+/// \brief The dense direct sum (direct_sum.hpp) against serial references, for every decomposition, shape, and value.
+///
+/// The decompositions are the panel kernel (1, 3, 4, 8, and 16 targets per thread), the lane kernel (32 lanes in teams
+/// of 4 targets, and 8 lanes in teams of 3), and direct_sum's default for the space. Each kernel runs on every space,
+/// so a host build tests the lanes too.
 ///
 /// Interactions and accumulators are functors, so the same per-pair code computes the serial host reference, and no
 /// KOKKOS_LAMBDA sits in a test body (CUDA forbids it there).
@@ -40,7 +44,7 @@
 #include <mundy_math/DoubleDouble.hpp>  // for mundy::DoubleDouble
 #include <mundy_math/Matrix.hpp>        // for mundy::Matrix
 #include <mundy_math/Vector.hpp>        // for mundy::Vector, mundy::dot
-#include <mundy_math/direct_sum.hpp>    // for mundy::direct_sum
+#include <mundy_math/direct_sum.hpp>    // for mundy::direct_sum, mundy::impl::direct_sum_with_{panels,lanes}
 
 namespace mundy {
 
@@ -206,21 +210,51 @@ std::vector<double> serial_reference(const size_t num_targets, const size_t num_
   return out;
 }
 
-/// \brief direct_sum<PanelSize> on space into a NaN-filled output; checks accumulate ran once per target.
-template <size_t PanelSize, class ExecSpace, class Interaction>
+/// \brief The panel kernel, with PanelSize targets per thread.
+template <size_t PanelSize>
+struct Panels {};
+
+/// \brief The lane kernel, with Lanes vector lanes per target and TargetsPerTeam targets per team.
+template <int Lanes, int TargetsPerTeam>
+struct LaneTeams {};
+
+/// \brief direct_sum's default for the space.
+struct Default {};
+
+/// \brief Run the panel kernel.
+template <size_t PanelSize, class... Args>
+void run_decomposition(Panels<PanelSize>, const Args&... args) {
+  impl::direct_sum_with_panels<PanelSize>(args...);
+}
+
+/// \brief Run the lane kernel.
+template <int Lanes, int TargetsPerTeam, class... Args>
+void run_decomposition(LaneTeams<Lanes, TargetsPerTeam>, const Args&... args) {
+  impl::direct_sum_with_lanes<Lanes, TargetsPerTeam>(args...);
+}
+
+/// \brief Run direct_sum's default.
+template <class... Args>
+void run_decomposition(Default, const Args&... args) {
+  direct_sum(args...);
+}
+
+/// \brief direct_sum, decomposed as Decomposition says, on space into a NaN-filled output; checks accumulate ran once
+/// per target.
+template <class Decomposition, class ExecSpace, class Interaction>
 std::vector<double> run_direct_sum(const ExecSpace& space, const size_t num_targets, const size_t num_sources,
                                    const size_t num_components, const Interaction& interaction) {
   using memory_space = typename ExecSpace::memory_space;
   Kokkos::View<double*, memory_space> out("out", num_components * num_targets);
   Kokkos::View<size_t, memory_space> calls("calls");
   Kokkos::deep_copy(out, std::numeric_limits<double>::quiet_NaN());
-  direct_sum<PanelSize>(space, num_targets, num_sources, interaction,
-                        StoreSum<decltype(out), decltype(calls)>{out, calls});
+  const StoreSum<decltype(out), decltype(calls)> store{out, calls};
+  run_decomposition(Decomposition{}, space, num_targets, num_sources, interaction, store);
   space.fence();
 
   size_t host_calls = 0;
   Kokkos::deep_copy(host_calls, calls);
-  EXPECT_EQ(host_calls, num_targets) << "accumulate must run exactly once per target (panel size " << PanelSize << ")";
+  EXPECT_EQ(host_calls, num_targets) << "accumulate must run exactly once per target";
   const auto host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, out);
   return std::vector<double>(host.data(), host.data() + host.extent(0));
 }
@@ -239,27 +273,26 @@ void expect_near_reference(const std::vector<double>& actual, const std::vector<
   }
 }
 
-/// \brief Run interaction through direct_sum with panel sizes 1, 3, 4, 8, 16 and the default, against the reference.
+/// \brief Run interaction through every decomposition against the reference.
 template <class DeviceInteraction, class HostInteraction>
-void expect_every_panel_size_matches(const size_t num_targets, const size_t num_sources, const size_t num_components,
-                                     const DeviceInteraction& device_interaction,
-                                     const HostInteraction& host_interaction, const double rel_tol) {
+void expect_every_decomposition_matches(const size_t num_targets, const size_t num_sources,
+                                        const size_t num_components, const DeviceInteraction& device_interaction,
+                                        const HostInteraction& host_interaction, const double rel_tol) {
   const std::vector<double> reference = serial_reference(num_targets, num_sources, host_interaction);
   const DeviceSpace space;
-  expect_near_reference(run_direct_sum<1>(space, num_targets, num_sources, num_components, device_interaction),
-                        reference, rel_tol, "panel size 1");
-  expect_near_reference(run_direct_sum<3>(space, num_targets, num_sources, num_components, device_interaction),
-                        reference, rel_tol, "panel size 3");
-  expect_near_reference(run_direct_sum<4>(space, num_targets, num_sources, num_components, device_interaction),
-                        reference, rel_tol, "panel size 4");
-  expect_near_reference(run_direct_sum<8>(space, num_targets, num_sources, num_components, device_interaction),
-                        reference, rel_tol, "panel size 8");
-  expect_near_reference(run_direct_sum<16>(space, num_targets, num_sources, num_components, device_interaction),
-                        reference, rel_tol, "panel size 16");
-  expect_near_reference(
-      run_direct_sum<impl::default_direct_sum_panel_size<DeviceSpace>>(space, num_targets, num_sources,
-                                                                       num_components, device_interaction),
-      reference, rel_tol, "default panel size");
+  auto expect = [&]<class Decomposition>(Decomposition, const char* what) {
+    expect_near_reference(
+        run_direct_sum<Decomposition>(space, num_targets, num_sources, num_components, device_interaction), reference,
+        rel_tol, what);
+  };
+  expect(Panels<1>{}, "panel size 1");
+  expect(Panels<3>{}, "panel size 3");
+  expect(Panels<4>{}, "panel size 4");
+  expect(Panels<8>{}, "panel size 8");
+  expect(Panels<16>{}, "panel size 16");
+  expect(LaneTeams<32, 4>{}, "32 lanes, 4 targets per team");
+  expect(LaneTeams<8, 3>{}, "8 lanes, 3 targets per team");
+  expect(Default{}, "default");
 }
 
 /// \brief The host mirror of a device view.
@@ -269,10 +302,11 @@ HostView to_host(const DeviceView& view) {
 //@}
 
 TEST(DirectSum, ScalarSumsMatchTheSerialReference) {
-  // 37 targets are not a multiple of 3, 4, 8, or 16, so every panel size also takes the partial-panel path.
+  // 37 targets are not a multiple of 3, 4, 8, or 16, so every panel size, and the lanes' teams of up to 4 targets,
+  // also take the partial path.
   const DeviceView targets = make_points(37, 0.1);
   const DeviceView sources = make_points(53, 0.2);
-  expect_every_panel_size_matches(37, 53, 1, InverseDistance<DeviceView>{targets, sources},
+  expect_every_decomposition_matches(37, 53, 1, InverseDistance<DeviceView>{targets, sources},
                                   InverseDistance<HostView>{to_host(targets), to_host(sources)}, 1e-14);
 }
 
@@ -280,14 +314,14 @@ TEST(DirectSum, VectorSumsMatchTheSerialReference) {
   const DeviceView targets = make_points(29, 0.3);
   const DeviceView sources = make_points(41, 0.4);
   const DeviceView forces = make_points(41, 0.5);
-  expect_every_panel_size_matches(29, 41, 3, Stokeslet<DeviceView>{targets, sources, forces},
+  expect_every_decomposition_matches(29, 41, 3, Stokeslet<DeviceView>{targets, sources, forces},
                                   Stokeslet<HostView>{to_host(targets), to_host(sources), to_host(forces)}, 1e-14);
 }
 
 TEST(DirectSum, MatrixSumsMatchTheSerialReference) {
   const DeviceView targets = make_points(10, 0.6);
   const DeviceView sources = make_points(13, 0.7);
-  expect_every_panel_size_matches(10, 13, 9, StokesletTensor<DeviceView>{targets, sources},
+  expect_every_decomposition_matches(10, 13, 9, StokesletTensor<DeviceView>{targets, sources},
                                   StokesletTensor<HostView>{to_host(targets), to_host(sources)}, 1e-14);
 }
 
@@ -295,14 +329,14 @@ TEST(DirectSum, CustomPassiveScalarSumsMatchTheSerialReference) {
   // Double-double sums keep their low parts: compare both halves.
   const DeviceView targets = make_points(11, 0.15);
   const DeviceView sources = make_points(17, 0.25);
-  expect_every_panel_size_matches(11, 17, 2, InverseDistanceDD<DeviceView>{targets, sources},
+  expect_every_decomposition_matches(11, 17, 2, InverseDistanceDD<DeviceView>{targets, sources},
                                   InverseDistanceDD<HostView>{to_host(targets), to_host(sources)}, 1e-30);
 }
 
 TEST(DirectSum, SharedPointsSkipTheirOwnPair) {
   // Targets and sources are the same points: the coincident pair contributes 0 through the branch-free guard.
   const DeviceView points = make_points(24, 0.35);
-  expect_every_panel_size_matches(24, 24, 1, InverseDistance<DeviceView>{points, points},
+  expect_every_decomposition_matches(24, 24, 1, InverseDistance<DeviceView>{points, points},
                                   InverseDistance<HostView>{to_host(points), to_host(points)}, 1e-14);
 }
 
@@ -311,24 +345,34 @@ TEST(DirectSum, PanelsLargerThanTheTargetCount) {
   for (const size_t num_targets : {3, 8}) {
     const DeviceView targets = make_points(num_targets, 0.45);
     const DeviceView sources = make_points(19, 0.55);
-    expect_every_panel_size_matches(num_targets, 19, 1, InverseDistance<DeviceView>{targets, sources},
+    expect_every_decomposition_matches(num_targets, 19, 1, InverseDistance<DeviceView>{targets, sources},
                                     InverseDistance<HostView>{to_host(targets), to_host(sources)}, 1e-14);
   }
 }
 
-TEST(DirectSum, NoSourcesGivesZeroSums) {
+/// \brief The sums of 6 targets over no sources, decomposed as Decomposition says.
+template <class Decomposition>
+std::vector<double> sums_over_no_sources() {
   const DeviceView targets = make_points(6, 0.65);
   const DeviceView sources = make_points(0, 0.75);
-  const std::vector<double> sums = run_direct_sum<4>(DeviceSpace(), 6, 0, 3,
-                                                     Stokeslet<DeviceView>{targets, sources, sources});
-  for (const double sum : sums) {
-    EXPECT_EQ(sum, 0.0);
+  return run_direct_sum<Decomposition>(DeviceSpace(), 6, 0, 3, Stokeslet<DeviceView>{targets, sources, sources});
+}
+
+TEST(DirectSum, NoSourcesGivesZeroSums) {
+  for (const std::vector<double>& sums : {sums_over_no_sources<Panels<4>>(), sums_over_no_sources<LaneTeams<32, 4>>(),
+                                          sums_over_no_sources<Default>()}) {
+    for (const double sum : sums) {
+      EXPECT_EQ(sum, 0.0);
+    }
   }
 }
 
 TEST(DirectSum, NoTargetsRunsNothing) {
   const DeviceView points = make_points(5, 0.85);
-  EXPECT_TRUE(run_direct_sum<4>(DeviceSpace(), 0, 5, 1, InverseDistance<DeviceView>{points, points}).empty());
+  const InverseDistance<DeviceView> interaction{points, points};
+  EXPECT_TRUE(run_direct_sum<Panels<4>>(DeviceSpace(), 0, 5, 1, interaction).empty());
+  EXPECT_TRUE((run_direct_sum<LaneTeams<32, 4>>(DeviceSpace(), 0, 5, 1, interaction).empty()));
+  EXPECT_TRUE(run_direct_sum<Default>(DeviceSpace(), 0, 5, 1, interaction).empty());
 }
 
 #if defined(KOKKOS_ENABLE_SERIAL)
@@ -337,8 +381,11 @@ TEST(DirectSum, RunsOnTheGivenExecutionSpace) {
   const HostView targets = to_host(make_points(9, 0.95));
   const HostView sources = to_host(make_points(14, 0.05));
   const InverseDistance<HostView> interaction{targets, sources};
-  expect_near_reference(run_direct_sum<4>(Kokkos::Serial(), 9, 14, 1, interaction),
-                        serial_reference(9, 14, interaction), 1e-14, "Kokkos::Serial");
+  const std::vector<double> reference = serial_reference(9, 14, interaction);
+  expect_near_reference(run_direct_sum<Panels<4>>(Kokkos::Serial(), 9, 14, 1, interaction), reference, 1e-14,
+                        "Kokkos::Serial panels");
+  expect_near_reference(run_direct_sum<LaneTeams<32, 4>>(Kokkos::Serial(), 9, 14, 1, interaction), reference, 1e-14,
+                        "Kokkos::Serial lanes");
 }
 #endif
 
