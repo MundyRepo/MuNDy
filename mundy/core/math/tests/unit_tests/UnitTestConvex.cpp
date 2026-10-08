@@ -1478,6 +1478,31 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
 
   ASSERT_EQ(backend_t::domain_size(M_op), backend_t::size(f_b)) << "M and f_b should be compatible for multiplication";
   ASSERT_EQ(backend_t::domain_size(DT_op), backend_t::range_size(M_op)) << "DT and M should be compatible for DT * M";
+
+  // Strategy + state
+  using vector_t = decltype(x_exact);
+  const size_t size = x_exact.extent(0);
+  vector_t x(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x"), size);
+  vector_t grad(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad"), size);
+  vector_t x_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_tmp"), size);
+  vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
+  Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
+
+  PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+
+  // Solve
+  auto result = solve_mixed_cqpp(mixed_cqpp, pgd, pgd_state);
+
+  // Check results
+  EXPECT_TRUE(result.converged);
+  EXPECT_LE(result.num_iters, cfg.max_iters);
+  const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+  const auto x_exact_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_exact);
+  for (size_t i = 0; i < size; ++i) {
+    EXPECT_NEAR(x_host(i), x_exact_host(i), 10 * cfg.tol);
+  }
 }
 
 /// \brief The Kokkos allocations one sparse apply makes on ExecSpace.
@@ -1779,7 +1804,8 @@ TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
     !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
   GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
 #endif
-  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+  // NX <= NZ, so the reduced Hessian D^T (M - M B S B^T M) D can be nonsingular and x* is the unique solution.
+  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
