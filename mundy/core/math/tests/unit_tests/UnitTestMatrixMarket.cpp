@@ -39,10 +39,11 @@
 #include <vector>       // for std::vector
 
 // Mundy
-#include <mundy_math/Matrix.hpp>         // for mundy::Matrix, mundy::get_matrix
-#include <mundy_math/Vector.hpp>         // for mundy::Vector, mundy::get_vector
-#include <mundy_math/cmath.hpp>          // for mundy::bit_cast
-#include <mundy_math/matrix_market.hpp>  // for mundy::write_matrix_market, mundy::read_matrix_market
+#include <mundy_math/Matrix.hpp>           // for mundy::Matrix, mundy::get_matrix
+#include <mundy_math/Vector.hpp>           // for mundy::Vector, mundy::get_vector
+#include <mundy_math/cmath.hpp>            // for mundy::bit_cast
+#include <mundy_math/matrix_market.hpp>    // for mundy::write_matrix_market, mundy::read_matrix_market
+#include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, MundyMathBackend}
 
 namespace mundy {
 
@@ -338,6 +339,67 @@ TEST(MatrixMarket, MundyTypesRequireTheFileExtents) {
   write_text(filename, "%%MatrixMarket matrix array real general\n2 3\n1\n2\n3\n4\n5\n6\n");
   Matrix<double, 3, 2> matrix;
   EXPECT_THROW(read_matrix_market(filename, matrix), std::runtime_error) << "a 2 x 3 file into a 3 x 2 matrix";
+  std::remove(filename.c_str());
+}
+//@}
+
+//! \name Linear operators
+//@{
+
+/// \brief y_i = x_{i+1} - x_i, an (n - 1) x n operator with no stored matrix, applied on the default execution space.
+struct ForwardDifference {
+  using view_t = Kokkos::View<double*, Kokkos::DefaultExecutionSpace::memory_space>;
+
+  size_t n;
+
+  size_t domain_size() const {
+    return n;
+  }
+  size_t range_size() const {
+    return n - 1;
+  }
+  view_t make_domain_vector() const {
+    return view_t("x", n);
+  }
+  view_t make_range_vector() const {
+    return view_t("y", n - 1);
+  }
+  void apply(const view_t& x, view_t& y) const {
+    Kokkos::parallel_for(
+        "ForwardDifference", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, n - 1),
+        KOKKOS_LAMBDA(const int i) { y(i) = x(i + 1) - x(i); });
+  }
+};
+
+// An operator is written as its matrix: one with a stored matrix writes exactly that matrix, and one without writes
+// the matrix of its action, here an exact (n - 1) x n difference stencil with the range size as its rows.
+TEST(MatrixMarket, OperatorsWriteTheirMatrix) {
+  const std::string filename = "MatrixMarket_operator.mtx";
+
+  // A stored matrix, through the MundyMath backend
+  const std::vector<double> values = hard_values<double>();
+  const Matrix<double, 3, 2> matrix{values[0], values[1], values[2], values[3], values[4], values[5]};
+  write_matrix_market<MundyMathBackend>(filename, matrix);
+  Matrix<double, 3, 2> matrix_read;
+  read_matrix_market(filename, matrix_read);
+  for (size_t i = 0; i < 3; ++i) {
+    for (size_t j = 0; j < 2; ++j) {
+      EXPECT_TRUE(same_bits(matrix_read(i, j), matrix(i, j))) << "matrix entry (" << i << ", " << j << ")";
+    }
+  }
+
+  // No stored matrix, through the Kokkos backend on the default execution space
+  const size_t n = 5;
+  write_matrix_market<KokkosBackend<Kokkos::DefaultExecutionSpace>>(filename, ForwardDifference{n});
+  Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::HostSpace> stencil("stencil", 0, 0);
+  read_matrix_market(filename, stencil);
+  ASSERT_EQ(stencil.extent(0), n - 1);
+  ASSERT_EQ(stencil.extent(1), n);
+  for (size_t i = 0; i + 1 < n; ++i) {
+    for (size_t j = 0; j < n; ++j) {
+      EXPECT_EQ(stencil(i, j), j == i ? -1.0 : (j == i + 1 ? 1.0 : 0.0)) << "entry (" << i << ", " << j << ")";
+    }
+  }
   std::remove(filename.c_str());
 }
 //@}
