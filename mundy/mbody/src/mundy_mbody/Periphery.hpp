@@ -22,8 +22,8 @@
 #define MUNDY_MBODY_PERIPHERY_HPP_
 
 /* This class evaluates the fluid flow at interior points of the domain induced by enforcing the no-slip condition
-on the periphery: given an external flow sampled on the surface it computes the surface forces f = M^{-1} u, then
-evaluates the flow those forces induce at the interior points.
+on the periphery: given an external flow sampled on the surface it computes the surface density q = M^{-1} u, then
+evaluates the flow that density induces at the interior points.
 
 The periphery is described by a collection of nodes with consistently oriented surface normals (set_surface_normals
 declares the orientation; it is checked against the geometry) and predefined quadrature weights. We are not in charge
@@ -34,7 +34,8 @@ is ~200 MB) fits on one device, so it is not distributed.
 
 Conventions:
   T[q](x) = int_Gamma K(x, y) q(y) dS_y with K_ij(x, y) = -3 / (4 pi mu) r_i r_j (r . n(y)) / |r|^5 and r = x - y is
-  the double-layer potential of a stresslet surface density q (force per length, i.e. mu times velocity).
+  the double-layer potential of the surface density q. Because K carries 1/mu, q is mu times a velocity-type density:
+  it has units of force per length, but it is neither a force nor a traction.
   sigma = +1 if the normals point out of the region Gamma encloses and -1 if they point into it. The Gauss identity
   gives int_Gamma K(x, y) dS_y = sigma/mu inside, sigma/(2 mu) on Gamma (principal value), and 0 outside, so
   PV T[1] = sigma/(2 mu) I. With the normals pointing into the fluid (outward on a body, inward on the periphery),
@@ -49,8 +50,8 @@ Consider a system containing just mobile bodies:
         = - u_{ext}(x) - sum_m (G(x - X_b^m) dot F_b^m + R(x - X_b^m) dot tau_b^m)
 
   for n in 1..N_{bodies}:
-    1/|Gamma_b^n| int_{Gamma_b^n} q_b^n(y) dS_y - U_b^n = 0
-    1/|Gamma_b^n| int_{Gamma_b^n} (y - X_b^n) cross q_b^n(y) dS_y - Omega_b^n = 0
+    1/(mu |Gamma_b^n|) int_{Gamma_b^n} q_b^n(y) dS_y - U_b^n = 0
+    1/mu (I_b^n)^{-1} int_{Gamma_b^n} (y - X_b^n) cross q_b^n(y) dS_y - Omega_b^n = 0
 
   Here,
     U_b^n, Omega_b^n are the unknown center of mass translational and rotational velocities of the n'th body
@@ -62,8 +63,11 @@ Consider a system containing just mobile bodies:
     G/R are the stokeslet and rotlet
     F_b^m and tao_b^m are the center of mass force and torque on body m applied at location X_b^m
     |Gamma_b^n| means surface area of the surface Gamma_b^n of the n'th body
-  The constraint rows only fix the rigid-motion null-space component of q_b^n, which produces no exterior flow, so
-  U_b^n and Omega_b^n are determined by the first row and are the physical velocities for any viscosity.
+    I_b^n = int_{Gamma_b^n} (|y - X_b^n|^2 I - (y - X_b^n)(y - X_b^n)) dS_y is the surface moment of Gamma_b^n
+  The constraint rows (Power & Miranda 1987; Karrila & Kim 1989) set the rigid-motion part of the velocity density
+  q_b^n / mu to U_b^n + Omega_b^n cross (x - X_b^n); they are its projection onto rigid motions when X_b^n is the
+  centroid of Gamma_b^n. That part produces no exterior flow, so U_b^n and Omega_b^n are determined by the first row
+  and are the physical velocities for any viscosity.
 
 Now, place them in a periphery:
   for n in 1..N_{bodies}:
@@ -78,8 +82,8 @@ feedback where u_p^{slip_unknown}(x) = sum_m T_b^m[q_b^m](x) u_p^{slip_known}(x)
 F_b^m + R(x - X_b^m) dot tau_b^m)
 
   for n in 1..N_{bodies}:
-    1/|Gamma_b^n| int_{Gamma_b^n} q_b^n(y) dS_y - U_b^n = 0
-    1/|Gamma_b^n| int_{Gamma_b^n} (y - X_b^n) cross q_b^n(y) dS_y - Omega_b^n = 0
+    1/(mu |Gamma_b^n|) int_{Gamma_b^n} q_b^n(y) dS_y - U_b^n = 0
+    1/mu (I_b^n)^{-1} int_{Gamma_b^n} (y - X_b^n) cross q_b^n(y) dS_y - Omega_b^n = 0
 
 Now, add point spheres generating a flow through their interaction kernel K (RPY, RPYC, or Stokes; none when Dry):
   u_ext(x) = sum_s K(x - x_s) dot F_s
@@ -116,7 +120,9 @@ periphery)
 
 // Mundy
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
+#include <mundy_math/Matrix3.hpp>              // for mundy::Matrix3d, mundy::inverse (a body's surface moment)
 #include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion (reference->lab rotation)
+#include <mundy_math/Tolerance.hpp>            // for mundy::get_zero_tolerance (coincident points)
 #include <mundy_math/Vector3.hpp>              // for mundy::Vector3, mundy::cross
 #include <mundy_math/cmath.hpp>                // for mundy::rsqrt
 #include <mundy_math/direct_sum.hpp>           // for mundy::direct_sum
@@ -133,13 +139,16 @@ periphery)
 #include <mundy_math/solver_backends.hpp>  // for mundy::KokkosBackend
 #endif
 
-#define DOUBLE_ZERO 1.0e-12
-
 namespace mundy {
 
 namespace mbody {
 
 namespace impl {
+
+/// \brief The Stokes kernels' prefactors 1 / (6 pi), 1 / (8 pi), and 3 / (4 pi), each divided by the viscosity at use.
+inline constexpr double one_over_six_pi = 1.0 / (6.0 * Kokkos::numbers::pi_v<double>);
+inline constexpr double one_over_eight_pi = 1.0 / (8.0 * Kokkos::numbers::pi_v<double>);
+inline constexpr double three_over_four_pi = 3.0 / (4.0 * Kokkos::numbers::pi_v<double>);
 
 /// \brief True iff every listed type is a rank-1 Kokkos::View of (possibly const) double.
 template <class... Views>
@@ -324,7 +333,7 @@ void apply_stokes_kernel(const ExecutionSpace& space,                  //
   impl::require_length(target_velocities, 3 * num_target_points, "apply_stokes_kernel");
 
   // Launch the parallel kernel
-  const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
+  const double scale_factor = impl::one_over_eight_pi / viscosity;
 
   auto stokes_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
@@ -337,7 +346,8 @@ void apply_stokes_kernel(const ExecutionSpace& space,                  //
     const double fz = source_forces(3 * s + 2);
 
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = r2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
 
@@ -384,7 +394,7 @@ void apply_weighted_stokes_kernel(const ExecutionSpace& space,                  
   impl::require_length(source_weights, num_source_points, "apply_weighted_stokes_kernel");
 
   // Launch the parallel kernel
-  const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
+  const double scale_factor = impl::one_over_eight_pi / viscosity;
   auto weighted_stokes_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
@@ -395,20 +405,9 @@ void apply_weighted_stokes_kernel(const ExecutionSpace& space,                  
     const double fy = source_forces(3 * s + 1) * source_weights(s);
     const double fz = source_forces(3 * s + 2) * source_weights(s);
 
-    // const double r2 = dx * dx + dy * dy + dz * dz;
-    // const double rinv = r2 < DOUBLE_ZERO ? 0.0 : 1.0 / Kokkos::sqrt(r2);
-    // const double rinv3 = rinv * rinv * rinv;
-
-    // const double inner_prod = fx * dx + fy * dy + fz * dz;
-    // const double scale_factor_rinv3 = scale_factor * rinv3;
-
-    // // Accumulate velocity contribution to local variables
-    // vx_accum += scale_factor_rinv3 * (r2 * fx + dx * inner_prod);
-    // vy_accum += scale_factor_rinv3 * (r2 * fy + dy * inner_prod);
-    // vz_accum += scale_factor_rinv3 * (r2 * fz + dz * inner_prod);
-
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = r2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv2 = rinv * rinv;
 
@@ -460,7 +459,7 @@ void apply_rpy_kernel(const ExecutionSpace& space,                  //
   impl::require_length(target_radii, num_target_points, "apply_rpy_kernel");
 
   // Launch the parallel kernel
-  const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
+  const double scale_factor = impl::one_over_eight_pi / viscosity;
   auto rpy_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
@@ -477,7 +476,8 @@ void apply_rpy_kernel(const ExecutionSpace& space,                  //
 
     const double a2_over_three = one_over_three * a * a;
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = r2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
     const double rinv5 = rinv * rinv * rinv3;
@@ -555,6 +555,7 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
   constexpr double one_over_three = 1.0 / 3.0;
   constexpr double one_over_32 = 1.0 / 32.0;
   constexpr double inv_pi = 1.0 / Kokkos::numbers::pi_v<double>;
+  constexpr double zero_tolerance = mundy::get_zero_tolerance<double>();
   const double inv_viscosity = 1.0 / viscosity;
   auto rpyc_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
@@ -571,9 +572,9 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
     const double r2 = dx * dx + dy * dy + dz * dz;
     const double r = Kokkos::sqrt(r2);
     const double r3 = r * r2;
-    const bool coincident = r2 < DOUBLE_ZERO;
+    const bool coincident = r2 < zero_tolerance;
     const bool far = a + b < r;
-    const bool overlapping = !far && Kokkos::abs(a - b) < r && a > DOUBLE_ZERO && b > DOUBLE_ZERO;
+    const bool overlapping = !far && Kokkos::abs(a - b) < r && a > zero_tolerance && b > zero_tolerance;
 
     // One division for two reciprocals: with q = a b (corrected RPY) or q = max(a, b) (local drag),
     // 1 / r = q / (r q) and 1 / q = r / (r q). Coincident points use r = 1, so nothing divides by zero.
@@ -629,9 +630,9 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
                     ADD_TO_VECTOR3_ENTRIES(target_velocities));
 }
 
-/// \brief Accumulate the singularity-subtracted exterior trace u += (J + T)[f] of a closed body surface.
+/// \brief Accumulate the singularity-subtracted exterior trace u += (J + T)[q] of a closed body surface.
 ///
-/// Evaluates u_t += sum_{s != t} T_{t,s} (f_s - f_t), the exterior trace of the double-layer potential with the given
+/// Evaluates u_t += sum_{s != t} T_{t,s} (q_s - q_t), the exterior trace of the double-layer potential with the given
 /// normals; its analytic target coefficient is zero (see the file header), so it is valid for either orientation.
 ///
 /// \param space The execution space
@@ -640,34 +641,34 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
 /// \param[in] positions The surface point positions (size num_points * 3)
 /// \param[in] normals The surface normals (size num_points * 3)
 /// \param[in] quadrature_weights The quadrature weights (size num_points)
-/// \param[in] forces The surface forces the operator is applied to (size num_points * 3)
+/// \param[in] densities The surface density q the operator is applied to (size num_points * 3)
 /// \param[out] velocities The resulting surface velocities (size num_points * 3)
 template <class ExecutionSpace, typename PosVectorType, typename NormalVectorType, typename QuadratureWeightVectorType,
-          typename ForceVectorType, typename VelocityVectorType>
+          typename DensityVectorType, typename VelocityVectorType>
 void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,                           //
                                          const double viscosity,                                //
                                          const size_t num_points,                               //
                                          const PosVectorType& positions,                        //
                                          const NormalVectorType& normals,                       //
                                          const QuadratureWeightVectorType& quadrature_weights,  //
-                                         const ForceVectorType& forces,                         //
+                                         const DensityVectorType& densities,                    //
                                          const VelocityVectorType& velocities) {
-  static_assert(impl::are_double_vectors_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType, ForceVectorType,
-                                           VelocityVectorType>,
+  static_assert(impl::are_double_vectors_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType,
+                                           DensityVectorType, VelocityVectorType>,
                 "apply_stokes_double_layer_kernel_ss: inputs must be rank-1 Kokkos::Views of double.");
-  static_assert(impl::share_memory_space_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType, ForceVectorType,
-                                           VelocityVectorType>,
+  static_assert(impl::share_memory_space_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType,
+                                           DensityVectorType, VelocityVectorType>,
                 "apply_stokes_double_layer_kernel_ss: all views must share one memory space.");
 
   impl::require_length(positions, 3 * num_points, "apply_stokes_double_layer_kernel_ss");
   impl::require_length(normals, 3 * num_points, "apply_stokes_double_layer_kernel_ss");
   impl::require_length(quadrature_weights, num_points, "apply_stokes_double_layer_kernel_ss");
-  impl::require_length(forces, 3 * num_points, "apply_stokes_double_layer_kernel_ss");
+  impl::require_length(densities, 3 * num_points, "apply_stokes_double_layer_kernel_ss");
   impl::require_length(velocities, 3 * num_points, "apply_stokes_double_layer_kernel_ss");
   impl::require_positive_viscosity(viscosity, "apply_stokes_double_layer_kernel_ss");
 
   // Launch the parallel kernel
-  const double scale_factor = 3.0 / (4.0 * M_PI * viscosity);
+  const double scale_factor = impl::three_over_four_pi / viscosity;
   auto stokes_double_layer_computation = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Skip self-interaction
     if (t == s) {
@@ -681,24 +682,25 @@ void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,           
 
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = dr2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
-    // The singularity-subtracted integrand K(x_t, y_s) (f_s - f_t), bounded as y_s -> x_t.
-    const double fs0 = forces(3 * s + 0) - forces(3 * t + 0);
-    const double fs1 = forces(3 * s + 1) - forces(3 * t + 1);
-    const double fs2 = forces(3 * s + 2) - forces(3 * t + 2);
-    const double sxx = normals(3 * s + 0) * fs0 * quadrature_weights(s);
-    const double sxy = normals(3 * s + 0) * fs1 * quadrature_weights(s);
-    const double sxz = normals(3 * s + 0) * fs2 * quadrature_weights(s);
-    const double syx = normals(3 * s + 1) * fs0 * quadrature_weights(s);
-    const double syy = normals(3 * s + 1) * fs1 * quadrature_weights(s);
-    const double syz = normals(3 * s + 1) * fs2 * quadrature_weights(s);
-    const double szx = normals(3 * s + 2) * fs0 * quadrature_weights(s);
-    const double szy = normals(3 * s + 2) * fs1 * quadrature_weights(s);
-    const double szz = normals(3 * s + 2) * fs2 * quadrature_weights(s);
+    // The singularity-subtracted integrand K(x_t, y_s) (q_s - q_t), bounded as y_s -> x_t.
+    const double qs0 = densities(3 * s + 0) - densities(3 * t + 0);
+    const double qs1 = densities(3 * s + 1) - densities(3 * t + 1);
+    const double qs2 = densities(3 * s + 2) - densities(3 * t + 2);
+    const double sxx = normals(3 * s + 0) * qs0 * quadrature_weights(s);
+    const double sxy = normals(3 * s + 0) * qs1 * quadrature_weights(s);
+    const double sxz = normals(3 * s + 0) * qs2 * quadrature_weights(s);
+    const double syx = normals(3 * s + 1) * qs0 * quadrature_weights(s);
+    const double syy = normals(3 * s + 1) * qs1 * quadrature_weights(s);
+    const double syz = normals(3 * s + 1) * qs2 * quadrature_weights(s);
+    const double szx = normals(3 * s + 2) * qs0 * quadrature_weights(s);
+    const double szy = normals(3 * s + 2) * qs1 * quadrature_weights(s);
+    const double szz = normals(3 * s + 2) * qs2 * quadrature_weights(s);
 
     double coeff = sxx * dx * dx + syy * dy * dy + szz * dz * dz;
     coeff += (sxy + syx) * dx * dy;
@@ -713,7 +715,7 @@ void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,           
                     ADD_TO_VECTOR3_ENTRIES(velocities));
 }
 
-/// \brief Apply the stokes double layer kernel to map source forces to target velocities: u_target += M f_source
+/// \brief Apply the stokes double layer kernel to map a source density to target velocities: u_target += T q_source
 ///
 /// \param space The execution space
 /// \param[in] viscosity The viscosity
@@ -723,10 +725,10 @@ void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,           
 /// \param[in] target_positions The positions of the target points (size num_target_points * 3)
 /// \param[in] source_normals The normals of the source points (size num_source_points * 3)
 /// \param[in] quadrature_weights The quadrature weights (size num_source_points)
-/// \param[in] source_forces The vector to apply the self-interaction matrix to (size num_nodes * 3)
-/// \param[out] target_velocities The result of applying the self-interaction matrix to f (size num_nodes * 3)
+/// \param[in] source_densities The source surface density q (size num_source_points * 3)
+/// \param[out] target_velocities T q is accumulated into this vector (size num_target_points * 3)
 template <class ExecutionSpace, typename SourcePosVectorType, typename TargetPosVectorType,
-          typename SourceNormalVectorType, typename QuadratureWeightVectorType, typename SourceForceVectorType,
+          typename SourceNormalVectorType, typename QuadratureWeightVectorType, typename SourceDensityVectorType,
           typename TargetVelocityVectorType>
 void apply_stokes_double_layer_kernel(const ExecutionSpace& space,                           //
                                       const double viscosity,                                //
@@ -736,24 +738,26 @@ void apply_stokes_double_layer_kernel(const ExecutionSpace& space,              
                                       const TargetPosVectorType& target_positions,           //
                                       const SourceNormalVectorType& source_normals,          //
                                       const QuadratureWeightVectorType& quadrature_weights,  //
-                                      const SourceForceVectorType& source_forces,            //
+                                      const SourceDensityVectorType& source_densities,       //
                                       const TargetVelocityVectorType& target_velocities) {
-  static_assert(impl::are_double_vectors_v<SourcePosVectorType, TargetPosVectorType, SourceNormalVectorType,
-                                           QuadratureWeightVectorType, SourceForceVectorType, TargetVelocityVectorType>,
-                "apply_stokes_double_layer_kernel: inputs must be rank-1 Kokkos::Views of double.");
-  static_assert(impl::share_memory_space_v<SourcePosVectorType, TargetPosVectorType, SourceNormalVectorType,
-                                           QuadratureWeightVectorType, SourceForceVectorType, TargetVelocityVectorType>,
-                "apply_stokes_double_layer_kernel: all views must share one memory space.");
+  static_assert(
+      impl::are_double_vectors_v<SourcePosVectorType, TargetPosVectorType, SourceNormalVectorType,
+                                 QuadratureWeightVectorType, SourceDensityVectorType, TargetVelocityVectorType>,
+      "apply_stokes_double_layer_kernel: inputs must be rank-1 Kokkos::Views of double.");
+  static_assert(
+      impl::share_memory_space_v<SourcePosVectorType, TargetPosVectorType, SourceNormalVectorType,
+                                 QuadratureWeightVectorType, SourceDensityVectorType, TargetVelocityVectorType>,
+      "apply_stokes_double_layer_kernel: all views must share one memory space.");
 
   impl::require_length(source_positions, 3 * num_source_points, "apply_stokes_double_layer_kernel");
   impl::require_length(target_positions, 3 * num_target_points, "apply_stokes_double_layer_kernel");
   impl::require_length(source_normals, 3 * num_source_points, "apply_stokes_double_layer_kernel");
   impl::require_length(quadrature_weights, num_source_points, "apply_stokes_double_layer_kernel");
-  impl::require_length(source_forces, 3 * num_source_points, "apply_stokes_double_layer_kernel");
+  impl::require_length(source_densities, 3 * num_source_points, "apply_stokes_double_layer_kernel");
   impl::require_length(target_velocities, 3 * num_target_points, "apply_stokes_double_layer_kernel");
 
   // Launch the parallel kernel
-  const double scale_factor = 3.0 / (4.0 * M_PI * viscosity);
+  const double scale_factor = impl::three_over_four_pi / viscosity;
   auto stokes_double_layer_contribution = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
@@ -762,21 +766,22 @@ void apply_stokes_double_layer_kernel(const ExecutionSpace& space,              
 
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = dr2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
     // Compute the double layer potential
-    const double sxx = source_normals(3 * s + 0) * source_forces(3 * s + 0) * quadrature_weights(s);
-    const double sxy = source_normals(3 * s + 0) * source_forces(3 * s + 1) * quadrature_weights(s);
-    const double sxz = source_normals(3 * s + 0) * source_forces(3 * s + 2) * quadrature_weights(s);
-    const double syx = source_normals(3 * s + 1) * source_forces(3 * s + 0) * quadrature_weights(s);
-    const double syy = source_normals(3 * s + 1) * source_forces(3 * s + 1) * quadrature_weights(s);
-    const double syz = source_normals(3 * s + 1) * source_forces(3 * s + 2) * quadrature_weights(s);
-    const double szx = source_normals(3 * s + 2) * source_forces(3 * s + 0) * quadrature_weights(s);
-    const double szy = source_normals(3 * s + 2) * source_forces(3 * s + 1) * quadrature_weights(s);
-    const double szz = source_normals(3 * s + 2) * source_forces(3 * s + 2) * quadrature_weights(s);
+    const double sxx = source_normals(3 * s + 0) * source_densities(3 * s + 0) * quadrature_weights(s);
+    const double sxy = source_normals(3 * s + 0) * source_densities(3 * s + 1) * quadrature_weights(s);
+    const double sxz = source_normals(3 * s + 0) * source_densities(3 * s + 2) * quadrature_weights(s);
+    const double syx = source_normals(3 * s + 1) * source_densities(3 * s + 0) * quadrature_weights(s);
+    const double syy = source_normals(3 * s + 1) * source_densities(3 * s + 1) * quadrature_weights(s);
+    const double syz = source_normals(3 * s + 1) * source_densities(3 * s + 2) * quadrature_weights(s);
+    const double szx = source_normals(3 * s + 2) * source_densities(3 * s + 0) * quadrature_weights(s);
+    const double szy = source_normals(3 * s + 2) * source_densities(3 * s + 1) * quadrature_weights(s);
+    const double szz = source_normals(3 * s + 2) * source_densities(3 * s + 2) * quadrature_weights(s);
 
     double coeff = sxx * dx * dx + syy * dy * dy + szz * dz * dz;
     coeff += (sxy + syx) * dx * dy;
@@ -808,7 +813,7 @@ void apply_local_drag([[maybe_unused]] const ExecutionSpace& space,       //
   impl::require_length(sphere_forces, 3 * sphere_radii.extent(0), "apply_local_drag");
 
   const size_t num_spheres = sphere_radii.extent(0);
-  const double scale = 1.0 / (6.0 * M_PI * viscosity);
+  const double scale = impl::one_over_six_pi / viscosity;
   Kokkos::parallel_for(
       "apply_local_drag", Kokkos::RangePolicy<ExecutionSpace>(0, num_spheres), KOKKOS_LAMBDA(const size_t i) {
         const double r = sphere_radii(i);
@@ -863,7 +868,7 @@ void fill_stokes_double_layer_matrix(const ExecutionSpace& space,               
                      "fill_stokes_double_layer_matrix: T must have size 3 * num_source_points.");
 
   // Compute the scale factor
-  const double scale_factor = -3.0 / (4.0 * M_PI * viscosity);
+  const double scale_factor = -impl::three_over_four_pi / viscosity;
   Kokkos::parallel_for(
       "DoubleLayerMatrixFill",
       Kokkos::MDRangePolicy<ExecutionSpace, Kokkos::Rank<2>>(space, {0, 0}, {num_target_points, num_source_points}),
@@ -875,7 +880,7 @@ void fill_stokes_double_layer_matrix(const ExecutionSpace& space,               
 
         // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
         const double dr2 = dx * dx + dy * dy + dz * dz;
-        const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+        const bool coincident = dr2 < mundy::get_zero_tolerance<double>();
         const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
         const double rinv2 = rinv * rinv;
         const double rinv5 = rinv * rinv2 * rinv2;
@@ -1084,12 +1089,12 @@ void add_complementary_matrix(const ExecutionSpace& space,                      
 
 /// \brief Fill the periphery's second-kind operator M = J + T + N (interior trace).
 ///
-/// M f = u is the second kind Fredholm integral equation for the Stokes flow a closed periphery induces to satisfy the
-/// surface velocity u (for no-slip, u = -u_slip); f is a stresslet surface density (see the file header).
+/// M q = u is the second kind Fredholm integral equation for the Stokes flow a closed periphery induces to satisfy the
+/// surface velocity u (for no-slip, u = -u_slip); q is the surface density (see the file header).
 ///   - J + T: the singularity-subtracted interior trace of the double layer, J = sigma / (2 viscosity) I
 ///     (add_singularity_subtraction)
 ///   - N: the null-space completion (add_complementary_matrix)
-/// Reversing the normals reverses J + T (N is invariant), so f changes sign and the interior flow T[f] is unchanged.
+/// Reversing the normals reverses J + T (N is invariant), so q changes sign and the interior flow T[q] is unchanged.
 ///
 /// \param space The execution space
 /// \param[in] viscosity The viscosity
@@ -1135,11 +1140,11 @@ void fill_skfie_matrix(const ExecutionSpace& space,                           //
   add_complementary_matrix(space, viscosity, surface_area, normals, quadrature_weights, M);
 }
 
-/// \brief Accumulate u += M f, the matrix-free form of fill_skfie_matrix.
+/// \brief Accumulate u += M q, the matrix-free form of fill_skfie_matrix.
 ///
 /// Per target t (see fill_skfie_matrix for sigma, J, T, and N):
-///   u_t += sum_{s != t} T_{t,s} (f_s - f_t) + (sigma / viscosity) f_t
-///          + normal_t / (viscosity |Gamma|) sum_s quadrature_weight_s normal_s . f_s
+///   u_t += sum_{s != t} T_{t,s} (q_s - q_t) + (sigma / viscosity) q_t
+///          + normal_t / (viscosity |Gamma|) sum_s quadrature_weight_s normal_s . q_s
 ///
 /// \param space The execution space
 /// \param[in] viscosity The viscosity
@@ -1147,40 +1152,40 @@ void fill_skfie_matrix(const ExecutionSpace& space,                           //
 /// \param[in] positions The surface positions (size num_points * 3)
 /// \param[in] normals The surface normals (size num_points * 3)
 /// \param[in] quadrature_weights The quadrature weights (size num_points)
-/// \param[in] forces The density f (size num_points * 3)
-/// \param[out] velocities M f is accumulated into this vector (size num_points * 3)
+/// \param[in] densities The surface density q (size num_points * 3)
+/// \param[out] velocities M q is accumulated into this vector (size num_points * 3)
 /// \param[in] outward_normal Whether the normals point out of (true) or into (false) the enclosed region; checked
 /// against the geometry
 template <class ExecutionSpace, typename PosVectorType, typename NormalVectorType, typename QuadratureWeightVectorType,
-          typename ForceVectorType, typename VelocityVectorType>
+          typename DensityVectorType, typename VelocityVectorType>
 void apply_skfie(const ExecutionSpace& space,                           //
                  const double viscosity,                                //
                  const size_t num_points,                               //
                  const PosVectorType& positions,                        //
                  const NormalVectorType& normals,                       //
                  const QuadratureWeightVectorType& quadrature_weights,  //
-                 const ForceVectorType& forces,                         //
+                 const DensityVectorType& densities,                    //
                  const VelocityVectorType& velocities,                  //
                  const bool outward_normal) {
-  static_assert(impl::are_double_vectors_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType, ForceVectorType,
-                                           VelocityVectorType>,
+  static_assert(impl::are_double_vectors_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType,
+                                           DensityVectorType, VelocityVectorType>,
                 "apply_skfie: inputs must be rank-1 Kokkos::Views of double.");
-  static_assert(impl::share_memory_space_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType, ForceVectorType,
-                                           VelocityVectorType>,
+  static_assert(impl::share_memory_space_v<PosVectorType, NormalVectorType, QuadratureWeightVectorType,
+                                           DensityVectorType, VelocityVectorType>,
                 "apply_skfie: all views must share one memory space.");
 
   impl::require_positive_viscosity(viscosity, "apply_skfie");
   impl::require_length(positions, 3 * num_points, "apply_skfie");
   impl::require_length(normals, 3 * num_points, "apply_skfie");
   impl::require_length(quadrature_weights, num_points, "apply_skfie");
-  impl::require_length(forces, 3 * num_points, "apply_skfie");
+  impl::require_length(densities, 3 * num_points, "apply_skfie");
   impl::require_length(velocities, 3 * num_points, "apply_skfie");
   const double surface_area = impl::validated_surface_area(space, num_points, positions, normals, quadrature_weights,
                                                            outward_normal, "apply_skfie");
   const double complementary_scale = 1.0 / (viscosity * surface_area);
 
   // Launch the parallel kernel
-  const double scale_factor = 3.0 / (4.0 * M_PI * viscosity);
+  const double scale_factor = impl::three_over_four_pi / viscosity;
   auto skfie_contribution = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     // Compute the distance vector
     const double dx = positions(3 * t + 0) - positions(3 * s + 0);
@@ -1195,30 +1200,31 @@ void apply_skfie(const ExecutionSpace& space,                           //
     const double normal_t1 = normals(3 * t + 1);
     const double normal_t2 = normals(3 * t + 2);
     const double quadrature_weight_s = quadrature_weights(s);
-    const double force_s0 = forces(3 * s + 0);
-    const double force_s1 = forces(3 * s + 1);
-    const double force_s2 = forces(3 * s + 2);
-    const double force_t0 = forces(3 * t + 0);
-    const double force_t1 = forces(3 * t + 1);
-    const double force_t2 = forces(3 * t + 2);
+    const double q_s0 = densities(3 * s + 0);
+    const double q_s1 = densities(3 * s + 1);
+    const double q_s2 = densities(3 * s + 2);
+    const double q_t0 = densities(3 * t + 0);
+    const double q_t1 = densities(3 * t + 1);
+    const double q_t2 = densities(3 * t + 2);
 
     // Compute rinv5. If r is zero, set rinv5 to zero, effectively setting the diagonal of K to zero.
     const double dr2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = dr2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = dr2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : dr2);
     const double rinv2 = rinv * rinv;
     const double rinv5 = rinv * rinv2 * rinv2;
 
-    // Compute the singularity-subtracted double layer potential, K(x_t, y_s) (f_s - f_t)
-    const double sxx = normal_s0 * (force_s0 - force_t0) * quadrature_weight_s;
-    const double sxy = normal_s0 * (force_s1 - force_t1) * quadrature_weight_s;
-    const double sxz = normal_s0 * (force_s2 - force_t2) * quadrature_weight_s;
-    const double syx = normal_s1 * (force_s0 - force_t0) * quadrature_weight_s;
-    const double syy = normal_s1 * (force_s1 - force_t1) * quadrature_weight_s;
-    const double syz = normal_s1 * (force_s2 - force_t2) * quadrature_weight_s;
-    const double szx = normal_s2 * (force_s0 - force_t0) * quadrature_weight_s;
-    const double szy = normal_s2 * (force_s1 - force_t1) * quadrature_weight_s;
-    const double szz = normal_s2 * (force_s2 - force_t2) * quadrature_weight_s;
+    // Compute the singularity-subtracted double layer potential, K(x_t, y_s) (q_s - q_t)
+    const double sxx = normal_s0 * (q_s0 - q_t0) * quadrature_weight_s;
+    const double sxy = normal_s0 * (q_s1 - q_t1) * quadrature_weight_s;
+    const double sxz = normal_s0 * (q_s2 - q_t2) * quadrature_weight_s;
+    const double syx = normal_s1 * (q_s0 - q_t0) * quadrature_weight_s;
+    const double syy = normal_s1 * (q_s1 - q_t1) * quadrature_weight_s;
+    const double syz = normal_s1 * (q_s2 - q_t2) * quadrature_weight_s;
+    const double szx = normal_s2 * (q_s0 - q_t0) * quadrature_weight_s;
+    const double szy = normal_s2 * (q_s1 - q_t1) * quadrature_weight_s;
+    const double szz = normal_s2 * (q_s2 - q_t2) * quadrature_weight_s;
 
     double coeff = sxx * dx * dx + syy * dy * dy + szz * dz * dz;
     coeff += (sxy + syx) * dx * dy;
@@ -1226,30 +1232,30 @@ void apply_skfie(const ExecutionSpace& space,                           //
     coeff += (syz + szy) * dy * dz;
     coeff *= -scale_factor * rinv5;
 
-    // Compute the complementarity term v += normal(t) * normal(s) dot f(s) w(s) / (viscosity |Gamma|)
-    const double scaled_normal_dot_force = (normal_s0 * force_s0 + normal_s1 * force_s1 + normal_s2 * force_s2) *
+    // Compute the complementarity term v += normal(t) * normal(s) dot q(s) w(s) / (viscosity |Gamma|)
+    const double scaled_normal_dot_density = (normal_s0 * q_s0 + normal_s1 * q_s1 + normal_s2 * q_s2) *
                                            quadrature_weight_s * complementary_scale;
 
-    return mundy::Vector3d{dx * coeff + scaled_normal_dot_force * normal_t0,
-                           dy * coeff + scaled_normal_dot_force * normal_t1,
-                           dz * coeff + scaled_normal_dot_force * normal_t2};
+    return mundy::Vector3d{dx * coeff + scaled_normal_dot_density * normal_t0,
+                           dy * coeff + scaled_normal_dot_density * normal_t1,
+                           dz * coeff + scaled_normal_dot_density * normal_t2};
   };
 
   mundy::direct_sum(space, num_points, num_points, skfie_contribution, ADD_TO_VECTOR3_ENTRIES(velocities));
 
-  // The analytic target term (sigma / viscosity) f_t, added once per target node -- NOT inside the per-source sweep.
+  // The analytic target term (sigma / viscosity) q_t, added once per target node -- NOT inside the per-source sweep.
   const double target_coefficient = impl::interior_trace_coefficient(viscosity, outward_normal);
   Kokkos::parallel_for(
       "apply_skfie_target_term", Kokkos::RangePolicy<ExecutionSpace>(0, 3 * num_points),
-      KOKKOS_LAMBDA(const size_t i) { velocities(i) += target_coefficient * forces(i); });
+      KOKKOS_LAMBDA(const size_t i) { velocities(i) += target_coefficient * densities(i); });
 }
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
 /// \brief The operator M of fill_skfie_matrix as a matrix-free Mundy LinearOperator.
 ///
-/// apply(f, u) computes u = M f by evaluating apply_skfie against the surface geometry it holds; no dense matrix is
+/// apply(q, u) computes u = M q by evaluating apply_skfie against the surface geometry it holds; no dense matrix is
 /// formed, so mobile geometry is handled by re-applying against updated positions/normals. Its views live in the
-/// solve's memory space (\c ExecSpace::memory_space), which apply_skfie requires to match the force/velocity views
+/// solve's memory space (\c ExecSpace::memory_space), which apply_skfie requires to match the density/velocity views
 /// Belos hands it. Domain and range are the 3*num_nodes flattened surface vectors.
 template <class ExecSpace>
 struct SkfieOp {
@@ -1277,20 +1283,20 @@ struct SkfieOp {
     return view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "skfie_range"), 3 * num_nodes);
   }
 
-  // u = M f. apply_skfie accumulates into u via atomic_add, so u must be zeroed first.
-  template <class ForceVector, class VelocityVector>
-  void apply(const ForceVector& f, VelocityVector& u) const {
+  // u = M q. apply_skfie accumulates into u via atomic_add, so u must be zeroed first.
+  template <class DensityVector, class VelocityVector>
+  void apply(const DensityVector& q, VelocityVector& u) const {
     Kokkos::deep_copy(u, 0.0);
-    apply_skfie(exec_space{}, viscosity, num_nodes, surface_positions, surface_normals, quadrature_weights, f, u,
+    apply_skfie(exec_space{}, viscosity, num_nodes, surface_positions, surface_normals, quadrature_weights, q, u,
                 outward_normal);
   }
 };
 #endif  // HAVE_MUNDYMATH_BELOS && HAVE_MUNDYMATH_TPETRA
 
-/// \brief How the periphery inverts the self-interaction operator M to recover surface forces from a slip velocity.
+/// \brief How the periphery inverts its operator M to recover the surface density from a slip velocity.
 enum class InverseMethod {
   Direct,          //!< Precompute the dense inverse M^{-1} and apply it with a gemv.
-  MatrixFreeGMRES  //!< Solve M f = u matrix-free with Belos GMRES; no dense matrix is formed (requires Belos+Tpetra).
+  MatrixFreeGMRES  //!< Solve M q = u matrix-free with Belos GMRES; no dense matrix is formed (requires Belos+Tpetra).
 };
 
 template <typename ExecSpace>
@@ -1475,6 +1481,8 @@ class PeripheryT {
 
   /// \brief Set the precomputed matrix
   ///
+  /// M^{-1} scales with the viscosity, so it must come from a periphery of this viscosity.
+  ///
   /// \param M_inv The precomputed matrix (size 3 * num_nodes x 3 * num_nodes)
   template <class MemorySpace>
   PeripheryT& set_inverse_self_interaction_matrix(
@@ -1491,6 +1499,8 @@ class PeripheryT {
 
   /// \brief Set the precomputed matrix
   ///
+  /// M^{-1} scales with the viscosity, so it must come from a periphery of this viscosity.
+  ///
   /// \param M_inv_flat The precomputed matrix, row-major (size 3 * num_nodes x 3 * num_nodes)
   PeripheryT& set_inverse_self_interaction_matrix(const double* M_inv_flat) {
     for (size_t i = 0; i < 3 * num_surface_nodes_; ++i) {
@@ -1506,6 +1516,8 @@ class PeripheryT {
   }
 
   /// \brief Set the precomputed matrix
+  ///
+  /// M^{-1} scales with the viscosity, so it must come from a periphery of this viscosity.
   ///
   /// \param inverse_self_interaction_matrix_filename A Matrix Market file of the precomputed matrix, as written by
   /// write_inverse_self_interaction_matrix (num_nodes * 3 x num_nodes * 3)
@@ -1555,34 +1567,34 @@ class PeripheryT {
     return *this;
   }
 
-  /// \brief Compute the surface forces induced by external flow on the surface
+  /// \brief Accumulate the surface density q = -M^{-1} u whose flow cancels the external flow u on the surface
   ///
   /// \param[in] external_flow_velocity The external flow velocity (size num_nodes x 3)
-  /// \param[out] surface_forces The surface forces induced by enforcing no-slip on the surface (size num_nodes x 3)
+  /// \param[in,out] surface_density The density q is added to (size num_nodes x 3)
   PeripheryT& compute_surface_forces(
       const Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>& external_flow_velocity,
-      Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>& surface_forces) {
-    // Both paths accumulate surface_forces += -M^{-1} u_slip: the negative balances the imposed slip velocity, and
-    // the result is added onto whatever surface_forces already holds.
+      Kokkos::View<double*, Kokkos::LayoutLeft, DeviceMemorySpace>& surface_density) {
+    // Both paths accumulate surface_density += -M^{-1} u_slip: the negative balances the imposed slip velocity, and
+    // the result is added onto whatever surface_density already holds.
     if (inverse_method_ == InverseMethod::Direct) {
       MUNDY_THROW_REQUIRE(is_inverse_self_interaction_matrix_set_, std::runtime_error,
                           "compute_surface_forces: build_inverse_self_interaction_matrix() or "
                           "set_inverse_self_interaction_matrix() must be called before using the direct inverse.");
-      KokkosBlas::gemv(DeviceExecutionSpace(), "N", -1.0, M_inv_, external_flow_velocity, 1.0, surface_forces);
+      KokkosBlas::gemv(DeviceExecutionSpace(), "N", -1.0, M_inv_, external_flow_velocity, 1.0, surface_density);
       return *this;
     }
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
-    // MatrixFreeGMRES: solve M f = u_slip for f = M^{-1} u_slip, then accumulate -f into surface_forces.
+    // MatrixFreeGMRES: solve M q = u_slip for M^{-1} u_slip, then accumulate its negative into surface_density.
     MUNDY_THROW_REQUIRE(is_matrix_free_inverse_set_, std::runtime_error,
                         "compute_surface_forces: build_matrix_free_inverse() must be called before using the "
                         "matrix-free inverse.");
     belos_inv_op_->apply(external_flow_velocity, mf_solution_);
     auto solution = mf_solution_;
-    auto forces = surface_forces;
+    auto density = surface_density;
     Kokkos::parallel_for(
-        "compute_surface_forces_accumulate", Kokkos::RangePolicy<DeviceExecutionSpace>(0, forces.extent(0)),
-        KOKKOS_LAMBDA(const size_t i) { forces(i) -= solution(i); });
+        "compute_surface_forces_accumulate", Kokkos::RangePolicy<DeviceExecutionSpace>(0, density.extent(0)),
+        KOKKOS_LAMBDA(const size_t i) { density(i) -= solution(i); });
     return *this;
 #else
     MUNDY_THROW_REQUIRE(false, std::logic_error,
@@ -1774,13 +1786,14 @@ void apply_stokeslet_rotlet_kernel(const ExecutionSpace& space, const double vis
                                    const TargetVelocityVectorType& target_velocities) {
   const size_t num_source_points = source_positions.extent(0) / 3;
   const size_t num_target_points = target_positions.extent(0) / 3;
-  const double scale_factor = 1.0 / (8.0 * M_PI * viscosity);
+  const double scale_factor = impl::one_over_eight_pi / viscosity;
   auto contribution = KOKKOS_LAMBDA(const size_t t, const size_t s) {
     const double dx = target_positions(3 * t + 0) - source_positions(3 * s + 0);
     const double dy = target_positions(3 * t + 1) - source_positions(3 * s + 1);
     const double dz = target_positions(3 * t + 2) - source_positions(3 * s + 2);
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on, so direct_sum vectorizes
+    // coincident is selected on, not branched on, so direct_sum vectorizes
+    const bool coincident = r2 < mundy::get_zero_tolerance<double>();
     const double rinv = coincident ? 0.0 : mundy::rsqrt(coincident ? 1.0 : r2);
     const double rinv3 = rinv * rinv * rinv;
 
@@ -1831,18 +1844,17 @@ void apply_body_self_lhs(const ExecutionSpace& space, const double viscosity, co
       });
 }
 
-/// \brief Fused reduction value: the mean force (3) and mean torque (3) accumulated over a body's quadrature.
-struct BodyMeanForceTorque {
-  double force[3];
-  double torque[3];
+/// \brief Fused reduction value: the moments of a body's density q and its surface moment, over its quadrature.
+struct BodyDensityMoments {
+  double integral[3];        //!< sum_k w_k q_k
+  double moment[3];          //!< sum_k w_k (x_k - X) x q_k
+  double surface_moment[6];  //!< sum_k w_k (|x_k - X|^2 I - (x_k - X)(x_k - X)), as xx, yy, zz, xy, xz, yz
 };
 
-/// \brief Reduction functor accumulating BodyMeanForceTorque in one sweep over a body's quadrature.
-///
-/// Accumulates the (un-normalized) mean force sum_k w_k q_k and mean torque sum_k w_k (x_k - X) x q_k.
+/// \brief Reduction functor accumulating BodyDensityMoments in one sweep over a body's quadrature.
 template <class PosView, class WgtView, class QView, class CenterView>
-struct BodyMeanForceTorqueFunctor {
-  using value_type = BodyMeanForceTorque;
+struct BodyDensityMomentsFunctor {
+  using value_type = BodyDensityMoments;
 
   PosView positions;
   WgtView weights;
@@ -1854,48 +1866,68 @@ struct BodyMeanForceTorqueFunctor {
     const double qx = q(3 * k + 0);
     const double qy = q(3 * k + 1);
     const double qz = q(3 * k + 2);
-    acc.force[0] += w * qx;
-    acc.force[1] += w * qy;
-    acc.force[2] += w * qz;
+    acc.integral[0] += w * qx;
+    acc.integral[1] += w * qy;
+    acc.integral[2] += w * qz;
 
     const double rx = positions(3 * k + 0) - center(0);
     const double ry = positions(3 * k + 1) - center(1);
     const double rz = positions(3 * k + 2) - center(2);
-    acc.torque[0] += w * (ry * qz - rz * qy);
-    acc.torque[1] += w * (rz * qx - rx * qz);
-    acc.torque[2] += w * (rx * qy - ry * qx);
+    acc.moment[0] += w * (ry * qz - rz * qy);
+    acc.moment[1] += w * (rz * qx - rx * qz);
+    acc.moment[2] += w * (rx * qy - ry * qx);
+
+    acc.surface_moment[0] += w * (ry * ry + rz * rz);
+    acc.surface_moment[1] += w * (rx * rx + rz * rz);
+    acc.surface_moment[2] += w * (rx * rx + ry * ry);
+    acc.surface_moment[3] -= w * rx * ry;
+    acc.surface_moment[4] -= w * rx * rz;
+    acc.surface_moment[5] -= w * ry * rz;
   }
 
   KOKKOS_INLINE_FUNCTION void join(value_type& dst, const value_type& src) const {
     for (int i = 0; i < 3; ++i) {
-      dst.force[i] += src.force[i];
-      dst.torque[i] += src.torque[i];
+      dst.integral[i] += src.integral[i];
+      dst.moment[i] += src.moment[i];
+    }
+    for (int i = 0; i < 6; ++i) {
+      dst.surface_moment[i] += src.surface_moment[i];
     }
   }
 
   KOKKOS_INLINE_FUNCTION void init(value_type& v) const {
     for (int i = 0; i < 3; ++i) {
-      v.force[i] = 0.0;
-      v.torque[i] = 0.0;
+      v.integral[i] = 0.0;
+      v.moment[i] = 0.0;
+    }
+    for (int i = 0; i < 6; ++i) {
+      v.surface_moment[i] = 0.0;
     }
   }
 };
 
-/// \brief The mean force and mean torque of a body's surface density, in one reduction sweep.
+/// \brief The rigid-motion part (U, Omega) of a body's velocity density q / viscosity, in one reduction sweep.
 ///
-///   mean_force = (1/|Gamma|) integral q dS,   mean_torque = (1/|Gamma|) integral (y - X) x q dS.
-/// These recover the body's rigid translational and angular velocity from the surface density.
+///   U = 1 / (viscosity |Gamma|) integral q dS,    Omega = 1 / viscosity I^{-1} integral (y - X) x q dS,
+/// with I = integral (|y - X|^2 I - (y - X)(y - X)) dS the surface moment about X. These are the projection of
+/// q / viscosity onto rigid motions when X is the centroid of Gamma (see the file header).
 template <class ExecutionSpace, class PosView, class WgtView, class QView, class CenterView>
-void body_mean_force_and_torque([[maybe_unused]] const ExecutionSpace& space, const size_t num_quadrature_points,
-                                const PosView& positions, const WgtView& weights, const QView& q,
-                                const CenterView& center, const double area, mundy::Vector3d& mean_force,
-                                mundy::Vector3d& mean_torque) {
-  BodyMeanForceTorqueFunctor<PosView, WgtView, QView, CenterView> functor{positions, weights, q, center};
-  BodyMeanForceTorque acc;
-  Kokkos::parallel_reduce("body_mean_force_and_torque", Kokkos::RangePolicy<ExecutionSpace>(0, num_quadrature_points),
+void body_rigid_projection([[maybe_unused]] const ExecutionSpace& space, const double viscosity,
+                           const size_t num_quadrature_points, const PosView& positions, const WgtView& weights,
+                           const QView& q, const CenterView& center, const double area, mundy::Vector3d& velocity,
+                           mundy::Vector3d& angular_velocity) {
+  BodyDensityMomentsFunctor<PosView, WgtView, QView, CenterView> functor{positions, weights, q, center};
+  BodyDensityMoments acc;
+  Kokkos::parallel_reduce("body_rigid_projection", Kokkos::RangePolicy<ExecutionSpace>(0, num_quadrature_points),
                           functor, acc);
-  mean_force = mundy::Vector3d(acc.force[0] / area, acc.force[1] / area, acc.force[2] / area);
-  mean_torque = mundy::Vector3d(acc.torque[0] / area, acc.torque[1] / area, acc.torque[2] / area);
+  const double* const s = acc.surface_moment;
+  const mundy::Matrix3d surface_moment(s[0], s[3], s[4],  //
+                                       s[3], s[1], s[5],  //
+                                       s[4], s[5], s[2]);
+  const mundy::Vector3d integral(acc.integral[0], acc.integral[1], acc.integral[2]);
+  const mundy::Vector3d moment(acc.moment[0], acc.moment[1], acc.moment[2]);
+  velocity = integral / (viscosity * area);
+  angular_velocity = mundy::inverse(surface_moment) * moment / viscosity;
 }
 
 /// \brief One motile rigid body with its own surface quadrature.
@@ -2246,23 +2278,24 @@ struct BodyMobilityOp {
       }
     }
 
-    // constraint rows:  (1/|Gamma|) integral q - U ,  (1/|Gamma|) integral (y-X) x q - Omega.
+    // constraint rows: the rigid-motion part of q / viscosity minus (U, Omega) (see the file header).
     for (size_t i = 0; i < num_bodies; ++i) {
       const auto& body = B.bodies[i];
-      mundy::Vector3d mean_force;
-      mundy::Vector3d mean_torque;
-      body_mean_force_and_torque(ExecSpace{}, body.num_quadrature_points, body.positions, body.weights, density(x, i),
-                                 body.center, body.area, mean_force, mean_torque);
-      const Kokkos::Array<double, 3> mf = {mean_force[0], mean_force[1], mean_force[2]};
-      const Kokkos::Array<double, 3> mt = {mean_torque[0], mean_torque[1], mean_torque[2]};
+      mundy::Vector3d rigid_velocity;
+      mundy::Vector3d rigid_angular_velocity;
+      body_rigid_projection(ExecSpace{}, viscosity, body.num_quadrature_points, body.positions, body.weights,
+                            density(x, i), body.center, body.area, rigid_velocity, rigid_angular_velocity);
+      const Kokkos::Array<double, 3> rv = {rigid_velocity[0], rigid_velocity[1], rigid_velocity[2]};
+      const Kokkos::Array<double, 3> rw = {rigid_angular_velocity[0], rigid_angular_velocity[1],
+                                           rigid_angular_velocity[2]};
       auto U_i = trans(x, i);
       auto Om_i = rot(x, i);
       auto yU_i = trans(y, i);
       auto yO_i = rot(y, i);
       Kokkos::parallel_for(
           "body_constraint_rows", Kokkos::RangePolicy<ExecSpace>(0, 3), KOKKOS_LAMBDA(const int k) {
-            yU_i(k) = mf[k] - U_i(k);
-            yO_i(k) = mt[k] - Om_i(k);
+            yU_i(k) = rv[k] - U_i(k);
+            yO_i(k) = rw[k] - Om_i(k);
           });
     }
   }
@@ -2476,8 +2509,12 @@ class MobilitySystem {
 
   //! \brief Set the (optional) periphery; the system shares ownership.
   //!
-  //! An empty shared_ptr leaves the system in free space.
+  //! An empty shared_ptr leaves the system in free space. The periphery's M^{-1} scales with its viscosity, which must
+  //! therefore be the system's.
   MobilitySystem& set_periphery(std::shared_ptr<const PeripheryT<ExecSpace>> periphery) {
+    MUNDY_THROW_REQUIRE(!periphery || periphery->get_viscosity() == viscosity_, std::invalid_argument,
+                        mundy::sink() << "MobilitySystem::set_periphery: the periphery's viscosity "
+                                      << periphery->get_viscosity() << " is not the system's " << viscosity_);
     periphery_ = std::move(periphery);
     return *this;
   }
