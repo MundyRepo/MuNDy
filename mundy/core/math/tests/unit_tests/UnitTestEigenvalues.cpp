@@ -38,13 +38,15 @@
 #include <vector>
 
 // Mundy
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_KOKKOSKERNELS
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Matrix3.hpp>
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/Vector3.hpp>
 #include <mundy_math/eigenvalues.hpp>
 #include <mundy_math/solver_backends.hpp>
-#include <mundy_utils/rng.hpp>  // for mundy::make_philox
+#include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
+#include <mundy_utils/rng.hpp>           // for mundy::make_philox
 
 namespace mundy {
 
@@ -333,23 +335,46 @@ double abs_overlap_with_tridiagonal_eigenvector(const view_t& q, size_t k) {
   return std::abs(overlap);
 }
 
+// sign * T as an operator that applies itself and, with KokkosKernels, as a dense and a sparse matrix.
 TEST(Eigenvalues, KokkosBounds) {
   constexpr size_t n = 16;
   for (const double sign : {1.0, -1.0}) {
-    const TridiagonalKokkosOp A{n, sign};
-    auto prob = make_eigen_problem<kokkos_backend_t>(TridiagonalKokkosOp(A));
-    auto dominant = make_power_state(random_start_view(n, 5), A.make_range_vector(), A.make_range_vector());
-    auto opposite = make_power_state(random_start_view(n, 6), A.make_range_vector(), A.make_range_vector());
-    const auto strat = make_power_strategy(PowerConfig<double>{.max_iters = 20000, .tol = 1e-12});
+    const auto check = [&](const auto& A, const char* kind) {
+      using op_t = std::remove_cvref_t<decltype(A)>;
+      auto prob = make_eigen_problem<kokkos_backend_t>(op_t(A));
+      auto dominant = make_power_state(random_start_view(n, 5), kokkos_backend_t::make_range_vector(A),
+                                       kokkos_backend_t::make_range_vector(A));
+      auto opposite = make_power_state(random_start_view(n, 6), kokkos_backend_t::make_range_vector(A),
+                                       kokkos_backend_t::make_range_vector(A));
+      const auto strat = make_power_strategy(PowerConfig<double>{.max_iters = 20000, .tol = 1e-12});
 
-    const auto bounds = solve_eigen_bounds(prob, strat, dominant, opposite);
-    ASSERT_TRUE(bounds.dominant.converged) << "sign=" << sign;
-    ASSERT_TRUE(bounds.opposite.converged) << "sign=" << sign;
+      const auto bounds = solve_eigen_bounds(prob, strat, dominant, opposite);
+      ASSERT_TRUE(bounds.dominant.converged) << kind << " sign=" << sign;
+      ASSERT_TRUE(bounds.opposite.converged) << kind << " sign=" << sign;
 
-    EXPECT_NEAR(bounds.dominant.eigenvalue, sign * tridiagonal_eigenvalue(n, n), 1e-12) << "sign=" << sign;
-    EXPECT_NEAR(bounds.opposite.eigenvalue, sign * tridiagonal_eigenvalue(n, 1), 1e-12) << "sign=" << sign;
-    EXPECT_NEAR(abs_overlap_with_tridiagonal_eigenvector(dominant.q(), n), 1.0, 1e-12) << "sign=" << sign;
-    EXPECT_NEAR(abs_overlap_with_tridiagonal_eigenvector(opposite.q(), 1), 1.0, 1e-12) << "sign=" << sign;
+      EXPECT_NEAR(bounds.dominant.eigenvalue, sign * tridiagonal_eigenvalue(n, n), 1e-12) << kind << " sign=" << sign;
+      EXPECT_NEAR(bounds.opposite.eigenvalue, sign * tridiagonal_eigenvalue(n, 1), 1e-12) << kind << " sign=" << sign;
+      EXPECT_NEAR(abs_overlap_with_tridiagonal_eigenvector(dominant.q(), n), 1.0, 1e-12) << kind << " sign=" << sign;
+      EXPECT_NEAR(abs_overlap_with_tridiagonal_eigenvector(opposite.q(), 1), 1.0, 1e-12) << kind << " sign=" << sign;
+    };
+    check(TridiagonalKokkosOp{n, sign}, "applies itself");
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+    using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+    using sparse_matrix_t = KokkosSparse::CrsMatrix<
+        double, int, Kokkos::Device<Kokkos::DefaultExecutionSpace, Kokkos::DefaultExecutionSpace::memory_space>, void,
+        size_t>;
+    const dense_matrix_t dense("dense", n, n);
+    const auto dense_host = Kokkos::create_mirror_view(dense);
+    for (size_t i = 0; i < n; ++i) {
+      dense_host(i, i) = 2.0 * sign;
+      if (i > 0) dense_host(i, i - 1) = -sign;
+      if (i + 1 < n) dense_host(i, i + 1) = -sign;
+    }
+    Kokkos::deep_copy(dense, dense_host);
+    check(dense, "dense");
+    check(make_sparse_matrix<sparse_matrix_t>(dense), "sparse");
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
   }
 }
 //@}

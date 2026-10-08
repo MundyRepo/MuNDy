@@ -34,6 +34,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <mundy_math/belos_solver.hpp>
+#include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
 #include <stdexcept>
 
 namespace mundy {
@@ -257,13 +258,31 @@ host_view_t ramp(int n, double step = 0.5) {
 // rhs = A * x_exact (x_exact given on host).
 template <class Op>
 view_t known_rhs(const Op& A, const host_view_t& x_exact_h) {
-  const int n = static_cast<int>(A.domain_size());
+  const int n = static_cast<int>(kokkos_backend_t::domain_size(A));
   view_t x(Kokkos::view_alloc(Kokkos::WithoutInitializing, "known_x"), n);
   Kokkos::deep_copy(x, x_exact_h);
   view_t b(Kokkos::view_alloc(Kokkos::WithoutInitializing, "known_b"), n);
-  A.apply(x, b);
+  kokkos_backend_t::apply(A, x, b);
   return b;
 }
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, mem_space>;
+using sparse_matrix_t = KokkosSparse::CrsMatrix<double, int, Kokkos::Device<exec_space, mem_space>, void, size_t>;
+
+/// \brief The n x n tridiagonal matrix with sub, diag and super on its three diagonals.
+dense_matrix_t dense_tridiagonal(int n, double sub, double diag, double super) {
+  dense_matrix_t A("A", n, n);
+  const auto A_host = Kokkos::create_mirror_view(A);
+  for (int i = 0; i < n; ++i) {
+    A_host(i, i) = diag;
+    if (i > 0) A_host(i, i - 1) = sub;
+    if (i + 1 < n) A_host(i, i + 1) = super;
+  }
+  Kokkos::deep_copy(A, A_host);
+  return A;
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 // Solve A x = rhs from a cold start via belos_solve; return the result, leaving the solution in x_out.
 template <class Op, class Precond = NoPreconditioner>
@@ -330,39 +349,55 @@ static_assert(LinearOperator<kokkos_backend_t, BelosInvOp<kokkos_backend_t, Nons
 
 // ---- Solver-menu coverage: every BelosSolver enumerator is exercised through a real solve. ----
 
+// The system an operator that applies itself defines, solved through it and, with KokkosKernels, through the dense and
+// the sparse matrix of its entries.
 TEST(BelosSolver, NonsymmetricSolversConverge) {
-  const NonsymTridiagOp A{12};
-  const host_view_t xe = ramp(A.n);
-  const view_t rhs = known_rhs(A, xe);
+  const NonsymTridiagOp op{12};
+  const host_view_t xe = ramp(op.n);
+  const view_t rhs = known_rhs(op, xe);
 
-  for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_GMRES, BelosSolver::BICGSTAB, BelosSolver::TFQMR}) {
-    BelosConfig<double> cfg;
-    cfg.solver = s;
-    cfg.tol = 1e-10;
-    cfg.max_iters = 200;
-    cfg.num_blocks = A.n;
-    view_t x("x", A.n);
-    const auto res = solve_into(A, rhs, x, cfg);
-    EXPECT_TRUE(res.converged) << impl::solver_name_string(s) << " did not converge: " << res;
-    expect_matches(x, xe);
-  }
+  const auto check = [&](const auto& A, const char* kind) {
+    for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_GMRES, BelosSolver::BICGSTAB, BelosSolver::TFQMR}) {
+      BelosConfig<double> cfg;
+      cfg.solver = s;
+      cfg.tol = 1e-10;
+      cfg.max_iters = 200;
+      cfg.num_blocks = op.n;
+      view_t x("x", op.n);
+      const auto res = solve_into(A, rhs, x, cfg);
+      EXPECT_TRUE(res.converged) << kind << ": " << impl::solver_name_string(s) << " did not converge: " << res;
+      expect_matches(x, xe);
+    }
+  };
+  check(op, "applies itself");
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  check(dense_tridiagonal(op.n, -2.0, 4.0, -1.0), "dense");
+  check(make_sparse_matrix<sparse_matrix_t>(dense_tridiagonal(op.n, -2.0, 4.0, -1.0)), "sparse");
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 
 TEST(BelosSolver, SymmetricSolversConvergeOnSpdSystem) {
-  const SymTridiagOp A{12};
-  const host_view_t xe = ramp(A.n);
-  const view_t rhs = known_rhs(A, xe);
+  const SymTridiagOp op{12};
+  const host_view_t xe = ramp(op.n);
+  const view_t rhs = known_rhs(op, xe);
 
-  for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_CG, BelosSolver::MINRES}) {
-    BelosConfig<double> cfg;
-    cfg.solver = s;
-    cfg.tol = 1e-10;
-    cfg.max_iters = 200;
-    view_t x("x", A.n);
-    const auto res = solve_into(A, rhs, x, cfg);
-    EXPECT_TRUE(res.converged) << impl::solver_name_string(s) << " did not converge: " << res;
-    expect_matches(x, xe);
-  }
+  const auto check = [&](const auto& A, const char* kind) {
+    for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_CG, BelosSolver::MINRES}) {
+      BelosConfig<double> cfg;
+      cfg.solver = s;
+      cfg.tol = 1e-10;
+      cfg.max_iters = 200;
+      view_t x("x", op.n);
+      const auto res = solve_into(A, rhs, x, cfg);
+      EXPECT_TRUE(res.converged) << kind << ": " << impl::solver_name_string(s) << " did not converge: " << res;
+      expect_matches(x, xe);
+    }
+  };
+  check(op, "applies itself");
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  check(dense_tridiagonal(op.n, -1.0, 4.0, -1.0), "dense");
+  check(make_sparse_matrix<sparse_matrix_t>(dense_tridiagonal(op.n, -1.0, 4.0, -1.0)), "sparse");
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 
 TEST(BelosSolver, GcrodrConvergesWithRecycleParams) {

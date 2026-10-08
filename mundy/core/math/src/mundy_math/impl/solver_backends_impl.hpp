@@ -30,16 +30,55 @@
 #include <type_traits>
 #include <utility>
 
+// KokkosKernels
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+#include <KokkosSparse_CrsMatrix.hpp>  // for KokkosSparse::is_crs_matrix_v
+#endif
+
 namespace mundy {
 
 namespace impl {
 
+/// \brief A dense matrix in Kokkos::View<double**> or Kokkos::View<const double**> form.
 template <class Op>
 concept DenseMatView = Kokkos::is_view_v<Op> && requires {
   // These are checked in constraint context:
   { std::remove_reference_t<Op>::rank } -> std::convertible_to<int>;
   typename std::remove_reference_t<Op>::non_const_value_type;
 } && (std::remove_reference_t<Op>::rank == 2);
+
+/// \brief A sparse matrix in KokkosSparse::CrsMatrix (compressed row storage) form.
+template <class Op>
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+concept SparseMatView = KokkosSparse::is_crs_matrix_v<std::remove_cvref_t<Op>>;
+#else
+concept SparseMatView = false;
+#endif
+
+/// \brief A dense or sparse matrix view, as opposed to an operator that applies itself.
+template <class Op>
+concept MatView = DenseMatView<Op> || SparseMatView<Op>;
+
+/// \brief The number of rows of a matrix view.
+template <MatView Matrix>
+KOKKOS_INLINE_FUNCTION size_t mat_view_num_rows(const Matrix& A) {
+  if constexpr (DenseMatView<Matrix>) {
+    return A.extent(0);
+  } else {
+    return static_cast<size_t>(A.numRows());
+  }
+}
+
+/// \brief The number of columns of a matrix view.
+template <MatView Matrix>
+KOKKOS_INLINE_FUNCTION size_t mat_view_num_cols(const Matrix& A) {
+  if constexpr (DenseMatView<Matrix>) {
+    return A.extent(1);
+  } else {
+    return static_cast<size_t>(A.numCols());
+  }
+}
 
 template <class Op, typename X, typename Y>
 concept HasApplyMember = requires(const Op& op, const X& x, Y& y) {

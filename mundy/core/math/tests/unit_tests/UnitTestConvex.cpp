@@ -32,9 +32,11 @@
 #endif
 
 // C++ core
-#include <cmath>    // for std::ldexp
-#include <limits>   // for std::numeric_limits
-#include <ostream>  // for std::cout
+#include <cmath>        // for std::ldexp
+#include <limits>       // for std::numeric_limits
+#include <ostream>      // for std::cout
+#include <string_view>  // for std::string_view
+#include <type_traits>  // for std::is_same_v
 
 // Mundy
 #include <mundy_math/Matrix.hpp>  // for mundy::Matrix
@@ -44,6 +46,7 @@
 #include <mundy_math/cqpp.hpp>
 #include <mundy_math/lcp.hpp>
 #include <mundy_math/linear_system.hpp>  // for mundy::{CGConfig, make_cg_inv_op}
+#include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
 #include <mundy_utils/rng.hpp>  // for mundy::make_philox
 
 namespace mundy {
@@ -1073,6 +1076,42 @@ struct RandomMixedCongruentCCQP {
 
 }  // namespace mixed
 
+/// \brief Problem with each of its matrices given as the sparse matrix holding the same entries.
+template <class Problem>
+struct SparseMatrices : Problem {
+  using sparse_t =
+      KokkosSparse::CrsMatrix<typename Problem::value_type, int,
+                              Kokkos::Device<typename Problem::exec_space, typename Problem::exec_space::memory_space>,
+                              void, size_t>;
+
+  std::string name() const {
+    return "SparseMatrices<" + Problem::name() + ">";
+  }
+
+  // clang-format off
+  sparse_t get_A()    const requires requires(const Problem& p) { p.get_A(); }    { return sparse(Problem::get_A()); }
+  sparse_t get_D()    const requires requires(const Problem& p) { p.get_D(); }    { return sparse(Problem::get_D()); }
+  sparse_t get_M()    const requires requires(const Problem& p) { p.get_M(); }    { return sparse(Problem::get_M()); }
+  sparse_t get_DT()   const requires requires(const Problem& p) { p.get_DT(); }   { return sparse(Problem::get_DT()); }
+  sparse_t get_B()    const requires requires(const Problem& p) { p.get_B(); }    { return sparse(Problem::get_B()); }
+  sparse_t get_S()    const requires requires(const Problem& p) { p.get_S(); }    { return sparse(Problem::get_S()); }
+  sparse_t get_BT()   const requires requires(const Problem& p) { p.get_BT(); }   { return sparse(Problem::get_BT()); }
+  sparse_t get_Kinv() const requires requires(const Problem& p) { p.get_Kinv(); } { return sparse(Problem::get_Kinv()); }
+  // clang-format on
+
+ private:
+  template <class DenseMatrix>
+  static sparse_t sparse(const DenseMatrix& dense) {
+    return make_sparse_matrix<sparse_t>(dense);
+  }
+};
+
+/// \brief problem with its matrices sparse.
+template <class Problem>
+SparseMatrices<Problem> as_sparse(const Problem& problem) {
+  return SparseMatrices<Problem>{problem};
+}
+
 }  // namespace kokkos_backend
 //@}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
@@ -1399,6 +1438,7 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   auto exec_space = test.get_exec_space();
+  using backend_t = KokkosBackend<decltype(exec_space)>;
 
   // Problem setup
   auto DT = test.get_DT();
@@ -1414,18 +1454,18 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   auto y_exact = test.get_exact_y();
 
   // Double check sizes:
-  ASSERT_EQ(M.extent(0), M.extent(1)) << "M should be square";
-  ASSERT_EQ(DT.extent(0), D.extent(1)) << "DT and D are supposed to be transposes of each other";
-  ASSERT_EQ(DT.extent(1), D.extent(0)) << "DT and D are supposed to be transposes of each other";
-  ASSERT_EQ(DT.extent(1), M.extent(0)) << "DT * M should be well-defined";
-  ASSERT_EQ(M.extent(1), D.extent(0)) << "M * D should be well-defined";
-  ASSERT_EQ(M.extent(1), B.extent(0)) << "M * B should be well-defined";
-  ASSERT_EQ(BT.extent(1), M.extent(0)) << "B^T * M should be well-defined";
+  ASSERT_EQ(backend_t::range_size(M), backend_t::domain_size(M)) << "M should be square";
+  ASSERT_EQ(backend_t::range_size(DT), backend_t::domain_size(D)) << "DT and D are supposed to be transposes";
+  ASSERT_EQ(backend_t::domain_size(DT), backend_t::range_size(D)) << "DT and D are supposed to be transposes";
+  ASSERT_EQ(backend_t::domain_size(DT), backend_t::range_size(M)) << "DT * M should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(M), backend_t::range_size(D)) << "M * D should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(M), backend_t::range_size(B)) << "M * B should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(BT), backend_t::range_size(M)) << "B^T * M should be well-defined";
 
-  ASSERT_EQ(D.extent(1), x_exact.extent(0)) << "D * x should be well-defined";
-  ASSERT_EQ(B.extent(1), y_exact.extent(0)) << "B * y should be well-defined";
-  ASSERT_EQ(S.extent(1), BT.extent(0)) << "S * BT should be well-defined";
-  ASSERT_EQ(B.extent(1), S.extent(0)) << "B * S should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(D), x_exact.extent(0)) << "D * x should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(B), y_exact.extent(0)) << "B * y should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(S), backend_t::range_size(BT)) << "S * BT should be well-defined";
+  ASSERT_EQ(backend_t::domain_size(B), backend_t::range_size(S)) << "B * S should be well-defined";
   ASSERT_EQ(q.extent(0), x_exact.extent(0)) << "q should be same size as x_exact";
   ASSERT_EQ(b.extent(0), y_exact.extent(0)) << "b should be same size as y_exact";
 
@@ -1436,30 +1476,54 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   auto M_op = mixed_cqpp.M();
   auto f_b = mixed_cqpp.f_b();
 
-  using backend_t = KokkosBackend<decltype(exec_space)>;
   ASSERT_EQ(backend_t::domain_size(M_op), backend_t::size(f_b)) << "M and f_b should be compatible for multiplication";
   ASSERT_EQ(backend_t::domain_size(DT_op), backend_t::range_size(M_op)) << "DT and M should be compatible for DT * M";
 }
 
-/// \brief The number of Kokkos allocations made while f runs.
+/// \brief The Kokkos allocations one sparse apply makes on ExecSpace.
+///
+/// On CUDA its team launch takes a team-scratch slot, an allocation even when the kernel asks for no scratch; host
+/// launches make none.
+template <class ExecSpace>
+constexpr size_t allocations_per_sparse_apply() {
+#ifdef KOKKOS_ENABLE_CUDA
+  if constexpr (std::is_same_v<ExecSpace, Kokkos::Cuda>) {
+    return 1;
+  }
+#endif
+  return 0;
+}
+
+/// \brief The Kokkos allocations made while some code runs, and its sparse applies (KokkosSparse::spmv launches).
+struct AllocationCount {
+  size_t allocations = 0;
+  size_t sparse_applies = 0;
+};
+
+/// \brief The Kokkos allocations made, and sparse applies launched, while f runs.
 template <class F>
-size_t count_allocations(F&& f) {
-  static size_t count = 0;
-  count = 0;
+AllocationCount count_allocations(F&& f) {
+  static AllocationCount count;
+  count = AllocationCount{};
   Kokkos::Tools::Experimental::set_init_callback([](const int, const uint64_t, const uint32_t,
                                                     Kokkos_Profiling_KokkosPDeviceInfo*) {});
   Kokkos::Tools::Experimental::set_allocate_data_callback(
-      [](const Kokkos_Profiling_SpaceHandle, const char*, const void*, const uint64_t) { ++count; });
+      [](const Kokkos_Profiling_SpaceHandle, const char*, const void*, const uint64_t) { ++count.allocations; });
+  Kokkos::Tools::Experimental::set_begin_parallel_for_callback([](const char* name, const uint32_t, uint64_t*) {
+    count.sparse_applies += std::string_view(name).starts_with("KokkosSparse::spmv");
+  });
   f();
+  Kokkos::Tools::Experimental::set_begin_parallel_for_callback(nullptr);
   Kokkos::Tools::Experimental::set_allocate_data_callback(nullptr);
   Kokkos::Tools::Experimental::set_init_callback(nullptr);
   return count;
 }
 
 // A mixed CQPP formed in a reused workspace solves exactly as one formed in fresh storage, and forming and solving it
-// through that workspace allocates nothing.
+// through that workspace allocates nothing but the allocations its sparse applies make.
 void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
-  using backend_t = KokkosBackend<decltype(test.get_exec_space())>;
+  using exec_space = decltype(test.get_exec_space());
+  using backend_t = KokkosBackend<exec_space>;
   const auto DT = test.get_DT();
   const auto M = test.get_M();
   const auto D = test.get_D();
@@ -1490,7 +1554,7 @@ void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
     Kokkos::deep_copy(x_reused, 99.99);
     auto state = make_pgd_state(x_reused, grad, x_tmp, grad_tmp);
     PGDResult<double> result;
-    const size_t num_allocations = count_allocations([&] {
+    const AllocationCount counted = count_allocations([&] {
       result = solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, workspace), pgd, state);
     });
     const auto x_reused_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_reused);
@@ -1498,7 +1562,8 @@ void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
     for (size_t i = 0; i < size; ++i) {
       EXPECT_EQ(x_reused_host(i), x_fresh_host(i)) << test.name() << " pass " << pass << " entry " << i;
     }
-    EXPECT_EQ(num_allocations, 0u) << test.name() << " pass " << pass;
+    EXPECT_EQ(counted.allocations, allocations_per_sparse_apply<exec_space>() * counted.sparse_applies)
+        << test.name() << " pass " << pass;
   }
 }
 
@@ -1689,6 +1754,7 @@ TEST(Convex, KokkosAnalyticalSolutions) {
                                     kokkos_backend::RandomLCP{7},                        //
                                     kokkos_backend::RandomLCP{200});
   std::apply([](auto&&... test_case) { (run_kokkos_test(test_case), ...); }, test_cases);
+  std::apply([](auto&&... test_case) { (run_kokkos_test(kokkos_backend::as_sparse(test_case)), ...); }, test_cases);
 }
 
 TEST(Convex, KokkosCongruentAnalyticalSolutions) {
@@ -1704,6 +1770,8 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
                                     CongruentLCPWrapper{kokkos_backend::RandomLCP{7}},                        //
                                     CongruentLCPWrapper{kokkos_backend::RandomLCP{200}});
   std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(test_case), ...); }, test_cases);
+  std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
+             test_cases);
 }
 
 TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
@@ -1714,6 +1782,8 @@ TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
   auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
+  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
+             test_cases);
 }
 
 TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
@@ -1726,6 +1796,12 @@ TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_workspace_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case), ...); },
              test_cases);
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
+      },
+      test_cases);
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 

@@ -22,16 +22,19 @@
 #define MUNDY_MATH_MATRIX_MARKET_HPP_
 
 /// \file matrix_market.hpp
-/// \brief Write and read vectors and matrices as Matrix Market array files, exactly.
+/// \brief Write and read vectors and matrices as Matrix Market array files, and sparse matrices as Matrix Market
+/// coordinate files, exactly.
 ///
 /// The Matrix Market array format is the dense text format of numpy and scipy (mmread, mmwrite), MATLAB, Tpetra, and
 /// Eigen: the banner "%%MatrixMarket matrix array real general", the extents "rows cols", then the entries in
-/// column-major order, one per line. A vector is a rows x 1 column. Each entry is written as the shortest decimal that
-/// reads back to the same bits, so writing then reading reproduces every value exactly, including -0, infinities, and
-/// NaN.
+/// column-major order, one per line. A vector is a rows x 1 column. The coordinate format is their sparse peer: the
+/// banner "%%MatrixMarket matrix coordinate real general", the extents "rows cols nnz", then one stored entry per line
+/// as "row col value" with one-based indices. Each entry is written as the shortest decimal that reads back to the same
+/// bits, so writing then reading reproduces every value exactly, including -0, infinities, and NaN.
 ///
 /// Both solver backends are supported. Kokkos views (rank 1 or 2, any memory space and layout) are resized to the
-/// file's extents. AVector and AMatrix have compile-time sizes, so the file's extents must equal them.
+/// file's extents, and a sparse matrix takes the file's extents and entries. AVector and AMatrix have compile-time
+/// sizes, so the file's extents must equal them.
 ///
 /// A linear operator, with or without a stored matrix, is written as its matrix: column j is the operator applied to
 /// the j-th column of the identity.
@@ -43,16 +46,22 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::View, Kokkos::resize, Kokkos::create_mirror_view, ...
 
 // C++ core
+#include <algorithm>    // for std::sort
 #include <string>       // for std::string
+#include <tuple>        // for std::tuple
 #include <type_traits>  // for std::is_same_v, std::remove_cv_t, std::remove_cvref_t
+#include <vector>       // for std::vector
 
 // Mundy
-#include <mundy_math/Accessor.hpp>                 // for mundy::ValidAccessor
-#include <mundy_math/Matrix.hpp>                   // for mundy::AMatrix
-#include <mundy_math/Vector.hpp>                   // for mundy::AVector
-#include <mundy_math/impl/matrix_market_impl.hpp>  // for mundy::impl::{write_matrix_market, MatrixMarketReader}
-#include <mundy_utils/requires.hpp>                // for MUNDY_REQUIRES
-#include <mundy_utils/throw_assert.hpp>            // for MUNDY_THROW_REQUIRE
+#include <MundyMath_config.hpp>                      // for HAVE_MUNDYMATH_KOKKOSKERNELS
+#include <mundy_math/Accessor.hpp>                   // for mundy::ValidAccessor
+#include <mundy_math/Matrix.hpp>                     // for mundy::AMatrix
+#include <mundy_math/Vector.hpp>                     // for mundy::AVector
+#include <mundy_math/impl/matrix_market_impl.hpp>    // for mundy::impl::{write_matrix_market, MatrixMarketReader}
+#include <mundy_math/impl/solver_backends_impl.hpp>  // for mundy::impl::SparseMatView
+#include <mundy_math/sparse_matrix.hpp>              // for mundy::impl::{SparseEntry, make_sparse_matrix}
+#include <mundy_utils/requires.hpp>                  // for MUNDY_REQUIRES
+#include <mundy_utils/throw_assert.hpp>              // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -101,6 +110,56 @@ void read_matrix_market(const std::string& filename, View& view) {
   Kokkos::deep_copy(view, host);
 }
 //@}
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+//! \name Sparse matrices
+//@{
+
+/// \brief Write a sparse matrix to filename as a Matrix Market coordinate file, its stored entries in row order.
+template <class SparseMatrix>
+MUNDY_REQUIRES(impl::SparseMatView<SparseMatrix>)
+void write_matrix_market(const std::string& filename, const SparseMatrix& matrix) {
+  using scalar_t = typename SparseMatrix::non_const_value_type;
+  const auto row_map = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, matrix.graph.row_map);
+  const auto cols_of = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, matrix.graph.entries);
+  const auto values = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, matrix.values);
+  std::vector<size_t> row_of(values.extent(0));
+  for (size_t i = 0; i < static_cast<size_t>(matrix.numRows()); ++i) {
+    for (size_t k = row_map(i); k < static_cast<size_t>(row_map(i + 1)); ++k) {
+      row_of[k] = i;
+    }
+  }
+  impl::write_matrix_market_coordinate<scalar_t>(
+      filename, matrix.numRows(), matrix.numCols(), values.extent(0), [&](size_t k) {
+        return std::tuple<size_t, size_t, scalar_t>{row_of[k], static_cast<size_t>(cols_of(k)), values(k)};
+      });
+}
+
+/// \brief Read a Matrix Market coordinate file into a sparse matrix, which takes the file's extents and entries.
+///
+/// Each row's entries are ordered by column. The file lists each entry at most once, in any order.
+template <class SparseMatrix>
+MUNDY_REQUIRES(impl::SparseMatView<SparseMatrix>)
+void read_matrix_market(const std::string& filename, SparseMatrix& matrix) {
+  using scalar_t = typename SparseMatrix::non_const_value_type;
+  impl::MatrixMarketReader reader(filename);
+  std::vector<impl::SparseEntry<scalar_t>> entries;
+  entries.reserve(reader.nnz());
+  reader.read_coordinate<scalar_t>(
+      [&](size_t i, size_t j, scalar_t value) { entries.push_back(impl::SparseEntry<scalar_t>{i, j, value}); });
+  const auto precedes = [](const impl::SparseEntry<scalar_t>& a, const impl::SparseEntry<scalar_t>& b) {
+    return a.row < b.row || (a.row == b.row && a.col < b.col);
+  };
+  std::sort(entries.begin(), entries.end(), precedes);
+  for (size_t k = 1; k < entries.size(); ++k) {
+    MUNDY_THROW_REQUIRE(precedes(entries[k - 1], entries[k]), std::runtime_error,
+                        mundy::sink() << "read_matrix_market: " << filename << " lists entry (" << entries[k].row + 1
+                                      << ", " << entries[k].col + 1 << ") more than once.");
+  }
+  matrix = impl::make_sparse_matrix<SparseMatrix>(reader.rows(), reader.cols(), entries);
+}
+//@}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 //! \name AVector and AMatrix
 //@{
