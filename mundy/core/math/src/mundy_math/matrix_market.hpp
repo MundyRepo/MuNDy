@@ -33,6 +33,9 @@
 /// Both solver backends are supported. Kokkos views (rank 1 or 2, any memory space and layout) are resized to the
 /// file's extents. AVector and AMatrix have compile-time sizes, so the file's extents must equal them.
 ///
+/// A linear operator, with or without a stored matrix, is written as its matrix: column j is the operator applied to
+/// the j-th column of the identity.
+///
 /// These functions are serial: every process that calls them opens the file itself, so under MPI only one process
 /// should write a given file.
 
@@ -41,7 +44,7 @@
 
 // C++ core
 #include <string>       // for std::string
-#include <type_traits>  // for std::is_same_v, std::remove_cv_t
+#include <type_traits>  // for std::is_same_v, std::remove_cv_t, std::remove_cvref_t
 
 // Mundy
 #include <mundy_math/Accessor.hpp>                 // for mundy::ValidAccessor
@@ -130,6 +133,53 @@ void read_matrix_market(const std::string& filename, AMatrix<T, N, M, Accessor>&
   impl::MatrixMarketReader reader(filename);
   reader.require_extents(N, M);
   reader.read<T>([&](size_t i, size_t j, T value) { mat(i, j) = value; });
+}
+//@}
+
+//! \name Linear operators
+//@{
+
+/// \brief Write op's matrix to filename as a Matrix Market array file: column j is op applied, through Backend, to the
+/// j-th column of the identity.
+///
+/// The file has op's range size rows and its domain size columns, and writing it applies op once per column. Each
+/// entry carries the arithmetic of op's apply: an entry of -0 is written as 0, and a non-finite entry makes the
+/// entries it meets through the identity's zeros NaN.
+template <class Backend, class LinearOp>
+void write_matrix_market(const std::string& filename, const LinearOp& op) {
+  const size_t rows = Backend::range_size(op);
+  const size_t cols = Backend::domain_size(op);
+  auto unit = Backend::make_domain_vector(op);
+  auto column = Backend::make_range_vector(op);
+  auto workspace = Backend::make_workspace(op);
+
+  // The writer asks for the entries column by column, so each column is applied once.
+  size_t applied = cols;
+  if constexpr (Kokkos::is_view_v<decltype(column)>) {
+    using scalar_t = typename decltype(column)::non_const_value_type;
+    const auto column_host = Kokkos::create_mirror_view(column);
+    impl::write_matrix_market<scalar_t>(filename, rows, cols, [&](size_t i, size_t j) {
+      if (j != applied) {
+        Kokkos::deep_copy(unit, scalar_t(0));
+        Kokkos::deep_copy(Kokkos::subview(unit, j), scalar_t(1));
+        Backend::apply(op, unit, column, workspace);
+        Kokkos::deep_copy(column_host, column);
+        applied = j;
+      }
+      return column_host(i);
+    });
+  } else {
+    using scalar_t = std::remove_cvref_t<decltype(column[0])>;
+    impl::write_matrix_market<scalar_t>(filename, rows, cols, [&](size_t i, size_t j) {
+      if (j != applied) {
+        unit.fill(scalar_t(0));
+        unit[j] = scalar_t(1);
+        Backend::apply(op, unit, column, workspace);
+        applied = j;
+      }
+      return column[i];
+    });
+  }
 }
 //@}
 
