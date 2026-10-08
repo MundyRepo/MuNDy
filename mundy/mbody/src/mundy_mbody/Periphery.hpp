@@ -545,6 +545,11 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
   impl::require_length(target_radii, num_target_points, "apply_rpyc_kernel");
 
   // Launch the parallel kernel
+  //
+  // Every case below has the form v = tmp1 f + tmp2 (f . r_hat) r_hat with case-dependent tmp1 and tmp2. All three
+  // cases' coefficients are computed and the right pair is selected, not branched to, so that direct_sum vectorizes.
+  // Divides and square roots, not the arithmetic, bound this kernel, so 1 / r and the near-field scale share one
+  // division.
   constexpr double one_over_eight = 1.0 / 8.0;
   constexpr double one_over_six = 1.0 / 6.0;
   constexpr double one_over_three = 1.0 / 3.0;
@@ -566,8 +571,18 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
     const double r2 = dx * dx + dy * dy + dz * dz;
     const double r = Kokkos::sqrt(r2);
     const double r3 = r * r2;
-    const bool coincident = r2 < DOUBLE_ZERO;  // selected, not branched on
-    const double rinv = coincident ? 0.0 : 1.0 / (coincident ? 1.0 : r);
+    const bool coincident = r2 < DOUBLE_ZERO;
+    const bool far = a + b < r;
+    const bool overlapping = !far && Kokkos::abs(a - b) < r && a > DOUBLE_ZERO && b > DOUBLE_ZERO;
+
+    // One division for two reciprocals: with q = a b (corrected RPY) or q = max(a, b) (local drag),
+    // 1 / r = q / (r q) and 1 / q = r / (r q). Coincident points use r = 1, so nothing divides by zero.
+    const double max_a_b = Kokkos::max(a, b);
+    const double near_denominator = overlapping ? a * b : (max_a_b > 0.0 ? max_a_b : 1.0);
+    const double r_safe = coincident ? 1.0 : r;
+    const double inv_r_q = 1.0 / (r_safe * near_denominator);
+    const double rinv = coincident ? 0.0 : near_denominator * inv_r_q;
+    const double near_scale = one_over_six * inv_pi * inv_viscosity * (r_safe * inv_r_q);  // 1 / (6 pi mu q)
     const double rinv2 = rinv * rinv;
     const double rinv3 = rinv2 * rinv;
 
@@ -577,53 +592,37 @@ void apply_rpyc_kernel(const ExecutionSpace& space,                  //
 
     const double f_dot_rhat = fx * dx_hat + fy * dy_hat + fz * dz_hat;
 
-    if (a + b < r) {
-      // If a + b < r, regular RPY
-      // M = coeff * (tmp1 * I + tmp2 * r_hat outer r_hat)
-      //   coeff = 1 / (8 pi mu r_norm)
-      //   tmp1 = 1 + (a**2 + b**2) / (3 * r_norm**2)
-      //   tmp2 = 1 - (a**2 + b**2) / (r_norm**2)
-      //   r_hat = r / r_norm
-      const double a2 = a * a;
-      const double b2 = b * b;
-      const double a2_plus_b2_rinv2 = (a2 + b2) * rinv2;
-      const double scale_factor = one_over_eight * inv_pi * inv_viscosity * rinv;
-      const double tmp1_scaled = scale_factor * (1. + a2_plus_b2_rinv2 * one_over_three);
-      const double tmp2_scaled = scale_factor * (1. - a2_plus_b2_rinv2);
-      return mundy::Vector3d{tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat),
-                             tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat),
-                             tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat)};
-    } else if (Kokkos::abs(a - b) < r && a > DOUBLE_ZERO && b > DOUBLE_ZERO) {
-      // If neither radius is zero and if abs(a - b) < r < a + b, corrected RPY
-      // M = 1/(6 pi mu a b) * (tmp1 I + tmp2 r_hat outer r_hat) f
-      //  tmp1 = (16 r^3 (a + b) - ((a - b)^2 + 3 r^2)^2) / (32 r^3)
-      //  tmp2 = 3 ((a - b)^2 - r^2)^2 / (32 r^3)
-      //  r_hat = r / r_norm
-      const double a_plus_b = a + b;
-      const double a_minus_b = a - b;
-      const double a_minus_b2 = a_minus_b * a_minus_b;
-      const double tmp3 = a_minus_b2 + 3 * r2;
-      const double tmp4 = a_minus_b2 - r2;
+    // If a + b < r, regular RPY
+    // M = coeff * (tmp1 * I + tmp2 * r_hat outer r_hat)
+    //   coeff = 1 / (8 pi mu r_norm)
+    //   tmp1 = 1 + (a**2 + b**2) / (3 * r_norm**2)
+    //   tmp2 = 1 - (a**2 + b**2) / (r_norm**2)
+    //   r_hat = r / r_norm
+    const double a2_plus_b2_rinv2 = (a * a + b * b) * rinv2;
+    const double far_scale = one_over_eight * inv_pi * inv_viscosity * rinv;
+    const double far_tmp1_scaled = far_scale * (1. + a2_plus_b2_rinv2 * one_over_three);
+    const double far_tmp2_scaled = far_scale * (1. - a2_plus_b2_rinv2);
 
-      const double scale_factor = one_over_six * inv_pi * inv_viscosity / (a * b);
-      const double tmp1_scaled = scale_factor * (16.0 * r3 * a_plus_b - tmp3 * tmp3) * one_over_32 * rinv3;
-      const double tmp2_scaled = scale_factor * 3.0 * tmp4 * tmp4 * one_over_32 * rinv3;
+    // If neither radius is zero and if abs(a - b) < r < a + b, corrected RPY
+    // M = 1/(6 pi mu a b) * (tmp1 I + tmp2 r_hat outer r_hat) f
+    //  tmp1 = (16 r^3 (a + b) - ((a - b)^2 + 3 r^2)^2) / (32 r^3)
+    //  tmp2 = 3 ((a - b)^2 - r^2)^2 / (32 r^3)
+    //  r_hat = r / r_norm
+    const double a_minus_b2 = (a - b) * (a - b);
+    const double tmp3 = a_minus_b2 + 3 * r2;
+    const double tmp4 = a_minus_b2 - r2;
+    const double overlap_tmp1_scaled = near_scale * (16.0 * r3 * (a + b) - tmp3 * tmp3) * one_over_32 * rinv3;
+    const double overlap_tmp2_scaled = near_scale * 3.0 * tmp4 * tmp4 * one_over_32 * rinv3;
 
-      return mundy::Vector3d{tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat),
-                             tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat),
-                             tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat)};
-    } else {
-      //  if r < abs(a - b), Local drag
-      // v = 1 / (6 pi mu max(a, b)) * f
-      if (r2 < DOUBLE_ZERO) {
-        // Skip self interaction
-        return mundy::Vector3d{0.0, 0.0, 0.0};
-      }
+    // If r < abs(a - b), local drag (and skip self interaction)
+    // v = 1 / (6 pi mu max(a, b)) * f
+    const double drag_tmp1_scaled = coincident ? 0.0 : near_scale;
 
-      const double max_a_b = Kokkos::max(a, b);
-      const double scale_factor = one_over_six * inv_pi * inv_viscosity / max_a_b;
-      return mundy::Vector3d{scale_factor * fx, scale_factor * fy, scale_factor * fz};
-    }
+    const double tmp1_scaled = far ? far_tmp1_scaled : (overlapping ? overlap_tmp1_scaled : drag_tmp1_scaled);
+    const double tmp2_scaled = far ? far_tmp2_scaled : (overlapping ? overlap_tmp2_scaled : 0.0);
+    return mundy::Vector3d{tmp1_scaled * fx + tmp2_scaled * (f_dot_rhat * dx_hat),
+                           tmp1_scaled * fy + tmp2_scaled * (f_dot_rhat * dy_hat),
+                           tmp1_scaled * fz + tmp2_scaled * (f_dot_rhat * dz_hat)};
   };
 
   mundy::direct_sum(space, num_target_points, num_source_points, rpyc_computation,
