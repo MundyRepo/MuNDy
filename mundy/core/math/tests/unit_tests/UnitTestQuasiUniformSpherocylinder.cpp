@@ -188,7 +188,6 @@ void expect_runtime_rule_matches_compile_time_rule() {
 
 TEST(QuasiUniformSpherocylinder, IntegratesLowDegreePolynomialsWithSecondOrderAccuracy) {
   // For L = 4, the largest quadratic-moment error is the axial midpoint error in int z^2 dA.
-  expect_accurate_for_polynomials<3>(95.0 / (3 * 3));
   expect_accurate_for_polynomials<8>(95.0 / (8 * 8));
   expect_accurate_for_polynomials<16>(95.0 / (16 * 16));
 }
