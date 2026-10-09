@@ -26,18 +26,29 @@
 /// preconditioned.
 
 // C++ core
-#include <cstddef>  // for size_t
-#include <utility>  // for std::declval
+#include <cstddef>    // for size_t
+#include <optional>   // for std::optional
+#include <stdexcept>  // for std::logic_error
+#include <utility>    // for std::declval, std::in_place
 
 // Kokkos
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <MundyMath_config.hpp>                 // for HAVE_MUNDYMATH_{MUELU,TPETRA,KOKKOSKERNELS}
 #include <mundy_math/Matrix.hpp>                // for mundy::Matrix
 #include <mundy_math/Vector3.hpp>               // for mundy::Vector3d
 #include <mundy_math/preconditioners.hpp>       // for mundy::{Preconditioner, JacobiPreconditioner}
 #include <mundy_math/solver_backends.hpp>       // for mundy::KokkosBackend
 #include <mundy_mbody/KokkosMbodyMobility.hpp>  // for mundy::mbody::HasSelfMobility
+
+#if defined(HAVE_MUNDYMATH_MUELU) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
+#include <KokkosSparse_CrsMatrix.hpp>                           // for KokkosSparse::CrsMatrix
+#include <mundy_math/muelu_preconditioner.hpp>                  // for mundy::{MueLuConfig, MueLuPreconditioner}
+#include <mundy_mbody/impl/KokkosMbodyPreconditionersImpl.hpp>  // for mundy::mbody::impl::{make_row_rods, ...}
+#include <mundy_utils/host_ptr.hpp>                             // for mundy::host_ptr
+#include <mundy_utils/throw_assert.hpp>                         // for MUNDY_THROW_ASSERT
+#endif
 
 namespace mundy {
 
@@ -152,6 +163,101 @@ struct SelfMobilityJacobi {
     return SelfMobilityJacobiOp<typename Linearization::execution_space>(linearization.num_rows());
   }
 };
+
+#if defined(HAVE_MUNDYMATH_MUELU) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
+/// \brief One algebraic multigrid cycle of A_self = dt B^T M_self B + K^{-1}, for M_self the self blocks of M.
+///
+/// A_self(i, j) = dt sum v_ik^T M_b v_jl over the pairs (k, l) with b_ik = b_jl = b, plus K^{-1}_i when i = j, for b_ik
+/// the k-th rod of row i, v_ik = [force(i, k); torque(i, k)] and M_b rod b's self block: rows couple when they share a
+/// rod. A_self is the operator itself when M couples no two rods, and otherwise the operator with M's coupling between
+/// rods dropped. Each update assembles A_self at the linearization and rebuilds the cycle; copies share both.
+/// Host-only.
+template <typename ExecSpace>
+class SelfMobilityAMGOp {
+ public:
+  using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
+  using backend_t = ::mundy::KokkosBackend<ExecSpace>;
+  using matrix_t =
+      KokkosSparse::CrsMatrix<double, int, Kokkos::Device<ExecSpace, typename ExecSpace::memory_space>, void, size_t>;
+
+  SelfMobilityAMGOp(size_t num_rows, const ::mundy::MueLuConfig<double>& config)
+      : num_rows_(num_rows), state_(std::in_place, config) {
+  }
+
+  /// \brief A_self at the last update.
+  const matrix_t& matrix() const {
+    return state_->matrix;
+  }
+
+  size_t domain_size() const {
+    return num_rows_;
+  }
+  size_t range_size() const {
+    return num_rows_;
+  }
+  auto make_domain_vector() const {
+    return backend_t::template make_vector<view_t>(num_rows_);
+  }
+  auto make_range_vector() const {
+    return backend_t::template make_vector<view_t>(num_rows_);
+  }
+
+  /// \brief z := one cycle on r, for A_self at the last update.
+  template <class RVector, class ZVector>
+  void apply(const RVector& r, ZVector& z) const {
+    MUNDY_THROW_ASSERT(state_->cycle.has_value(), std::logic_error,
+                       "mbody::SelfMobilityAMGOp: applied before its first update.");
+    state_->cycle->apply(r, z);
+  }
+
+  /// \brief Assemble A_self at linearization and rebuild the cycle.
+  template <class Linearization>
+  void update(const Linearization& linearization) {
+    State& state = *state_;
+    const impl::RowRods<ExecSpace> row_rods = impl::make_row_rods<ExecSpace>(linearization.jacobian(), num_rows_);
+    // Rows keep their layout from update to update but may join other rods, which couple them differently.
+    const bool same_pattern = state.cycle.has_value() && impl::same_row_rods(row_rods, state.row_rods);
+    if (!same_pattern) {
+      state.row_rods = row_rods;
+      state.matrix = impl::make_shared_rod_pattern<matrix_t>(row_rods);
+    }
+    impl::fill_self_mobility_values<ExecSpace>(linearization.dt(), linearization.jacobian(), linearization.mobility(),
+                                               linearization.compliance(), state.matrix);
+    if (same_pattern) {
+      state.cycle->update(state.matrix);
+    } else {
+      state.cycle.emplace(backend_t{}, state.matrix, state.config);
+    }
+  }
+
+ private:
+  struct State {
+    explicit State(const ::mundy::MueLuConfig<double>& cycle_config) : config(cycle_config) {
+    }
+
+    ::mundy::MueLuConfig<double> config;
+    impl::RowRods<ExecSpace> row_rods;
+    matrix_t matrix;
+    std::optional<::mundy::MueLuPreconditioner<backend_t, matrix_t>> cycle;
+  };
+
+  size_t num_rows_;
+  ::mundy::host_ptr<State> state_;
+};
+
+/// \brief Algebraic multigrid preconditioning from the mobility's self blocks; the mobility must provide them
+/// (HasSelfMobility).
+struct SelfMobilityAMG {
+  ::mundy::MueLuConfig<double> config{};  ///< the multigrid cycle
+
+  template <class Linearization>
+  auto make_preconditioner(const Linearization& linearization) const {
+    static_assert(HasSelfMobility<typename Linearization::mobility_t>,
+                  "mbody::SelfMobilityAMG: the mobility must provide self_mobility(rod).");
+    return SelfMobilityAMGOp<typename Linearization::execution_space>(linearization.num_rows(), config);
+  }
+};
+#endif  // HAVE_MUNDYMATH_MUELU && HAVE_MUNDYMATH_TPETRA && HAVE_MUNDYMATH_KOKKOSKERNELS
 //@}
 
 }  // namespace mbody
