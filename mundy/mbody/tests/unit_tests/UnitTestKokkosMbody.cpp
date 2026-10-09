@@ -41,6 +41,7 @@
 #include <vector>     // for std::vector
 
 // Mundy
+#include <MundyMath_config.hpp>            // for HAVE_MUNDYMATH_{MUELU,TPETRA,KOKKOSKERNELS}
 #include <mundy_math/Matrix.hpp>           // for mundy::Matrix
 #include <mundy_math/eigenvalues.hpp>      // for mundy::make_eigen_problem, mundy::solve_eigen_problem
 #include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, JacobiPreconditioner}
@@ -234,6 +235,87 @@ struct ProbingSelfMobilityJacobi {
         SelfMobilityJacobi{}.make_preconditioner(linearization), records};
   }
 };
+
+#if defined(HAVE_MUNDYMATH_MUELU) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
+/// \brief At one update, SelfMobilityAMG's A_self and the operator probed by unit vectors, both dense, and the cycle's
+/// z = P r for a fixed r with the operator's A z.
+struct ProbedMatrix {
+  std::vector<std::vector<double>> self_mobility_amg;
+  std::vector<std::vector<double>> probed;
+  std::vector<double> r;
+  std::vector<double> z;
+  std::vector<double> a_z;
+};
+
+/// \brief SelfMobilityAMG, recording at each update its A_self, the operator it should equal, and one cycle.
+template <typename Space>
+struct ProbingSelfMobilityAMGOp : SelfMobilityAMGOp<Space> {
+  std::vector<ProbedMatrix>* records;
+
+  template <typename Linearization>
+  void update(const Linearization& linearization) {
+    using view_t = Kokkos::View<double*, typename Space::memory_space>;
+    SelfMobilityAMGOp<Space>::update(linearization);
+    const size_t num_rows = linearization.num_rows();
+    ProbedMatrix record{std::vector<std::vector<double>>(num_rows, std::vector<double>(num_rows, 0.0)),
+                        std::vector<std::vector<double>>(num_rows, std::vector<double>(num_rows, 0.0)),
+                        std::vector<double>(num_rows), std::vector<double>(num_rows), std::vector<double>(num_rows)};
+
+    // A_self, densified
+    const auto& matrix = this->matrix();
+    const auto row_map = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, matrix.graph.row_map);
+    const auto entries = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, matrix.graph.entries);
+    const auto values = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, matrix.values);
+    for (size_t i = 0; i < num_rows; ++i) {
+      for (size_t e = row_map(i); e < row_map(i + 1); ++e) {
+        record.self_mobility_amg[i][entries(e)] = values(e);
+      }
+    }
+
+    // The operator, column by column
+    view_t e("e", num_rows), column("column", num_rows);
+    for (size_t j = 0; j < num_rows; ++j) {
+      Kokkos::deep_copy(e, 0.0);
+      Kokkos::deep_copy(Kokkos::subview(e, j), 1.0);
+      linearization.apply(e, column);
+      const auto column_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, column);
+      for (size_t i = 0; i < num_rows; ++i) {
+        record.probed[i][j] = column_host(i);
+      }
+    }
+
+    // z = P r and A z
+    view_t r("r", num_rows), z("z", num_rows), a_z("a_z", num_rows);
+    const auto r_host = Kokkos::create_mirror_view(r);
+    for (size_t i = 0; i < num_rows; ++i) {
+      r_host(i) = std::sin(1.0 + 0.37 * static_cast<double>(i));
+    }
+    Kokkos::deep_copy(r, r_host);
+    this->apply(r, z);
+    linearization.apply(z, a_z);
+    const auto z_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, z);
+    const auto a_z_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, a_z);
+    for (size_t i = 0; i < num_rows; ++i) {
+      record.r[i] = r_host(i);
+      record.z[i] = z_host(i);
+      record.a_z[i] = a_z_host(i);
+    }
+    records->push_back(record);
+  }
+};
+
+/// \brief SelfMobilityAMG configured by config, recording into records at each update.
+struct ProbingSelfMobilityAMG {
+  MueLuConfig<double> config;
+  std::vector<ProbedMatrix>* records;
+
+  template <typename Linearization>
+  auto make_preconditioner(const Linearization& linearization) const {
+    return ProbingSelfMobilityAMGOp<typename Linearization::execution_space>{
+        SelfMobilityAMG{config}.make_preconditioner(linearization), records};
+  }
+};
+#endif  // HAVE_MUNDYMATH_MUELU && HAVE_MUNDYMATH_TPETRA && HAVE_MUNDYMATH_KOKKOSKERNELS
 
 //@}
 
@@ -3872,11 +3954,11 @@ struct ProppedCantilever {
 
 /// \brief A cantilever with links of family Link whose tip rests on an anchored sphere, settled under a midspan load.
 ///
-/// Each step is a sequence of at most max_iters linearizations, with the Schur complement preconditioned by its
-/// self-mobility Jacobi if preconditioned, through one workspace held across the steps if held_storage.
-template <typename Link>
+/// Each step is a sequence of at most max_iters linearizations, with the Schur complement preconditioned by policy,
+/// through one workspace held across the steps if held_storage.
+template <typename Link, typename Policy>
 ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double EI, double load, double dt,
-                                         unsigned max_iters, bool preconditioned, bool held_storage) {
+                                         unsigned max_iters, const Policy& policy, bool held_storage) {
   const size_t num_chain = num_segments + 2;
   const int midspan = static_cast<int>(num_segments / 2 + 1);
   const int tip = static_cast<int>(num_chain - 1);
@@ -3904,11 +3986,9 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
   const auto rods_d = create_mirror_view_and_copy(TestExecSpace{}, p.rods);
   const auto constraints_d = create_mirror_view_and_copy(TestExecSpace{}, constraints);
   const auto load_d = copy_load(rods_d);
-  const auto settle = [&](const auto& policy) {
-    return step_until_settled(make_mixed_slcp_integrator(rods_d, constraints_d, p.mobility_model, p.dt, policy), cfg,
-                              load_d, /*settled_step=*/10.0 * p.cfg.cg_tol, /*max_steps=*/1000, held_storage);
-  };
-  const bool settled = preconditioned ? settle(SelfMobilityJacobi{}) : settle(NoPreconditioner{});
+  const bool settled =
+      step_until_settled(make_mixed_slcp_integrator(rods_d, constraints_d, p.mobility_model, p.dt, policy), cfg, load_d,
+                         /*settled_step=*/10.0 * p.cfg.cg_tol, /*max_steps=*/1000, held_storage);
   deep_copy(p.rods, rods_d);
   deep_copy(constraints, constraints_d);
 
@@ -3933,16 +4013,17 @@ ProppedCantilever run_propped_cantilever(size_t num_segments, double L, double E
 //   R_N = P (N+2)(5N+2) / (8 (N+1)(2N+1)),
 //
 // first order in the spacing toward Euler-Bernoulli's 5P/16, with stiff-spring or rigid links and for either sequence
-// length, with and without the Schur complement preconditioned by its self-mobility Jacobi, and with a workspace per
-// step or one held across the steps. The steps keep the chain's geometry nonlinear, which at this load moves the
-// reaction by at most about 1e-6 of itself, shrinking as P^2. The tip rests on the obstacle to within what the solve's
-// tolerances allow (see run_propped_cantilever).
+// length, with the Schur complement unpreconditioned or preconditioned by its self-mobility Jacobi or algebraic
+// multigrid (several levels even on the coarsest chain), and with a workspace per step or one held across the steps.
+// The steps keep the chain's geometry nonlinear, which at this load moves the reaction by at most about 1e-6 of itself,
+// shrinking as P^2. The tip rests on the obstacle to within what the solve's tolerances allow (see
+// run_propped_cantilever).
 TEST(Mbody, ProppedCantileverMatchesHenckyBarChain) {
   const double L = 8.0, EI = 5.0, load = 0.01;
   const double continuum = 5.0 * load / 16.0;
   const char* const link_names[2] = {"stiff springs", "fixed lengths"};
 
-  for (const bool preconditioned : {false, true}) {
+  const auto check = [&](const auto& policy, const char* policy_name) {
     for (const bool held_storage : {false, true}) {
       for (const unsigned max_iters : {1u, 50u}) {
         for (int link = 0; link < 2; ++link) {
@@ -3953,32 +4034,39 @@ TEST(Mbody, ProppedCantileverMatchesHenckyBarChain) {
             const double hencky = load * (n + 2.0) * (5.0 * n + 2.0) / (8.0 * (n + 1.0) * (2.0 * n + 1.0));
             const ProppedCantilever r = link == 0 ? run_propped_cantilever<LinearSpringViews<HostExecSpace>>(
                                                         num_segments, L, EI, load,
-                                                        /*dt=*/100.0, max_iters, preconditioned, held_storage)
+                                                        /*dt=*/100.0, max_iters, policy, held_storage)
                                                   : run_propped_cantilever<FixedLengthViews<HostExecSpace>>(
                                                         num_segments, L, EI, load,
-                                                        /*dt=*/100.0, max_iters, preconditioned, held_storage);
+                                                        /*dt=*/100.0, max_iters, policy, held_storage);
 
             ASSERT_TRUE(r.settled) << link_names[link] << " at num_segments=" << num_segments
-                                   << " max_iters=" << max_iters << " preconditioned=" << preconditioned
+                                   << " max_iters=" << max_iters << " policy=" << policy_name
                                    << " held_storage=" << held_storage;
             EXPECT_NEAR(r.contact_force, hencky, 3e-6 * hencky)
                 << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters
-                << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+                << " policy=" << policy_name << " held_storage=" << held_storage;
             EXPECT_NEAR(r.tip_gap, 0.0, r.tip_gap_bound)
                 << link_names[link] << " at num_segments=" << num_segments << " max_iters=" << max_iters
-                << " preconditioned=" << preconditioned << " held_storage=" << held_storage;
+                << " policy=" << policy_name << " held_storage=" << held_storage;
             finest_scaled_error = n * (r.contact_force - continuum) / continuum;
             finest_scaled_error_expected = (9.0 * n + 3.0) / (10.0 * n + 15.0 + 5.0 / n);
           }
 
           // N rel_err = (9N + 3) / (10N + 15 + 5/N), which falls to 9/10
           EXPECT_NEAR(finest_scaled_error, finest_scaled_error_expected, 1e-4)
-              << link_names[link] << " at max_iters=" << max_iters << " preconditioned=" << preconditioned
+              << link_names[link] << " at max_iters=" << max_iters << " policy=" << policy_name
               << " held_storage=" << held_storage;
         }
       }
     }
-  }
+  };
+  check(NoPreconditioner{}, "unpreconditioned");
+  check(SelfMobilityJacobi{}, "self-mobility Jacobi");
+#if defined(HAVE_MUNDYMATH_MUELU) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
+  MueLuConfig<double> multigrid;
+  multigrid.coarse_max_size = 10;
+  check(SelfMobilityAMG{multigrid}, "self-mobility AMG");
+#endif
 }
 
 // The pre-bend must not reach the answer: amplitudes a decade apart agree on both boundary value problems.
@@ -4088,6 +4176,83 @@ TEST(Mbody, SelfMobilityJacobiIsTheDiagonal) {
     }
   }
 }
+
+#if defined(HAVE_MUNDYMATH_MUELU) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
+// SelfMobilityAMG's A_self is dt B^T M B + K^-1, exact under local drag, which couples no two rods: on the rows of
+// SelfMobilityJacobiIsTheDiagonal, at every solve of a sequence, and after the storage passes to constraints of the
+// same layout whose spring joins other rods. The two sum the same terms in different orders, each term bounded by
+// sqrt(A_ii A_jj), so they agree to a few dozen ulps of it. On these 15 rows the cycle has one level, solved directly,
+// so it inverts A: |A z - r| <= c n eps |A| |z|, with c = 10 covering pivot growth.
+TEST(Mbody, SelfMobilityAMGIsTheOperator) {
+  const auto p = make_fallback_problem();
+  const auto& c = p.constraints;
+  TriplePointAngularSpringViews<HostExecSpace> bend(1);
+  bend.rod_i(0) = 2;
+  bend.rod_j(0) = 4;
+  bend.rod_k(0) = 3;
+  bend.rest_angle(0) = 1.5;
+  bend.spring_constant(0) = 2.0;
+  const auto constraints =
+      make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
+                          get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
+                          get<FixedPositionViews<HostExecSpace>>(c), bend, get<ContactViews<HostExecSpace>>(c));
+  LinearSpringViews<HostExecSpace> rewired_spring(1);
+  rewired_spring.rod_i(0) = 1;
+  rewired_spring.rod_j(0) = 3;
+  rewired_spring.rest_length(0) = norm(p.rods.center(3) - p.rods.center(1));
+  rewired_spring.spring_constant(0) = 3.0;
+  const auto rewired =
+      make_constraint_set(rewired_spring, get<PinViews<HostExecSpace>>(c), get<FixedLengthViews<HostExecSpace>>(c),
+                          get<FixedPoseViews<HostExecSpace>>(c), get<FixedPositionViews<HostExecSpace>>(c), bend,
+                          get<ContactViews<HostExecSpace>>(c));
+
+  // Solve, then solve the rewired constraints through the same storage
+  std::vector<ProbedMatrix> records;
+  const ProbingSelfMobilityAMG policy{MueLuConfig<double>{}, &records};
+  const MixedSLCPConfig cfg{p.cfg, 3, p.cfg.cg_tol, p.cfg.cg_tol};
+  const auto integrator = make_mixed_slcp_integrator(
+      copy_to<TestExecSpace>(p.rods), copy_to<TestExecSpace>(constraints), p.mobility_model, p.dt, policy);
+  const MixedSLCPResult result = solve_step(integrator, cfg);
+  ASSERT_GE(result.num_iters, 2u) << result;
+  ASSERT_EQ(records.size(), result.num_iters) << "one update per solve";
+  const MixedSLCPResult rewired_result =
+      solve_step(make_mixed_slcp_integrator(copy_to<TestExecSpace>(p.rods), copy_to<TestExecSpace>(rewired),
+                                            p.mobility_model, p.dt, policy, integrator.workspace()),
+                 cfg);
+  ASSERT_EQ(records.size(), result.num_iters + rewired_result.num_iters) << "the storage serves the rewired solves";
+  size_t pattern_changes = 0;
+  for (size_t i = 0; i < 15; ++i) {
+    for (size_t j = 0; j < 15; ++j) {
+      pattern_changes += (records.front().probed[i][j] != 0.0) != (records.back().probed[i][j] != 0.0) ? 1 : 0;
+    }
+  }
+  ASSERT_GT(pattern_changes, 0u) << "the rewired spring should couple other rows";
+
+  // A_self = A, and P r solves A z = r, at every solve
+  for (size_t k = 0; k < records.size(); ++k) {
+    const ProbedMatrix& record = records[k];
+    ASSERT_EQ(record.probed.size(), 15u);
+    double a_norm = 0.0;
+    double z_norm = 0.0;
+    for (size_t i = 0; i < 15; ++i) {
+      double row_sum = 0.0;
+      for (size_t j = 0; j < 15; ++j) {
+        EXPECT_NEAR(
+            record.self_mobility_amg[i][j], record.probed[i][j],
+            32.0 * std::numeric_limits<double>::epsilon() * std::sqrt(record.probed[i][i] * record.probed[j][j]))
+            << "entry (" << i << ", " << j << ") at solve " << k;
+        row_sum += std::abs(record.probed[i][j]);
+      }
+      a_norm = std::max(a_norm, row_sum);
+      z_norm = std::max(z_norm, std::abs(record.z[i]));
+    }
+    for (size_t i = 0; i < 15; ++i) {
+      EXPECT_NEAR(record.a_z[i], record.r[i], 10.0 * 15.0 * std::numeric_limits<double>::epsilon() * a_norm * z_norm)
+          << "row " << i << " at solve " << k;
+    }
+  }
+}
+#endif  // HAVE_MUNDYMATH_MUELU && HAVE_MUNDYMATH_TPETRA && HAVE_MUNDYMATH_KOKKOSKERNELS
 
 // A caller's policy reaches CG, updated before every solve: with d = 1, preconditioned CG performs plain CG's
 // arithmetic, so the sequence reproduces the unpreconditioned one bit for bit, while d is NaN until the policy's first
