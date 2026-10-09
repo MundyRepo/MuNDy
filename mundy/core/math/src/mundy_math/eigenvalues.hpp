@@ -22,11 +22,14 @@
 #define MUNDY_MATH_EIGENVALUES_HPP_
 
 /// \file eigenvalues.hpp
-/// \brief Extremal eigenvalues of a square operator via the power method.
+/// \brief Extremal eigenvalues of a square operator via the power method or, for a symmetric one, the Lanczos method.
 ///
 /// The power method iterates q <- A q / ||A q|| from a caller-supplied start vector and reports the Rayleigh quotient
 /// lambda = q . A q of the unit iterate. It converges to the eigenvalue of largest magnitude at rate
 /// |lambda_2 / lambda_1| per iteration, provided the start vector has a component along its eigenvector.
+///
+/// The Lanczos method builds the tridiagonal T that A takes on the Krylov space of a caller-supplied start vector. T's
+/// extreme eigenvalues approach both ends of A's spectrum (of P A, preconditioned by an SPD P) from inside.
 
 // Kokkos:
 #include <Kokkos_Core.hpp>
@@ -42,7 +45,9 @@
 #include <mundy_math/NumTraits.hpp>        // for mundy::NumTraits
 #include <mundy_math/Tolerance.hpp>        // for mundy::get_relaxed_zero_tolerance<T>
 #include <mundy_math/cmath.hpp>            // for mundy::sqrt
+#include <mundy_math/impl/eigenvalues_impl.hpp>  // for mundy::impl::largest_ritz_value
 #include <mundy_math/linear_ops.hpp>       // for mundy::make_shifted_op
+#include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, Preconditioner}
 #include <mundy_math/residuals.hpp>        // for the vector and change residual policies
 #include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, workspace_commit, ...}
 #include <mundy_utils/requires.hpp>
@@ -81,6 +86,27 @@ struct EigenBounds {
   PowerResult<Scalar> dominant;
   PowerResult<Scalar> opposite;
 };
+
+/// \brief Result of a Lanczos solve: iteration count, final residual, spectrum bounds, and whether it converged.
+template <class Scalar>
+struct LanczosResult {
+  using value_type = Scalar;
+
+  unsigned num_iters{0};
+  Scalar residual{0};
+  Scalar smallest_eigenvalue{0};
+  Scalar largest_eigenvalue{0};
+  bool converged{false};
+};
+
+/// \brief Write a LanczosResult to an ostream.
+template <class Scalar>
+std::ostream& operator<<(std::ostream& os, const LanczosResult<Scalar> result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual
+     << ", smallest_eigenvalue: " << result.smallest_eigenvalue
+     << ", largest_eigenvalue: " << result.largest_eigenvalue << ", converged?: " << result.converged;
+  return os;
+}
 //@}
 
 template <typename Scalar>
@@ -89,6 +115,14 @@ struct PowerConfig {
 
   unsigned max_iters{1000};
   Scalar tol{get_relaxed_zero_tolerance<Scalar>()};  // compared directly against whatever ResidualPolicy reports
+};
+
+template <typename Scalar>
+struct LanczosConfig {
+  using value_type = Scalar;
+
+  unsigned max_iters{1000};
+  Scalar tol{get_relaxed_zero_tolerance<Scalar>()};
 };
 
 /// \brief The eigenvalue problem A q = lambda q for a square operator A, paired with a mutable workspace.
@@ -169,6 +203,73 @@ class PowerState {
   bool converged_{false};
   Scalar residual_{0};
   Scalar eigenvalue_{0};
+};
+
+/// \brief The Lanczos state: the v/v_prev/z/Az vectors, the tridiagonal T as its diagonal alpha and off-diagonal beta,
+/// and the iteration scalars.
+///
+/// v is the start vector on entry. smallest_eigenvalue() and largest_eigenvalue() are T's extreme eigenvalues, and
+/// smallest_ritz_residual() and largest_ritz_residual() the least Ritz residual of each so far.
+template <class Scalar, class VVector, class VPrevVector, class ZVector, class AzVector, class AlphaArray,
+          class BetaArray>
+class LanczosState {
+ public:
+  using value_type = Scalar;
+
+  KOKKOS_INLINE_FUNCTION
+  LanczosState(VVector&& v, VPrevVector&& v_prev, ZVector&& z, AzVector&& Az, AlphaArray&& alpha, BetaArray&& beta)
+      : v_(std::forward<VVector>(v)),
+        v_prev_(std::forward<VPrevVector>(v_prev)),
+        z_(std::forward<ZVector>(z)),
+        Az_(std::forward<AzVector>(Az)),
+        alpha_(std::forward<AlphaArray>(alpha)),
+        beta_(std::forward<BetaArray>(beta)) {
+  }
+
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION       auto& v()            { return v_.get(); }
+  KOKKOS_INLINE_FUNCTION const auto& v()      const { return v_.get(); }
+  KOKKOS_INLINE_FUNCTION       auto& v_prev()       { return v_prev_.get(); }
+  KOKKOS_INLINE_FUNCTION const auto& v_prev() const { return v_prev_.get(); }
+  KOKKOS_INLINE_FUNCTION       auto& z()            { return z_.get(); }
+  KOKKOS_INLINE_FUNCTION const auto& z()      const { return z_.get(); }
+  KOKKOS_INLINE_FUNCTION       auto& Az()           { return Az_.get(); }
+  KOKKOS_INLINE_FUNCTION const auto& Az()     const { return Az_.get(); }
+  KOKKOS_INLINE_FUNCTION       auto& alpha()        { return alpha_.get(); }
+  KOKKOS_INLINE_FUNCTION const auto& alpha()  const { return alpha_.get(); }
+  KOKKOS_INLINE_FUNCTION       auto& beta()         { return beta_.get(); }
+  KOKKOS_INLINE_FUNCTION const auto& beta()   const { return beta_.get(); }
+
+  KOKKOS_INLINE_FUNCTION unsigned&   iter()                      { return iter_; }
+  KOKKOS_INLINE_FUNCTION unsigned    iter()                const { return iter_; }
+  KOKKOS_INLINE_FUNCTION bool&       converged()                 { return converged_; }
+  KOKKOS_INLINE_FUNCTION bool        converged()           const { return converged_; }
+  KOKKOS_INLINE_FUNCTION value_type& residual()                  { return residual_; }
+  KOKKOS_INLINE_FUNCTION value_type  residual()            const { return residual_; }
+  KOKKOS_INLINE_FUNCTION value_type& smallest_eigenvalue()       { return smallest_eigenvalue_; }
+  KOKKOS_INLINE_FUNCTION value_type  smallest_eigenvalue() const { return smallest_eigenvalue_; }
+  KOKKOS_INLINE_FUNCTION value_type& largest_eigenvalue()        { return largest_eigenvalue_; }
+  KOKKOS_INLINE_FUNCTION value_type  largest_eigenvalue()  const { return largest_eigenvalue_; }
+  KOKKOS_INLINE_FUNCTION value_type& smallest_ritz_residual()       { return smallest_ritz_residual_; }
+  KOKKOS_INLINE_FUNCTION value_type  smallest_ritz_residual() const { return smallest_ritz_residual_; }
+  KOKKOS_INLINE_FUNCTION value_type& largest_ritz_residual()        { return largest_ritz_residual_; }
+  KOKKOS_INLINE_FUNCTION value_type  largest_ritz_residual()  const { return largest_ritz_residual_; }
+  // clang-format on
+
+ private:
+  ::mundy::storage<VVector> v_;
+  ::mundy::storage<VPrevVector> v_prev_;
+  ::mundy::storage<ZVector> z_;
+  ::mundy::storage<AzVector> Az_;
+  ::mundy::storage<AlphaArray> alpha_;
+  ::mundy::storage<BetaArray> beta_;
+  unsigned iter_{0};
+  bool converged_{false};
+  Scalar residual_{0};
+  Scalar smallest_eigenvalue_{0};
+  Scalar largest_eigenvalue_{0};
+  Scalar smallest_ritz_residual_{0};
+  Scalar largest_ritz_residual_{0};
 };
 
 /// \brief The power-method strategy: initialize/iterate/done/result over (Problem, State).
@@ -268,6 +369,162 @@ class PowerStrategy {
   config_t cfg_;
 };
 
+/// \brief The Lanczos strategy: initialize/iterate/done/result over (Problem, State), preconditioned by Precond.
+///
+/// For symmetric A (and SPD P), each iteration appends a row to T, whose extreme eigenvalues theta approach those of A
+/// (of P A) monotonically from inside. Each theta has the Ritz residual rho = ||A y - theta y|| of its Ritz vector y,
+/// within which an eigenvalue lies; by monotonicity, the least rho at an end so far still bounds it. The solve converges
+/// once that bound is at most tol |theta| at both ends.
+template <class Config, class Precond = NoPreconditioner>
+class LanczosStrategy {
+ public:
+  using value_type = typename Config::value_type;
+  using config_t = Config;
+  using preconditioner_t = Precond;
+  using result_t = LanczosResult<value_type>;
+
+  KOKKOS_INLINE_FUNCTION
+  explicit LanczosStrategy(config_t cfg = {}) : cfg_(cfg) {
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  LanczosStrategy(config_t cfg, Precond&& precond) : cfg_(cfg), precond_(std::forward<Precond>(precond)) {
+  }
+
+  KOKKOS_INLINE_FUNCTION const auto& precond() const {
+    return precond_.get();
+  }
+
+  template <class Problem, class State>
+  KOKKOS_FUNCTION void initialize(const Problem& prob, State& state) const {
+    using backend_t = decltype(prob.backend());
+    static_assert(Preconditioner<preconditioner_t, backend_t, std::remove_cvref_t<decltype(state.v())>>,
+                  "LanczosStrategy: Precond must be a Preconditioner.");
+    MUNDY_THROW_REQUIRE(backend_t::size(state.alpha()) >= cfg_.max_iters &&
+                            backend_t::size(state.beta()) >= cfg_.max_iters,
+                        std::invalid_argument, "LanczosStrategy: alpha and beta must have room for max_iters entries.");
+
+    precondition(prob, state);
+    const value_type v_z = backend_t::template dot<value_type>(state.v(), state.z());
+    MUNDY_THROW_REQUIRE(v_z > static_cast<value_type>(0), std::invalid_argument,
+                        "LanczosStrategy: the start vector must be nonzero, with P positive definite on it.");
+    normalize(prob, state, sqrt(v_z));
+
+    state.iter() = 0;
+    state.converged() = false;
+    state.residual() = NumTraits<value_type>::infinity();
+    state.smallest_eigenvalue() = NumTraits<value_type>::infinity();
+    state.largest_eigenvalue() = -NumTraits<value_type>::infinity();
+    state.smallest_ritz_residual() = NumTraits<value_type>::infinity();
+    state.largest_ritz_residual() = NumTraits<value_type>::infinity();
+  }
+
+  template <class Problem, class State>
+  KOKKOS_FUNCTION bool iterate(const Problem& prob, State& state) const {
+    using backend_t = decltype(prob.backend());
+    constexpr value_type zero = static_cast<value_type>(0);
+    constexpr value_type one = static_cast<value_type>(1);
+    auto& workspace = prob.workspace();
+
+    if (state.converged() || state.iter() >= cfg_.max_iters) {
+      return state.converged();
+    }
+
+    // Row j of T: alpha_j = z^T A z, and the next v is A z - alpha_j v - beta_{j-1} v_prev.
+    const unsigned j = state.iter();
+    backend_t::apply(prob.A(), state.z(), state.Az(), workspace);
+    const value_type alpha = backend_t::template dot<value_type>(state.z(), state.Az());
+    backend_t::axpby(-alpha, state.v(), one, state.Az());
+    if (j > 0) {
+      backend_t::axpby(-state.beta()[j - 1], state.v_prev(), one, state.Az());
+    }
+    backend_t::deep_copy(state.v_prev(), state.v());
+    backend_t::deep_copy(state.v(), state.Az());
+    precondition(prob, state);
+    const value_type v_z = backend_t::template dot<value_type>(state.v(), state.z());
+    state.alpha()[j] = alpha;
+    // v^T P v negative: P is not positive definite, so Lanczos stops unconverged.
+    if (!(v_z >= zero)) {
+      return true;
+    }
+    const value_type beta = sqrt(v_z);
+    state.beta()[j] = beta;
+    ++state.iter();
+
+    // The smallest eigenvalue of T is minus the largest of -T.
+    value_type largest = zero;
+    value_type largest_rho = zero;
+    value_type negated_smallest = zero;
+    value_type smallest_rho = zero;
+    impl::largest_ritz_value(state.alpha(), state.beta(), state.iter(), one, state.largest_eigenvalue(), largest,
+                             largest_rho);
+    impl::largest_ritz_value(state.alpha(), state.beta(), state.iter(), -one, -state.smallest_eigenvalue(),
+                             negated_smallest, smallest_rho);
+    state.largest_eigenvalue() = largest;
+    state.smallest_eigenvalue() = -negated_smallest;
+    state.largest_ritz_residual() = largest_rho < state.largest_ritz_residual() ? largest_rho : state.largest_ritz_residual();
+    state.smallest_ritz_residual() =
+        smallest_rho < state.smallest_ritz_residual() ? smallest_rho : state.smallest_ritz_residual();
+    const value_type largest_relative = relative(state.largest_ritz_residual(), largest);
+    const value_type smallest_relative = relative(state.smallest_ritz_residual(), negated_smallest);
+    state.residual() = largest_relative > smallest_relative ? largest_relative : smallest_relative;
+
+    if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
+      state.converged() = true;
+      impl::workspace_commit(workspace);
+      return true;
+    }
+    // beta = 0: the Krylov space is invariant, so T's eigenvalues are exact and there is no next v.
+    if (beta == zero) {
+      return true;
+    }
+    normalize(prob, state, beta);
+    return false;
+  }
+
+  template <class State>
+  KOKKOS_FUNCTION bool done(const State& state) const {
+    return state.converged() || state.iter() >= cfg_.max_iters;
+  }
+
+  template <class State>
+  KOKKOS_FUNCTION result_t result(const State& state) const {
+    return {state.iter(), state.residual(), state.smallest_eigenvalue(), state.largest_eigenvalue(),
+            state.converged()};
+  }
+
+ private:
+  static constexpr bool is_preconditioned = !std::same_as<std::remove_cvref_t<Precond>, NoPreconditioner>;
+
+  /// \brief z := P v, or z := v without a preconditioner.
+  template <class Problem, class State>
+  KOKKOS_FUNCTION void precondition([[maybe_unused]] const Problem& prob, State& state) const {
+    using backend_t = decltype(prob.backend());
+    if constexpr (is_preconditioned) {
+      backend_t::apply(precond(), state.v(), state.z());
+    } else {
+      backend_t::deep_copy(state.z(), state.v());
+    }
+  }
+
+  /// \brief rho / |theta|, zero when rho is.
+  KOKKOS_FUNCTION static value_type relative(value_type rho, value_type theta) {
+    return rho == static_cast<value_type>(0) ? rho : rho / abs(theta);
+  }
+
+  /// \brief v := v / norm and z := z / norm.
+  template <class Problem, class State>
+  KOKKOS_FUNCTION void normalize([[maybe_unused]] const Problem& prob, State& state, value_type norm) const {
+    using backend_t = decltype(prob.backend());
+    constexpr value_type zero = static_cast<value_type>(0);
+    backend_t::axpby(zero, state.v(), static_cast<value_type>(1) / norm, state.v());
+    backend_t::axpby(zero, state.z(), static_cast<value_type>(1) / norm, state.z());
+  }
+
+  config_t cfg_;
+  ::mundy::storage<Precond> precond_;
+};
+
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 //! \name Deduction guides
 //@{
@@ -283,6 +540,16 @@ PowerState(QVector&&, ZVector&&, RVector&&) -> PowerState<impl::vector_value_typ
 
 template <class ResidualPolicy, class Config>
 PowerStrategy(ResidualPolicy, Config = {}) -> PowerStrategy<ResidualPolicy, Config>;
+
+template <class VVector, class VPrevVector, class ZVector, class AzVector, class AlphaArray, class BetaArray>
+LanczosState(VVector&&, VPrevVector&&, ZVector&&, AzVector&&, AlphaArray&&, BetaArray&&)
+    -> LanczosState<impl::vector_value_type<VVector>, VVector, VPrevVector, ZVector, AzVector, AlphaArray, BetaArray>;
+
+template <class Config>
+LanczosStrategy(Config) -> LanczosStrategy<Config>;
+
+template <class Config, class Precond>
+LanczosStrategy(Config, Precond&&) -> LanczosStrategy<Config, Precond>;
 //@}
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
@@ -308,12 +575,28 @@ template <class QVector, class ZVector, class RVector>
 KOKKOS_INLINE_FUNCTION auto make_power_state(QVector&& q, ZVector&& z, RVector&& r) {
   return PowerState(std::forward<QVector>(q), std::forward<ZVector>(z), std::forward<RVector>(r));
 }
+//
+template <class Scalar>
+KOKKOS_INLINE_FUNCTION auto make_lanczos_strategy(const LanczosConfig<Scalar>& cfg = {}) {
+  return LanczosStrategy(cfg);
+}
+//
+template <class Scalar, class Precond>
+KOKKOS_INLINE_FUNCTION auto make_lanczos_strategy(const LanczosConfig<Scalar>& cfg, Precond&& precond) {
+  return LanczosStrategy(cfg, std::forward<Precond>(precond));
+}
+//
+template <class VVector, class VPrevVector, class ZVector, class AzVector, class AlphaArray, class BetaArray>
+KOKKOS_INLINE_FUNCTION auto make_lanczos_state(VVector&& v, VPrevVector&& v_prev, ZVector&& z, AzVector&& Az,
+                                               AlphaArray&& alpha, BetaArray&& beta) {
+  return LanczosState(std::forward<VVector>(v), std::forward<VPrevVector>(v_prev), std::forward<ZVector>(z),
+                      std::forward<AzVector>(Az), std::forward<AlphaArray>(alpha), std::forward<BetaArray>(beta));
+}
 //@}
 
-/// \brief The dominant (largest-magnitude) eigenpair of A via the power method.
+/// \brief Solve the eigenvalue problem prob from state with strat.
 ///
-/// state.q() is the start vector on entry and the unit eigenvector on exit. A converged result implies the operator's
-/// workspace is committed.
+/// A converged result implies the operator's workspace is committed.
 template <class Problem, class Strategy, class State>
 MUNDY_REQUIRES(requires(const Strategy& s, const Problem& prob, State& state) {
   { s.initialize(prob, state) } -> std::same_as<void>;
