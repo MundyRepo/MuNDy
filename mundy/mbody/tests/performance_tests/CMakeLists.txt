@@ -34,6 +34,20 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
+
+  tribits_add_executable(
+    ProppedCantileverConditioning
+    SOURCES ProppedCantileverConditioning.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+  tribits_copy_files_to_binary_dir(
+    ProppedCantileverConditioningCopyFiles
+    SOURCE_FILES
+      propped_cantilever_scaling.py
+    EXEDEPS ProppedCantileverConditioning
+    CATEGORIES PERFORMANCE
+  )
   tribits_copy_files_to_binary_dir(
     PeripheryStudiesCopyFiles
     SOURCE_FILES
