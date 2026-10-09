@@ -27,6 +27,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/eigenvalues.hpp
   src/mundy_math/GaussLegendre.hpp
   src/mundy_math/GaussLegendreSphere.hpp
+  src/mundy_math/GaussTriangleEllipsoid.hpp
   src/mundy_math/Hilbert.hpp
   src/mundy_math/impl/AccessorImpl.hpp
   src/mundy_math/impl/ArrayImpl.hpp
@@ -38,6 +39,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/eigenvalues_impl.hpp
   src/mundy_math/impl/GaussLegendreImpl.hpp
   src/mundy_math/impl/GaussLegendreSphereImpl.hpp
+  src/mundy_math/impl/GaussTriangleEllipsoidImpl.hpp
   src/mundy_math/impl/linear_ops_impl.hpp
   src/mundy_math/impl/MatrixImpl.hpp
   src/mundy_math/impl/matrix_market_impl.hpp
