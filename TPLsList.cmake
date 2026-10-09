@@ -17,6 +17,7 @@ tribits_repository_define_tpls(
   Teuchos        "cmake/TPLs/"                                    PT
   Tpetra         "cmake/TPLs/"                                    PT
   Belos          "cmake/TPLs/"                                    PT
+  MueLu          "cmake/TPLs/"                                    PT
   STK            "cmake/TPLs/"                                    PT
   ArborX         "cmake/TPLs/"                                    PT
   ParMETIS       "cmake/TPLs/"                                    PT
