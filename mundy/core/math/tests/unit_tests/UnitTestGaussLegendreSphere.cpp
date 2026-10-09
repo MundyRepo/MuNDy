@@ -50,7 +50,7 @@ namespace mundy {
 
 namespace {
 
-//! \name Group 0: compile-time checks
+//! \name Compile-time contracts
 //@{
 
 static_assert(GaussLegendreSphere<double, 3>::num_points == 18);
