@@ -40,7 +40,6 @@
 #include <utility>
 
 // Tpetra / Teuchos:
-#include <Teuchos_DefaultSerialComm.hpp>  // for Teuchos::SerialComm (single-rank, no MPI)
 #include <Teuchos_ParameterList.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_ScalarTraits.hpp>
@@ -56,6 +55,7 @@
 #include <BelosTypes.hpp>
 
 // Mundy:
+#include <mundy_math/impl/tpetra_impl.hpp>  // for mundy::impl::{make_serial_map, load_view_into_mv, extract_mv_into_view}
 #include <mundy_math/preconditioners.hpp>  // for mundy::NoPreconditioner
 #include <mundy_math/solver_backends.hpp>
 #include <mundy_utils/throw_assert.hpp>
@@ -126,31 +126,6 @@ class MundyTpetraOperator : public Tpetra::Operator<Scalar, LO, GO, NO> {
   Teuchos::RCP<const map_type> map_;
   mutable decltype(Backend::make_workspace(std::declval<const Op&>())) workspace_;
 };
-
-/// \brief A contiguous, single-process Map of \p n rows over a SerialComm -- fully local, no MPI.
-template <class LO, class GO, class NO>
-Teuchos::RCP<const Tpetra::Map<LO, GO, NO>> make_serial_map(size_t n) {
-  const Teuchos::RCP<const Teuchos::Comm<int>> comm = Teuchos::rcp(new Teuchos::SerialComm<int>());
-  const auto n_global = static_cast<Tpetra::global_size_t>(n);
-  const GO index_base = 0;
-  return Teuchos::rcp(new Tpetra::Map<LO, GO, NO>(n_global, index_base, comm));
-}
-
-/// \brief Copy a rank-1 Kokkos View into column 0 of a single-column MultiVector (device-to-device).
-template <class MvType, class SrcView>
-void load_view_into_mv(const SrcView& src, MvType& mv) {
-  auto dev = mv.getLocalViewDevice(Tpetra::Access::OverwriteAll);
-  auto col0 = Kokkos::subview(dev, Kokkos::ALL(), 0);
-  Kokkos::deep_copy(col0, src);
-}
-
-/// \brief Copy column 0 of a single-column MultiVector into a rank-1 Kokkos View (device-to-device).
-template <class MvType, class DstView>
-void extract_mv_into_view(MvType& mv, DstView& dst) {
-  auto dev = mv.getLocalViewDevice(Tpetra::Access::ReadOnly);
-  auto col0 = Kokkos::subview(dev, Kokkos::ALL(), 0);
-  Kokkos::deep_copy(dst, col0);
-}
 
 /// \brief A reusable Belos solve for a fixed operator, preconditioner, and configuration.
 ///

@@ -39,8 +39,10 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/MatrixImpl.hpp
   src/mundy_math/impl/matrix_market_impl.hpp
   src/mundy_math/impl/minimize_impl.hpp
+  src/mundy_math/impl/muelu_preconditioner_impl.hpp
   src/mundy_math/impl/QuaternionImpl.hpp
   src/mundy_math/impl/solver_backends_impl.hpp
+  src/mundy_math/impl/tpetra_impl.hpp
   src/mundy_math/impl/TrapezoidalTorusImpl.hpp
   src/mundy_math/impl/VectorImpl.hpp
   src/mundy_math/invert.hpp
@@ -52,6 +54,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/Matrix.hpp
   src/mundy_math/matrix_market.hpp
   src/mundy_math/minimize.hpp
+  src/mundy_math/muelu_preconditioner.hpp
   src/mundy_math/NumTraits.hpp
   src/mundy_math/preconditioners.hpp
   src/mundy_math/Quaternion.hpp

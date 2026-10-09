@@ -194,6 +194,15 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     INSTALLABLE
   )
 
+  # MueLu-backed preconditioner tests are active only when the MueLu, Tpetra and KokkosKernels TPLs are enabled; the
+  # source guards itself on HAVE_MUNDYMATH_{MUELU,TPETRA,KOKKOSKERNELS} and is an empty translation unit otherwise.
+  tribits_add_executable_and_test(
+    UnitTestMueLuPreconditioner
+    SOURCES UnitTestMueLuPreconditioner.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
   tribits_add_executable_and_test(
     UnitTestConvex
     SOURCES UnitTestConvex.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
