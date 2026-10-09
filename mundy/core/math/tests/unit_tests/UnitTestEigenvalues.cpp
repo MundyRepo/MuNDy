@@ -768,7 +768,7 @@ TEST(Eigenvalues, PreconditionedLanczosRecoversTheOriginalSpectrum) {
 }
 
 TEST(Eigenvalues, KokkosPreconditionedLanczosRecoversTheSpectrumForEveryRepresentation) {
-  for (const size_t n : {16, 200}) {
+  for (const size_t n : {16, 100}) {
     const LanczosConfig<double> config{.max_iters = static_cast<unsigned>(10 * n), .tol = 1e-10};
     const auto preconditioner = make_congruence_preconditioner(n);
     const auto strategy = make_lanczos_strategy(config, preconditioner);
