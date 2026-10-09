@@ -44,6 +44,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/minimize_impl.hpp
   src/mundy_math/impl/muelu_preconditioner_impl.hpp
   src/mundy_math/impl/QuaternionImpl.hpp
+  src/mundy_math/impl/QuasiUniformSpherocylinderImpl.hpp
   src/mundy_math/impl/solver_backends_impl.hpp
   src/mundy_math/impl/tpetra_impl.hpp
   src/mundy_math/impl/TrapezoidalTorusImpl.hpp
@@ -61,6 +62,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/NumTraits.hpp
   src/mundy_math/preconditioners.hpp
   src/mundy_math/Quaternion.hpp
+  src/mundy_math/QuasiUniformSpherocylinder.hpp
   src/mundy_math/residuals.hpp
   src/mundy_math/ScalarBinaryOpTraits.hpp
   src/mundy_math/ScalarWrapper.hpp
