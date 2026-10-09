@@ -38,169 +38,161 @@ namespace mundy {
 
 namespace impl {
 
-//! \name Resolutions and geometry
+//! \name Construction of quasi-uniform spherocylinder rules, at compile time or run time
 //@{
 
-struct QuasiUniformSpherocylinderCounts {
-  unsigned num_longitudes;
-  unsigned num_cylinder_rings;
-  unsigned num_cap_points;
+/// \brief Sine and cosine of the golden angle pi * (3 - sqrt(5)), evaluated in double-double.
+///
+/// alpha = pi * (sqrt(5) - 2) is small and gamma = pi - alpha, so sin(gamma) = sin(alpha) and
+/// cos(gamma) = -cos(alpha). Sixteen Taylor steps resolve both functions beyond double-double precision.
+KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDouble> golden_angle_sin_cos() {
+  const UnevaluatedSum half_pi = pi_over_2();
+  const DoubleDouble pi = DoubleDouble(half_pi.hi, half_pi.lo) * 2.0;
+  const DoubleDouble alpha = pi * (sqrt(DoubleDouble(5.0)) - 2.0);
+  const DoubleDouble alpha2 = alpha * alpha;
+
+  DoubleDouble sin_term = alpha;
+  DoubleDouble cos_term = 1.0;
+  DoubleDouble sin_alpha = sin_term;
+  DoubleDouble cos_alpha = cos_term;
+
+  for (unsigned n = 1; n <= 16; ++n) {
+    sin_term = sin_term * (-alpha2 / double((2 * n) * (2 * n + 1)));
+    cos_term = cos_term * (-alpha2 / double((2 * n - 1) * (2 * n)));
+    sin_alpha = sin_alpha + sin_term;
+    cos_alpha = cos_alpha + cos_term;
+  }
+
+  return {sin_alpha, -cos_alpha};
+}
+
+/// \brief Number of axial rings needed to match the circumferential node spacing.
+KOKKOS_INLINE_FUNCTION constexpr unsigned compute_num_cylinder_rings(unsigned ntheta, double aspect_ratio) {
+  if (aspect_ratio == 0.0) return 0u;
+  const unsigned nz = static_cast<unsigned>(aspect_ratio * ntheta / (2.0 * Kokkos::numbers::pi_v<double>)+0.5);
+  return nz > 0 ? nz : 1u;
+}
+
+/// \brief Number of equal-area Fibonacci nodes needed per hemispherical endcap.
+KOKKOS_INLINE_FUNCTION constexpr unsigned compute_num_cap_points(unsigned ntheta) {
+  const unsigned nc = static_cast<unsigned>(ntheta * double(ntheta) / (2.0 * Kokkos::numbers::pi_v<double>)+0.5);
+  return nc > 0 ? nc : 1u;
+}
+
+/// \brief Multiply sine/cosine pairs corresponding to the sum of two angles.
+KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDouble> multiply_sin_cos(const SinCos<DoubleDouble>& lhs,
+                                                                       const SinCos<DoubleDouble>& rhs) {
+  return {lhs.sin * rhs.cos + lhs.cos * rhs.sin, lhs.cos * rhs.cos - lhs.sin * rhs.sin};
+}
+
+/// \brief Sine and cosine of k times the golden angle, using double-double binary exponentiation.
+KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDouble> golden_angle_multiple(unsigned k, SinCos<DoubleDouble> step) {
+  SinCos<DoubleDouble> angle{0.0, 1.0};
+  while (k != 0) {
+    if (k & 1u) angle = multiply_sin_cos(angle, step);
+    k >>= 1u;
+    if (k != 0) step = multiply_sin_cos(step, step);
+  }
+  return angle;
+}
+
+/// \brief Write the i-th cylinder ring of the quasi-uniform spherocylinder rule, into points and weights.
+template <class Scalar, class Points, class Weights>
+KOKKOS_INLINE_FUNCTION constexpr void write_quasi_uniform_spherocylinder_cylinder_ring(unsigned ntheta, unsigned nz,
+                                                                                       double aspect_ratio, unsigned i,
+                                                                                       Points& points,
+                                                                                       Weights& weights) {
+  const DoubleDouble z = aspect_ratio * ((DoubleDouble(i) + 0.5) / double(nz) - 0.5);
+  const UnevaluatedSum half_pi = pi_over_2();
+  const DoubleDouble two_pi_over_ntheta = DoubleDouble(half_pi.hi, half_pi.lo) * 4.0 / double(ntheta);
+  const Scalar weight = static_cast<Scalar>((two_pi_over_ntheta * aspect_ratio / double(nz)).hi());
+
+  for (unsigned j = 0; j < ntheta; ++j) {
+    const unsigned k = i * ntheta + j;
+    const auto angle = sin_cos_of_turn_fraction<DoubleDouble>(2u * j + (i & 1u), 2u * ntheta);
+
+    points[3u * k + 0u] = static_cast<Scalar>(angle.cos.hi());
+    points[3u * k + 1u] = static_cast<Scalar>(angle.sin.hi());
+    points[3u * k + 2u] = static_cast<Scalar>(z.hi());
+    weights[k] = weight;
+  }
+}
+
+/// \brief Write the i-th mirrored Fibonacci point pair on the north and south caps, into points and weights.
+///
+/// Both points have the same x and y coordinates, opposite z coordinates, and equal weights. The azimuth
+/// is i times the golden angle, evaluated independently so distinct pairs can be generated in parallel.
+template <class Scalar, class Points, class Weights>
+KOKKOS_INLINE_FUNCTION constexpr void write_quasi_uniform_spherocylinder_cap_pair(unsigned ntheta, unsigned nz,
+                                                                                  unsigned ncap, double aspect_ratio,
+                                                                                  unsigned i, Points& points,
+                                                                                  Weights& weights) {
+  constexpr auto step = golden_angle_sin_cos();
+  const auto angle = golden_angle_multiple(i, step);
+  const DoubleDouble mu = (DoubleDouble(i) + 0.5) / double(ncap);
+  const DoubleDouble rho = sqrt((1.0 - mu) * (1.0 + mu));
+  const UnevaluatedSum half_pi = pi_over_2();
+  const DoubleDouble two_pi = DoubleDouble(half_pi.hi, half_pi.lo) * 4.0;
+  const Scalar cap_weight = static_cast<Scalar>((two_pi / double(ncap)).hi());
+
+  const Scalar x = static_cast<Scalar>((rho * angle.cos).hi());
+  const Scalar y = static_cast<Scalar>((rho * angle.sin).hi());
+  const Scalar z = static_cast<Scalar>((DoubleDouble(aspect_ratio) / 2.0 + mu).hi());
+
+  const unsigned north = nz * ntheta + i;
+  const unsigned south = nz * ntheta + ncap + i;
+  points[3u * north + 0u] = x;
+  points[3u * north + 1u] = y;
+  points[3u * north + 2u] = z;
+  weights[north] = cap_weight;
+  points[3u * south + 0u] = x;
+  points[3u * south + 1u] = y;
+  points[3u * south + 2u] = -z;
+  weights[south] = cap_weight;
+}
+
+/// \brief Unit-radius spherocylinder quadrature with Ntheta circumferential nodes per cylinder ring.
+///
+/// The cylinder has length AspectRatio; the number of axial rings and the number of Fibonacci nodes on each
+/// hemisphere are determined by matching nominal spacing to h = 2 pi / Ntheta.
+///   Nz = round(AspectRatio / h),
+///   Ncap = round(2 pi / h^2).
+/// Points are (x,y,z) triples; all weights are surface weights for this unit-radius geometry.
+template <class Scalar, unsigned Ntheta, double AspectRatio>
+struct QuasiUniformSpherocylinderRule {
+  static_assert(Ntheta >= 3);
+  static_assert(AspectRatio >= 0.0);
+
+  static constexpr unsigned num_points_per_ring = Ntheta;
+  static constexpr unsigned num_cylinder_rings = compute_num_cylinder_rings(Ntheta, AspectRatio);
+  static constexpr unsigned num_cap_points = compute_num_cap_points(Ntheta);
+  static constexpr unsigned num_points = num_cylinder_rings * num_points_per_ring + 2 * num_cap_points;
+
+  Kokkos::Array<Scalar, 3u * num_points> points;  //!< (x,y,z) triples
+  Kokkos::Array<Scalar, num_points> weights;
 };
 
-/// \brief Whether the counts describe a rule whose flattened indices and longitude arithmetic fit in unsigned.
-KOKKOS_INLINE_FUNCTION constexpr bool valid_spherocylinder_counts(unsigned n_theta, unsigned n_z, unsigned n_cap) {
-  constexpr unsigned limit = std::numeric_limits<unsigned>::max();
-  const uint64_t num_points = uint64_t(n_theta) * n_z + 2 * uint64_t(n_cap);
-  return n_theta >= 3 && n_theta <= limit / 8 && n_cap >= 1 && num_points <= limit / 3;
-}
+/// \brief Build the quasi-uniform spherocylinder rule at compile time, for the given circumferential node count
+template <class Scalar, unsigned Ntheta, double AspectRatio>
+KOKKOS_INLINE_FUNCTION constexpr QuasiUniformSpherocylinderRule<Scalar, Ntheta, AspectRatio>
+make_quasi_uniform_spherocylinder_rule() {
+  using Rule = QuasiUniformSpherocylinderRule<Scalar, Ntheta, AspectRatio>;
+  constexpr unsigned Nz = Rule::num_cylinder_rings;
+  constexpr unsigned Ncap = Rule::num_cap_points;
 
-KOKKOS_INLINE_FUNCTION constexpr void validate_spherocylinder_counts(unsigned n_theta, unsigned n_z, unsigned n_cap) {
-  MUNDY_THROW_REQUIRE(valid_spherocylinder_counts(n_theta, n_z, n_cap), std::invalid_argument,
-                      "quasi_uniform_spherocylinder_rule: requires at least 3 longitudes and 1 point per cap, "
-                      "with counts small enough for unsigned indexing.");
-}
+  Rule rule{};
 
-template <class Scalar>
-KOKKOS_INLINE_FUNCTION constexpr void validate_spherocylinder_geometry(unsigned n_z, Scalar radius, Scalar length) {
-  constexpr Scalar largest = std::numeric_limits<Scalar>::max();
-  MUNDY_THROW_REQUIRE(radius > Scalar(0) && radius <= largest && length >= Scalar(0) && length <= largest,
-                      std::invalid_argument,
-                      "quasi_uniform_spherocylinder_rule: radius must be positive, length nonnegative, "
-                      "and both finite.");
-  MUNDY_THROW_REQUIRE(n_z > 0 || length == Scalar(0), std::invalid_argument,
-                      "quasi_uniform_spherocylinder_rule: a positive cylinder length needs at least one ring.");
-}
-
-/// \brief Choose approximately equal area per node and comparable axial and circumferential spacings.
-///
-/// If c is the number of nodes per cap, the desired spacings give n_theta ~ sqrt(2 pi c),
-/// n_z ~ (length / radius) sqrt(c / (2 pi)), and c ~ target / (length / radius + 2).
-template <class Scalar>
-KOKKOS_INLINE_FUNCTION QuasiUniformSpherocylinderCounts quasi_uniform_spherocylinder_counts(unsigned target,
-                                                                                            Scalar radius,
-                                                                                            Scalar length) {
-  validate_spherocylinder_geometry(1, radius, length);
-  MUNDY_THROW_REQUIRE(target > 0, std::invalid_argument, "quasi_uniform_spherocylinder_rule: target must be positive.");
-  const double aspect = static_cast<double>(length) / static_cast<double>(radius);
-  const double two_pi = 2.0 * Kokkos::numbers::pi_v<double>;
-  const double cap_count = static_cast<double>(target) / (aspect + 2.0);
-  const double per_length = Kokkos::sqrt(cap_count / two_pi);
-  const double theta_count = Kokkos::floor(two_pi * per_length + 0.5);
-  const double ring_count = Kokkos::floor(aspect * per_length + 0.5);
-  const double rounded_cap_count = Kokkos::floor(cap_count + 0.5);
-  constexpr double limit = std::numeric_limits<unsigned>::max();
-  // Check before floating-to-integer conversion; these comparisons also reject infinities and NaNs.
-  MUNDY_THROW_REQUIRE(theta_count <= limit && ring_count <= limit && rounded_cap_count <= limit, std::invalid_argument,
-                      "quasi_uniform_spherocylinder_rule: requested resolution is too large.");
-  const unsigned n_theta = theta_count < 8.0 ? 8u : static_cast<unsigned>(theta_count);
-  const unsigned n_z = length == Scalar(0) ? 0u : (ring_count < 1.0 ? 1u : static_cast<unsigned>(ring_count));
-  const unsigned n_cap = rounded_cap_count < 8.0 ? 8u : static_cast<unsigned>(rounded_cap_count);
-  validate_spherocylinder_counts(n_theta, n_z, n_cap);
-  return {n_theta, n_z, n_cap};
-}
-//@}
-
-//! \name Reference nodes and physical geometry
-//@{
-
-/// \brief Fibonacci azimuth k pi (3 - sqrt(5)), without a growing trigonometric argument.
-///
-/// Binary exponentiation permits independent cap nodes. Double-double arithmetic keeps the accumulated rotation
-/// error below the output precision even for large k; the base rotation is computed rather than rounded in advance.
-KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDouble> fibonacci_sin_cos(unsigned k) {
-  constexpr auto half_pi = pi_over_2();
-  constexpr auto small_angle =
-      sin_cos_taylor((sqrt(DoubleDouble(5.0)) - 2.0) * (DoubleDouble(half_pi.hi, half_pi.lo) * 2.0));
-  SinCos<DoubleDouble> power{small_angle.sin, -small_angle.cos};
-  SinCos<DoubleDouble> result{DoubleDouble(0.0), DoubleDouble(1.0)};
-  while (k != 0) {
-    if (k & 1u) {
-      result = {result.sin * power.cos + result.cos * power.sin,  //
-                result.cos * power.cos - result.sin * power.sin};
-    }
-    k >>= 1u;
-    if (k != 0) {
-      power = {2.0 * power.sin * power.cos, power.cos * power.cos - power.sin * power.sin};
-    }
+  // Cylinder: uniform axial midpoints and staggered azimuthal nodes.
+  for (unsigned i = 0; i < Nz; ++i) {
+    write_quasi_uniform_spherocylinder_cylinder_ring<Scalar>(Ntheta, Nz, AspectRatio, i, rule.points, rule.weights);
   }
-  return result;
-}
 
-/// \brief Reference node i: cylinder radius 1 and length 1; unit hemispheres centered at the origin.
-template <class Scalar>
-KOKKOS_INLINE_FUNCTION constexpr Kokkos::Array<Scalar, 3> spherocylinder_reference_point(unsigned n_theta, unsigned n_z,
-                                                                                         unsigned n_cap, unsigned i) {
-  const unsigned cylinder_points = n_theta * n_z;
-  if (i < cylinder_points) {
-    const unsigned ring = i / n_theta;
-    const unsigned longitude = i % n_theta;
-    const auto angle = sin_cos_of_turn_fraction<DoubleDouble>(2 * longitude + 1 + (ring & 1u), 2 * n_theta);
-    const DoubleDouble z = (DoubleDouble(static_cast<double>(ring)) + 0.5) / static_cast<double>(n_z) - 0.5;
-    return {static_cast<Scalar>(angle.cos.hi()), static_cast<Scalar>(angle.sin.hi()), static_cast<Scalar>(z.hi())};
+  // Caps: uniform in mu = |cos(polar angle)| with golden-angle azimuthal increments.
+  for (unsigned i = 0; i < Ncap; ++i) {
+    write_quasi_uniform_spherocylinder_cap_pair<Scalar>(Ntheta, Nz, Ncap, AspectRatio, i, rule.points, rule.weights);
   }
-  const unsigned cap_index = i - cylinder_points;
-  const unsigned k = cap_index % n_cap;
-  const DoubleDouble z = (DoubleDouble(static_cast<double>(k)) + 0.5) / static_cast<double>(n_cap);
-  const DoubleDouble rho = sqrt((1.0 - z) * (1.0 + z));
-  const auto angle = fibonacci_sin_cos(k);
-  return {static_cast<Scalar>((rho * angle.cos).hi()),  //
-          static_cast<Scalar>((rho * angle.sin).hi()),  //
-          cap_index < n_cap ? static_cast<Scalar>(z.hi()) : -static_cast<Scalar>(z.hi())};
-}
 
-/// \brief Map a reference point to a radius-r, cylindrical-length-L surface. Caps shift by +/-L/2.
-template <class Scalar>
-KOKKOS_INLINE_FUNCTION constexpr Kokkos::Array<Scalar, 3> spherocylinder_physical_point(bool cylinder, Scalar radius,
-                                                                                        Scalar length, Scalar x,
-                                                                                        Scalar y, Scalar z) {
-  // Round the cap's multiply-and-add once, consistently in constexpr, host, and device evaluation.
-  DoubleDouble physical_z = DoubleDouble(static_cast<double>(z)) * static_cast<double>(cylinder ? length : radius);
-  if (!cylinder) {
-    physical_z += DoubleDouble(static_cast<double>(length)) * (z > Scalar(0) ? 0.5 : -0.5);
-  }
-  return {radius * x, radius * y, static_cast<Scalar>(physical_z.hi())};
-}
-
-/// \brief Surface area per node on one patch. Cylinder weights vanish in the sphere limit.
-template <class Scalar>
-KOKKOS_INLINE_FUNCTION constexpr Scalar spherocylinder_patch_weight(unsigned count, bool cylinder, Scalar radius,
-                                                                    Scalar length) {
-  const auto half_pi = pi_over_2();
-  const DoubleDouble two_pi = DoubleDouble(half_pi.hi, half_pi.lo) * 4.0;
-  return static_cast<Scalar>((two_pi / static_cast<double>(count) * static_cast<double>(radius) *
-                              static_cast<double>(cylinder ? length : radius))
-                                 .hi());
-}
-
-/// \brief Write one physical point and its patch weight, for host or device storage.
-template <class Scalar, class Points, class Weights>
-KOKKOS_INLINE_FUNCTION constexpr void write_quasi_uniform_spherocylinder_point(unsigned n_theta, unsigned n_z,
-                                                                               unsigned n_cap, unsigned i,
-                                                                               Scalar radius, Scalar length,
-                                                                               Points& points, Weights& weights) {
-  const unsigned cylinder_points = n_theta * n_z;
-  const auto reference = spherocylinder_reference_point<Scalar>(n_theta, n_z, n_cap, i);
-  const auto point = spherocylinder_physical_point(i < cylinder_points, radius, length,  //
-                                                   reference[0], reference[1], reference[2]);
-  for (unsigned d = 0; d < 3; ++d) {
-    points[3 * i + d] = point[d];
-  }
-  weights[i] = spherocylinder_patch_weight(i < cylinder_points ? cylinder_points : n_cap,  //
-                                           i < cylinder_points, radius, length);
-}
-
-/// \brief Compile-time reference points, ordered cylinder, north cap, south cap.
-template <class Scalar, unsigned NTheta, unsigned NZ, unsigned NCap>
-KOKKOS_INLINE_FUNCTION constexpr Kokkos::Array<Scalar, 3 * (NTheta * NZ + 2 * NCap)>
-make_quasi_uniform_spherocylinder_points() {
-  Kokkos::Array<Scalar, 3 * (NTheta * NZ + 2 * NCap)> points{};
-  for (unsigned i = 0; i < NTheta * NZ + 2 * NCap; ++i) {
-    const auto point = spherocylinder_reference_point<Scalar>(NTheta, NZ, NCap, i);
-    for (unsigned d = 0; d < 3; ++d) {
-      points[3 * i + d] = point[d];
-    }
-  }
-  return points;
+  return rule;
 }
 //@}
 
