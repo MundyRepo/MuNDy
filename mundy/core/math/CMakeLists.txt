@@ -19,6 +19,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/Array.hpp
   src/mundy_math/AutoDiffScalar.hpp
   src/mundy_math/belos_solver.hpp
+  src/mundy_math/ClenshawCurtis.hpp
   src/mundy_math/convex_spaces.hpp
   src/mundy_math/cqpp.hpp
   src/mundy_math/direct_sum.hpp
@@ -30,9 +31,11 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/AccessorImpl.hpp
   src/mundy_math/impl/ArrayImpl.hpp
   src/mundy_math/impl/belos_solver_impl.hpp
+  src/mundy_math/impl/ClenshawCurtisImpl.hpp
   src/mundy_math/impl/cmath_impl.hpp
   src/mundy_math/impl/direct_sum_impl.hpp
   src/mundy_math/impl/DoubleDoubleImpl.hpp
+  src/mundy_math/impl/eigenvalues_impl.hpp
   src/mundy_math/impl/GaussLegendreImpl.hpp
   src/mundy_math/impl/GaussLegendreSphereImpl.hpp
   src/mundy_math/impl/linear_ops_impl.hpp
