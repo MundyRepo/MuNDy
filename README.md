@@ -88,23 +88,23 @@ This structure is intended to keep:
 ### Code Statistics (via cloc)
 ```text
 cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
-     471 text files.
-     427 unique files.                                          
+     521 text files.
+     477 unique files.                                          
       50 files ignored.
 
-github.com/AlDanial/cloc v 1.96  T=0.93 s (460.6 files/s, 136353.1 lines/s)
+github.com/AlDanial/cloc v 1.96  T=2.32 s (205.6 files/s, 64400.2 lines/s)
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-C/C++ Header                   205           9680          18126          40036
-C++                            103           6831           7691          32929
-Markdown                        11            943              0           3059
-CMake                           85            584           1716           2729
-Python                           5            164            197            665
-Bourne Shell                    14            131            185            620
+C/C++ Header                   235          10905          20634          47101
+C++                            121           7999           9370          41856
+Markdown                        11            943              0           3056
+CMake                           86            601           1708           2911
+Python                           6            189            211            804
+Bourne Shell                    14            138            220            658
 YAML                             4             21              0             87
 -------------------------------------------------------------------------------
-SUM:                           427          18354          27915          80125
+SUM:                           477          20796          32143          96473
 -------------------------------------------------------------------------------
 ```
 
