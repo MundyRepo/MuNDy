@@ -175,7 +175,7 @@ if [ "$ENABLE_COVERAGE" -eq 1 ]; then
   echo "Coverage build: -O0 -g --coverage, CMAKE_BUILD_TYPE=Debug, ccache disabled"
 else
   CMAKE_BUILD_TYPE_VAL=${BUILD_TYPE:-RELEASE}
-  CXX_FLAGS_VAL="-O3 -march=native"
+  CXX_FLAGS_VAL="-O3 -march=native -fno-math-errno"
   EXE_LINKER_FLAGS_VAL=""
   SHARED_LINKER_FLAGS_VAL=""
   coverage_args=""
@@ -212,6 +212,7 @@ cmake \
 -DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR} \
 -DTPL_Tpetra_DIR:PATH=${TRILINOS_ROOT_DIR} \
 -DTPL_Belos_DIR:PATH=${TRILINOS_ROOT_DIR} \
+-DTPL_MueLu_DIR:PATH=${TRILINOS_ROOT_DIR} \
 -DMPI_EXEC_MAX_NUMPROCS:STRING=${MPI_MAX_NUMPROCS} \
 -DMPI_EXEC_DEFAULT_NUMPROCS:STRING=${MPI_DEFAULT_NUMPROCS} \
 -DMundy_ENABLE_MundyCore=ON \
@@ -227,6 +228,7 @@ cmake \
 -DMundy_ENABLE_KokkosKernels=ON \
 -DMundy_ENABLE_Tpetra=${MUNDY_ENABLE_TPETRA:-OFF} \
 -DMundy_ENABLE_Belos=${MUNDY_ENABLE_BELOS:-OFF} \
+-DMundy_ENABLE_MueLu=${MUNDY_ENABLE_MUELU:-OFF} \
 ${coverage_args} \
 ${ccache_args} \
 ${MUNDY_SOURCE_DIR}

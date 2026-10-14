@@ -51,8 +51,64 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestCmath
+    SOURCES UnitTestCmath.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestAutoDiffScalar
     SOURCES UnitTestAutoDiffScalar.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestDoubleDouble
+    SOURCES UnitTestDoubleDouble.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestClenshawCurtis
+    SOURCES UnitTestClenshawCurtis.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestGaussLegendre
+    SOURCES UnitTestGaussLegendre.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestGaussLegendreSphere
+    SOURCES UnitTestGaussLegendreSphere.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestGaussTriangleEllipsoid
+    SOURCES UnitTestGaussTriangleEllipsoid.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestTrapezoidalTorus
+    SOURCES UnitTestTrapezoidalTorus.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestQuasiUniformSpherocylinder
+    SOURCES UnitTestQuasiUniformSpherocylinder.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
     INSTALLABLE
   )
@@ -107,6 +163,29 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestDirectSum
+    SOURCES UnitTestDirectSum.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestMatrixMarket
+    SOURCES UnitTestMatrixMarket.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  # The dense inverse needs the KokkosKernels TPL; the source guards itself on HAVE_MUNDYMATH_KOKKOSKERNELS and is an
+  # empty (trivially passing) translation unit otherwise.
+  tribits_add_executable_and_test(
+    UnitTestInvert
+    SOURCES UnitTestInvert.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestLinearOperators
     SOURCES UnitTestLinearOperators.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
@@ -120,11 +199,27 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     INSTALLABLE
   )
 
+  tribits_add_executable_and_test(
+    UnitTestEigenvalues
+    SOURCES UnitTestEigenvalues.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
   # Belos-backed solve tests are active only when the Belos + Tpetra TPLs are enabled; the source guards itself on
   # HAVE_MUNDYMATH_{BELOS,TPETRA} and is an empty (trivially passing) translation unit otherwise.
   tribits_add_executable_and_test(
     UnitTestBelosSolver
     SOURCES UnitTestBelosSolver.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  # MueLu-backed preconditioner tests are active only when the MueLu, Tpetra and KokkosKernels TPLs are enabled; the
+  # source guards itself on HAVE_MUNDYMATH_{MUELU,TPETRA,KOKKOSKERNELS} and is an empty translation unit otherwise.
+  tribits_add_executable_and_test(
+    UnitTestMueLuPreconditioner
+    SOURCES UnitTestMueLuPreconditioner.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
     INSTALLABLE
   )

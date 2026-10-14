@@ -43,10 +43,10 @@
 #include <cstddef>      // for size_t
 #include <iostream>     // for std::ostream
 #include <stdexcept>    // for std::invalid_argument
-#include <type_traits>  // for std::is_arithmetic_v
+#include <type_traits>  // for std::true_type
 
 // Mundy
-#include <mundy_math/NumTraits.hpp>             // for mundy::NumTraits
+#include <mundy_math/NumTraits.hpp>             // for mundy::NumTraits, mundy::is_passive_scalar_v
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::ScalarBinaryOpTraits
 #include <mundy_math/Vector.hpp>                // for mundy::Vector (derivative storage)
 #include <mundy_math/cmath.hpp>                 // for mundy:: math dispatch used on the underlying value
@@ -60,10 +60,10 @@ namespace mundy {
 /// The value is a T; the derivatives are a \c Vector<T,N>, one slot per independent variable. Arithmetic
 /// and math operations carry both forward by the chain rule.
 ///
-/// \tparam T The passive (non-differentiated) real type, e.g. double.
+/// \tparam T The passive (non-differentiated) real type: any passive scalar (\ref is_passive_scalar).
 /// \tparam N The number of independent variables whose derivatives are tracked.
 template <typename T, size_t N>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 class AutoDiffScalar {
  public:
   //! \name Type aliases
@@ -302,7 +302,7 @@ KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> cos(const AutoDiffScalar<T
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> acos(const AutoDiffScalar<T, N>& x) {
-  return {acos(x.value()), x.derivatives() * (T(-1) / sqrt(T(1) - x.value() * x.value()))};
+  return {acos(x.value()), x.derivatives() * (-rsqrt(T(1) - x.value() * x.value()))};
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> abs(const AutoDiffScalar<T, N>& x) {
@@ -315,7 +315,7 @@ KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> tan(const AutoDiffScalar<T
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> asin(const AutoDiffScalar<T, N>& x) {
-  return {asin(x.value()), x.derivatives() * (T(1) / sqrt(T(1) - x.value() * x.value()))};
+  return {asin(x.value()), x.derivatives() * rsqrt(T(1) - x.value() * x.value())};
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> atan(const AutoDiffScalar<T, N>& x) {
@@ -419,6 +419,9 @@ std::ostream& operator<<(std::ostream& os, const AutoDiffScalar<T, N>& a) {
 
 //! \name Trait specializations for AutoDiffScalar
 //@{
+
+template <typename T, size_t N>
+struct is_autodiff_scalar<AutoDiffScalar<T, N>> : std::true_type {};
 
 /// \brief Numeric traits for AutoDiffScalar. Numeric values come from the passive type; the related
 /// types remain differentiable.

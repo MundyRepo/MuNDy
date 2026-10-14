@@ -73,14 +73,18 @@ class QuadraticFormOp {
   using linear_op_m_storage_t = ::mundy::storage<LinearOpM>;
   using linear_op_d_storage_t = ::mundy::storage<LinearOpD>;
 
-  template <class FVector, class UVector>
-  struct Workspace : impl::CommitGroup<> {
+  template <class FVector, class UVector, class DTWorkspace, class MWorkspace, class DWorkspace>
+  struct Workspace : impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace> {
    private:
-    using base_t = impl::CommitGroup<>;
+    using base_t = impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace>;
 
    public:
-    KOKKOS_INLINE_FUNCTION Workspace(FVector&& f, UVector&& u, bool committed = false)
-        : base_t(committed), f_storage_(std::forward<FVector>(f)), u_storage_(std::forward<UVector>(u)) {
+    KOKKOS_INLINE_FUNCTION Workspace(FVector&& f, UVector&& u, DTWorkspace&& dt_workspace, MWorkspace&& m_workspace,
+                                     DWorkspace&& d_workspace, bool committed = false)
+        : base_t(std::forward<DTWorkspace>(dt_workspace), std::forward<MWorkspace>(m_workspace),
+                 std::forward<DWorkspace>(d_workspace), committed),
+          f_storage_(std::forward<FVector>(f)),
+          u_storage_(std::forward<UVector>(u)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {
@@ -88,6 +92,9 @@ class QuadraticFormOp {
     }
     MUNDY_OP_WORKSPACE(f, FVector)
     MUNDY_OP_WORKSPACE(u, UVector)
+    MUNDY_OP_WORKSPACE_CHILD(dt_workspace, 0)
+    MUNDY_OP_WORKSPACE_CHILD(m_workspace, 1)
+    MUNDY_OP_WORKSPACE_CHILD(d_workspace, 2)
   };
 
   KOKKOS_INLINE_FUNCTION
@@ -105,36 +112,55 @@ class QuadraticFormOp {
   KOKKOS_INLINE_FUNCTION const auto& D() const { return D_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(D());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(DT());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<LinearOpD>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<LinearOpDT>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_domain_vector(D());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_range_vector(DT());
   }
 
-  auto make_workspace() const {
-    return make_workspace(Backend::make_domain_vector(M_storage_.get()), Backend::make_range_vector(M_storage_.get()));
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(Backend::make_domain_vector(M_storage_.get()), Backend::make_range_vector(M_storage_.get()),
+                          committed);
   }
 
   template <class FVector, class UVector>
-  auto make_workspace(FVector&& f, UVector&& u, bool committed = false) const {
-    return Workspace<FVector, UVector>(std::forward<FVector>(f), std::forward<UVector>(u), committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u, bool committed = false) const {
+    return make_workspace(std::forward<FVector>(f), std::forward<UVector>(u), impl::make_workspace(DT()),
+                          impl::make_workspace(M()), impl::make_workspace(D()), committed);
+  }
+
+  template <class FVector, class UVector, class DTWorkspace, class MWorkspace, class DWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u, DTWorkspace&& dt_workspace,
+                                             MWorkspace&& m_workspace, DWorkspace&& d_workspace,
+                                             bool committed = false) const {
+    return Workspace<FVector, UVector, DTWorkspace, MWorkspace, DWorkspace>(
+        std::forward<FVector>(f), std::forward<UVector>(u), std::forward<DTWorkspace>(dt_workspace),
+        std::forward<MWorkspace>(m_workspace), std::forward<DWorkspace>(d_workspace), committed);
   }
 
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
-    Backend::apply(D_storage_.get(), x, workspace.f());
-    Backend::apply(M_storage_.get(), workspace.f(), workspace.u());
-    Backend::apply(DT_storage_.get(), workspace.u(), y);
+    Backend::apply(D_storage_.get(), x, workspace.f(), workspace.d_workspace());
+    Backend::apply(M_storage_.get(), workspace.f(), workspace.u(), workspace.m_workspace());
+    Backend::apply(DT_storage_.get(), workspace.u(), y, workspace.dt_workspace());
   }
 
   // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
@@ -193,30 +219,38 @@ class MixedReducedOp {
   KOKKOS_INLINE_FUNCTION const auto& L() const { return L_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(A());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(A());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<LinearOpA>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<LinearOpA>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_domain_vector(A());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_range_vector(A());
   }
 
-  auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
     return make_workspace(Backend::make_range_vector(A()), Backend::make_range_vector(L()), impl::make_workspace(A()),
                           impl::make_workspace(L()), committed);
   }
 
   template <class AxVector, class LAxVector, class AWorkspace, class LWorkspace>
-  auto make_workspace(AxVector&& ax, LAxVector&& lax, AWorkspace&& a_workspace, LWorkspace&& l_workspace,
-                      bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(AxVector&& ax, LAxVector&& lax, AWorkspace&& a_workspace,
+                                             LWorkspace&& l_workspace, bool committed = false) const {
     return Workspace<AxVector, LAxVector, AWorkspace, LWorkspace>(
         std::forward<AxVector>(ax), std::forward<LAxVector>(lax), std::forward<AWorkspace>(a_workspace),
         std::forward<LWorkspace>(l_workspace), committed);
@@ -307,23 +341,31 @@ class CongruentMixedReducedOp {
   KOKKOS_INLINE_FUNCTION const auto& L() const { return L_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(D());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(DT());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<LinearOpD>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<LinearOpDT>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_domain_vector(D());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_range_vector(DT());
   }
 
-  auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
     return make_workspace(Backend::make_range_vector(D()), Backend::make_range_vector(M()),
                           Backend::make_range_vector(L()), impl::make_workspace(DT()), impl::make_workspace(M()),
                           impl::make_workspace(D()), impl::make_workspace(L()), committed);
@@ -331,9 +373,10 @@ class CongruentMixedReducedOp {
 
   template <class DxVector, class MDxVector, class LMDxVector, class DTWorkspace, class MWorkspace, class DWorkspace,
             class LWorkspace>
-  auto make_workspace(DxVector&& dx, MDxVector&& mdx, LMDxVector&& lmdx, DTWorkspace&& dt_workspace,
-                      MWorkspace&& m_workspace, DWorkspace&& d_workspace, LWorkspace&& l_workspace,
-                      bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(DxVector&& dx, MDxVector&& mdx, LMDxVector&& lmdx,
+                                             DTWorkspace&& dt_workspace, MWorkspace&& m_workspace,
+                                             DWorkspace&& d_workspace, LWorkspace&& l_workspace,
+                                             bool committed = false) const {
     return Workspace<DxVector, MDxVector, LMDxVector, DTWorkspace, MWorkspace, DWorkspace, LWorkspace>(
         std::forward<DxVector>(dx), std::forward<MDxVector>(mdx), std::forward<LMDxVector>(lmdx),
         std::forward<DTWorkspace>(dt_workspace), std::forward<MWorkspace>(m_workspace),
@@ -408,30 +451,38 @@ class SumOp {
   KOKKOS_INLINE_FUNCTION const auto& op2() const { return op2_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(op1());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(op1());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op1>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op1>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_domain_vector(op1());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_range_vector(op1());
   }
 
-  auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
     return make_workspace(Backend::make_range_vector(op1()), impl::make_workspace(op1()), impl::make_workspace(op2()),
                           committed);
   }
 
   template <class TmpVector, class Op1Workspace, class Op2Workspace>
-  auto make_workspace(TmpVector&& tmp, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace,
-                      bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(TmpVector&& tmp, Op1Workspace&& op1_workspace,
+                                             Op2Workspace&& op2_workspace, bool committed = false) const {
     return Workspace<TmpVector, Op1Workspace, Op2Workspace>(std::forward<TmpVector>(tmp),
                                                             std::forward<Op1Workspace>(op1_workspace),
                                                             std::forward<Op2Workspace>(op2_workspace), committed);
@@ -458,13 +509,30 @@ class SumOp {
 
 /// \brief The scalar multiple Op := alpha * op.
 ///
-/// Applies via Backend::apply(alpha, op, x, beta, y): the fused path when op provides HasScaledApplyMember, else
-/// an apply-then-axpby fallback. Holds no persistent workspace; op's own (if any) is rebuilt per apply.
+/// Uses op's own fused scaled apply where op provides one; otherwise applies op, through its workspace, and scales the
+/// result in place.
 template <class Backend, class Scalar, class Op>
 class ScaledOp {
  public:
   using backend_t = Backend;
   using op_storage_t = ::mundy::storage<Op>;
+
+  template <class OpWorkspace>
+  struct Workspace : impl::CommitGroup<OpWorkspace> {
+   private:
+    using base_t = impl::CommitGroup<OpWorkspace>;
+
+   public:
+    KOKKOS_INLINE_FUNCTION
+    explicit Workspace(OpWorkspace&& op_workspace, bool committed = false)
+        : base_t(std::forward<OpWorkspace>(op_workspace), committed) {
+    }
+
+    KOKKOS_INLINE_FUNCTION Backend backend() const {
+      return Backend{};
+    }
+    MUNDY_OP_WORKSPACE_CHILD(op_workspace, 0)
+  };
 
   KOKKOS_INLINE_FUNCTION
   ScaledOp(backend_t, Scalar alpha, Op&& op) : alpha_(alpha), op_storage_(std::forward<Op>(op)) {
@@ -476,26 +544,56 @@ class ScaledOp {
   KOKKOS_INLINE_FUNCTION const auto& op() const { return op_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(op());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(op());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_domain_vector(op());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_range_vector(op());
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(impl::make_workspace(op()), committed);
+  }
+
+  template <class OpWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace, bool committed = false) const {
+    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace), committed);
+  }
+
+  template <class XVector, class YVector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+    using value_type = impl::vector_value_type<YVector>;
+    constexpr auto zero = static_cast<value_type>(0);
+    const auto alpha = static_cast<value_type>(alpha_);
+    if constexpr (HasScaledApplyMember<std::remove_cvref_t<Op>, value_type, XVector, YVector>) {
+      Backend::apply(alpha, op(), x, zero, y, workspace.op_workspace());
+    } else {
+      Backend::apply(op(), x, y, workspace.op_workspace());
+      Backend::axpby(alpha, y, zero, y);
+    }
   }
 
   template <class XVector, class YVector>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
-    constexpr auto zero = static_cast<impl::vector_value_type<YVector>>(0);
-    Backend::apply(alpha_, op(), x, zero, y);
+    auto tmp_workspace = make_workspace();
+    apply(x, y, tmp_workspace);
   }
 
  private:
@@ -503,10 +601,96 @@ class ScaledOp {
   op_storage_t op_storage_;
 };
 
+/// \brief The spectral shift Op := op - sigma I.
+///
+/// Eigenvalues shift by -sigma; eigenvectors are unchanged.
+template <class Backend, class Scalar, class Op>
+class ShiftedOp {
+ public:
+  using backend_t = Backend;
+  using op_storage_t = ::mundy::storage<Op>;
+
+  template <class OpWorkspace>
+  struct Workspace : impl::CommitGroup<OpWorkspace> {
+   private:
+    using base_t = impl::CommitGroup<OpWorkspace>;
+
+   public:
+    KOKKOS_INLINE_FUNCTION
+    explicit Workspace(OpWorkspace&& op_workspace, bool committed = false)
+        : base_t(std::forward<OpWorkspace>(op_workspace), committed) {
+    }
+
+    KOKKOS_INLINE_FUNCTION Backend backend() const {
+      return Backend{};
+    }
+    MUNDY_OP_WORKSPACE_CHILD(op_workspace, 0)
+  };
+
+  KOKKOS_INLINE_FUNCTION
+  ShiftedOp(backend_t, Scalar sigma, Op&& op) : sigma_(sigma), op_storage_(std::forward<Op>(op)) {
+  }
+
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION Scalar sigma() const { return sigma_; }
+  KOKKOS_INLINE_FUNCTION const auto& op() const { return op_storage_.get(); }
+  // clang-format on
+
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
+    return Backend::domain_size(op());
+  }
+
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
+    return Backend::range_size(op());
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
+    return Backend::make_domain_vector(op());
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
+    return Backend::make_range_vector(op());
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(impl::make_workspace(op()), committed);
+  }
+
+  template <class OpWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace, bool committed = false) const {
+    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace), committed);
+  }
+
+  template <class XVector, class YVector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+    using value_type = impl::vector_value_type<YVector>;
+    Backend::apply(op(), x, y, workspace.op_workspace());
+    Backend::axpby(static_cast<value_type>(-sigma_), x, static_cast<value_type>(1), y);
+  }
+
+  template <class XVector, class YVector>
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
+    auto tmp_workspace = make_workspace();
+    apply(x, y, tmp_workspace);
+  }
+
+ private:
+  Scalar sigma_;
+  op_storage_t op_storage_;
+};
+
 /// \brief The domain concatenation Op := [op1 | op2].
 ///
-/// op1 and op2 share a range but have independent domains: apply([x1; x2]) = op1(x1) + op2(x2). x/y must be
-/// Kokkos::View-backed (apply splits x via Kokkos::subview).
+/// op1 and op2 share a range but have independent domains: apply([x1; x2]) = op1(x1) + op2(x2).
 template <class Backend, class Op1, class Op2>
 class ConcatDomainOp {
  public:
@@ -547,31 +731,43 @@ class ConcatDomainOp {
   KOKKOS_INLINE_FUNCTION const auto& op2() const { return op2_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(op1()) + Backend::domain_size(op2());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(op1());
   }
 
-  auto make_domain_vector() const {
-    using vector_t = decltype(Backend::make_domain_vector(op1()));
-    return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "ConcatDomainOp_domain"), domain_size());
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op1>() + Backend::template static_domain_size<Op2>();
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op1>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
+    using vector_t = decltype(Backend::make_domain_vector(op1()));
+    if constexpr (Backend::has_static_sizes) {
+      return Backend::template make_vector<impl::vector_value_type<vector_t>, static_domain_size()>();
+    } else {
+      return Backend::template make_vector<vector_t>(domain_size());
+    }
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_range_vector(op1());
   }
 
-  auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
     return make_workspace(Backend::make_range_vector(op2()), impl::make_workspace(op1()), impl::make_workspace(op2()),
                           committed);
   }
 
   template <class Y2Vector, class Op1Workspace, class Op2Workspace>
-  auto make_workspace(Y2Vector&& y2, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace,
-                      bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(Y2Vector&& y2, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace,
+                                             bool committed = false) const {
     return Workspace<Y2Vector, Op1Workspace, Op2Workspace>(std::forward<Y2Vector>(y2),
                                                            std::forward<Op1Workspace>(op1_workspace),
                                                            std::forward<Op2Workspace>(op2_workspace), committed);
@@ -579,14 +775,17 @@ class ConcatDomainOp {
 
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
-    constexpr auto one = static_cast<impl::vector_value_type<YVector>>(1);
-    const size_t n1 = Backend::domain_size(op1());
-    const size_t n2 = Backend::domain_size(op2());
-    const XVector x1 = Kokkos::subview(x, Kokkos::pair<size_t, size_t>(0, n1));
-    const XVector x2 = Kokkos::subview(x, Kokkos::pair<size_t, size_t>(n1, n1 + n2));
-    Backend::apply(op1(), x1, y, workspace.op1_workspace());
-    Backend::apply(op2(), x2, workspace.y2(), workspace.op2_workspace());
-    Backend::axpby(one, workspace.y2(), one, y);
+    if constexpr (Backend::has_static_sizes) {
+      constexpr size_t n1 = Backend::template static_domain_size<Op1>();
+      constexpr size_t n2 = Backend::template static_domain_size<Op2>();
+      apply_parts(Backend::template subvector<0, n1>(x), Backend::template subvector<n1, n2>(x), y, workspace);
+    } else {
+      const size_t n1 = Backend::domain_size(op1());
+      const size_t n2 = Backend::domain_size(op2());
+      const XVector x1 = Backend::subvector(x, 0, n1);
+      const XVector x2 = Backend::subvector(x, n1, n1 + n2);
+      apply_parts(x1, x2, y, workspace);
+    }
   }
 
   template <class XVector, class YVector>
@@ -596,14 +795,22 @@ class ConcatDomainOp {
   }
 
  private:
+  // y = op1(x1) + op2(x2)
+  template <class X1Vector, class X2Vector, class YVector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply_parts(const X1Vector& x1, const X2Vector& x2, YVector& y, WorkspaceType& workspace) const {
+    constexpr auto one = static_cast<impl::vector_value_type<YVector>>(1);
+    Backend::apply(op1(), x1, y, workspace.op1_workspace());
+    Backend::apply(op2(), x2, workspace.y2(), workspace.op2_workspace());
+    Backend::axpby(one, workspace.y2(), one, y);
+  }
+
   op1_storage_t op1_storage_;
   op2_storage_t op2_storage_;
 };
 
 /// \brief The range concatenation Op := [op1T; op2T], the transpose of ConcatDomainOp.
 ///
-/// op1T and op2T share a domain but produce independent ranges: apply(v) = [op1T(v); op2T(v)]. x/y must be
-/// Kokkos::View-backed (apply splits y via Kokkos::subview).
+/// op1T and op2T share a domain but produce independent ranges: apply(v) = [op1T(v); op2T(v)].
 template <class Backend, class Op1T, class Op2T>
 class ConcatRangeOp {
  public:
@@ -642,41 +849,61 @@ class ConcatRangeOp {
   KOKKOS_INLINE_FUNCTION const auto& op2t() const { return op2t_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
     return Backend::domain_size(op1t());
   }
 
-  size_t range_size() const {
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
     return Backend::range_size(op1t()) + Backend::range_size(op2t());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op1T>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op1T>() + Backend::template static_range_size<Op2T>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_domain_vector(op1t());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     using vector_t = decltype(Backend::make_range_vector(op1t()));
-    return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "ConcatRangeOp_range"), range_size());
+    if constexpr (Backend::has_static_sizes) {
+      return Backend::template make_vector<impl::vector_value_type<vector_t>, static_range_size()>();
+    } else {
+      return Backend::template make_vector<vector_t>(range_size());
+    }
   }
 
-  auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
     return make_workspace(impl::make_workspace(op1t()), impl::make_workspace(op2t()), committed);
   }
 
   template <class Op1TWorkspace, class Op2TWorkspace>
-  auto make_workspace(Op1TWorkspace&& op1t_workspace, Op2TWorkspace&& op2t_workspace, bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(Op1TWorkspace&& op1t_workspace, Op2TWorkspace&& op2t_workspace,
+                                             bool committed = false) const {
     return Workspace<Op1TWorkspace, Op2TWorkspace>(std::forward<Op1TWorkspace>(op1t_workspace),
                                                    std::forward<Op2TWorkspace>(op2t_workspace), committed);
   }
 
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
-    const size_t n1 = Backend::range_size(op1t());
-    const size_t n2 = Backend::range_size(op2t());
-    YVector y1 = Kokkos::subview(y, Kokkos::pair<size_t, size_t>(0, n1));
-    YVector y2 = Kokkos::subview(y, Kokkos::pair<size_t, size_t>(n1, n1 + n2));
-    Backend::apply(op1t(), x, y1, workspace.op1t_workspace());
-    Backend::apply(op2t(), x, y2, workspace.op2t_workspace());
+    if constexpr (Backend::has_static_sizes) {
+      constexpr size_t n1 = Backend::template static_range_size<Op1T>();
+      constexpr size_t n2 = Backend::template static_range_size<Op2T>();
+      auto y1 = Backend::template subvector<0, n1>(y);
+      auto y2 = Backend::template subvector<n1, n2>(y);
+      apply_parts(x, y1, y2, workspace);
+    } else {
+      const size_t n1 = Backend::range_size(op1t());
+      const size_t n2 = Backend::range_size(op2t());
+      YVector y1 = Backend::subvector(y, 0, n1);
+      YVector y2 = Backend::subvector(y, n1, n1 + n2);
+      apply_parts(x, y1, y2, workspace);
+    }
   }
 
   template <class XVector, class YVector>
@@ -686,13 +913,18 @@ class ConcatRangeOp {
   }
 
  private:
+  // [y1; y2] = [op1T(x); op2T(x)]
+  template <class XVector, class Y1Vector, class Y2Vector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply_parts(const XVector& x, Y1Vector& y1, Y2Vector& y2, WorkspaceType& workspace) const {
+    Backend::apply(op1t(), x, y1, workspace.op1t_workspace());
+    Backend::apply(op2t(), x, y2, workspace.op2t_workspace());
+  }
+
   op1t_storage_t op1t_storage_;
   op2t_storage_t op2t_storage_;
 };
 
 /// \brief The diagonal operator y := diag .* x.
-///
-/// Requires a Kokkos::View-backed backend (uses Kokkos::parallel_for over Backend::exec_space).
 template <class Backend, class DiagVector>
 class DiagonalOp {
  public:
@@ -707,29 +939,34 @@ class DiagonalOp {
   KOKKOS_INLINE_FUNCTION const auto& diag() const { return diag_storage_.get(); }
   // clang-format on
 
-  size_t domain_size() const {
-    return diag().extent(0);
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const {
+    return Backend::size(diag());
   }
 
-  size_t range_size() const {
-    return diag().extent(0);
+  KOKKOS_INLINE_FUNCTION size_t range_size() const {
+    return Backend::size(diag());
   }
 
-  auto make_domain_vector() const {
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_size<DiagVector>();
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_size<DiagVector>();
+  }
+
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const {
     return Backend::make_vector_like(diag());
   }
 
-  auto make_range_vector() const {
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const {
     return Backend::make_vector_like(diag());
   }
 
   template <class XVector, class YVector>
-  void apply(const XVector& x, YVector& y) const {
-    MUNDY_THROW_ASSERT(x.extent(0) == diag().extent(0), std::invalid_argument, "DiagonalOp: size mismatch.");
-    auto diag = diag_storage_.get();
-    Kokkos::parallel_for(
-        "DiagonalOp::apply", Kokkos::RangePolicy<typename Backend::exec_space>(0, diag.extent(0)),
-        KOKKOS_LAMBDA(const int i) { y(i) = diag(i) * x(i); });
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
+    MUNDY_THROW_ASSERT(Backend::size(x) == Backend::size(diag()), std::invalid_argument, "DiagonalOp: size mismatch.");
+    Backend::elementwise_mul(diag(), x, y);
   }
 
  private:
@@ -756,6 +993,9 @@ SumOp(Backend, Op1&&, Op2&&) -> SumOp<Backend, Op1, Op2>;
 
 template <class Backend, class Scalar, class Op>
 ScaledOp(Backend, Scalar, Op&&) -> ScaledOp<Backend, Scalar, Op>;
+
+template <class Backend, class Scalar, class Op>
+ShiftedOp(Backend, Scalar, Op&&) -> ShiftedOp<Backend, Scalar, Op>;
 
 template <class Backend, class Op1, class Op2>
 ConcatDomainOp(Backend, Op1&&, Op2&&) -> ConcatDomainOp<Backend, Op1, Op2>;
@@ -785,6 +1025,11 @@ KOKKOS_INLINE_FUNCTION auto make_sum_op(Op1&& op1, Op2&& op2) {
 template <typename Backend, class Scalar, class Op>
 KOKKOS_INLINE_FUNCTION auto make_scaled_op(Scalar alpha, Op&& op) {
   return ScaledOp(Backend{}, alpha, std::forward<Op>(op));
+}
+
+template <typename Backend, class Scalar, class Op>
+KOKKOS_INLINE_FUNCTION auto make_shifted_op(Scalar sigma, Op&& op) {
+  return ShiftedOp(Backend{}, sigma, std::forward<Op>(op));
 }
 
 template <typename Backend, class Op1, class Op2>

@@ -37,6 +37,7 @@
 #include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
 #include <mundy_math/Scalar.hpp>                // for mundy::AScalar (interaction operators)
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/ShiftedAccessor.hpp>       // for mundy::get_shifted_accessor
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
 #include <mundy_math/cmath.hpp>
 #include <mundy_math/impl/VectorImpl.hpp>
@@ -182,26 +183,25 @@ class AVector {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AVector() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with an AVector of the same type
+  // Same-type copy and move: construction copies the accessor, so a view binds to the same data; assignment copies the
+  // data, so a view writes through to it.
 
-  /// \brief Default copy constructor (deep copies the accessor, not necessarily the data)
-  /// Copy from same is safe for many views since the accessor is simply copied.
+  /// \brief Copy constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(const AVector<T, N, Accessor>&) = default;
 
-  /// \brief Default move constructor (deep moves the accessor, not necessarily the data)
-  /// Move from same is safe for many views since the accessor is simply moved.
+  /// \brief Move constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor>&&) = default;
 
-  /// \brief Default copy assignment operator (deep copies the data)
+  /// \brief Copy assignment (deep)
   KOKKOS_INLINE_FUNCTION
   constexpr AVector<T, N, Accessor>& operator=(const AVector<T, N, Accessor>& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
-  /// \brief Default move assignment operator (deep copies the data)
+  /// \brief Move assignment (deep)
   KOKKOS_INLINE_FUNCTION
   constexpr AVector<T, N, Accessor>& operator=(AVector<T, N, Accessor>&& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
@@ -212,7 +212,7 @@ class AVector {
 
   /// \brief Deep copy constructor with different accessor or ownership
   /// Deep copy construction from different is often ill-advised since the accessor must be default constructed and then
-  /// populated. For a T* accessor, this is illegal.
+  /// populated. For an accessor stored as a pointer (a T* or a T[N]), this is illegal.
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
@@ -222,7 +222,7 @@ class AVector {
     // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
     // illegal.
     static_assert(
-        std::is_pointer_v<Accessor> == false,
+        !impl::is_stored_as_pointer_v<Accessor>,
         "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
         "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
         "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
@@ -250,7 +250,7 @@ class AVector {
     // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
     // illegal.
     static_assert(
-        std::is_pointer_v<Accessor> == false,
+        !impl::is_stored_as_pointer_v<Accessor>,
         "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
         "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
         "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
@@ -353,6 +353,22 @@ class AVector {
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
     return impl::cast_impl<U>(std::make_index_sequence<N>{}, *this);
+  }
+
+  /// \brief Get a view into the Size entries starting at Offset
+  template <size_t Offset, size_t Size>
+  KOKKOS_INLINE_FUNCTION constexpr auto view_subset() {
+    static_assert(Offset + Size <= N, "AVector::view_subset: the subset must lie within the vector.");
+    auto shifted_data_accessor = get_shifted_accessor<T, Offset>(accessor_);
+    return AVector<T, Size, decltype(shifted_data_accessor)>(std::move(shifted_data_accessor));
+  }
+
+  /// \brief Get a view into the Size entries starting at Offset
+  template <size_t Offset, size_t Size>
+  KOKKOS_INLINE_FUNCTION constexpr auto view_subset() const {
+    static_assert(Offset + Size <= N, "AVector::view_subset: the subset must lie within the vector.");
+    auto shifted_data_accessor = get_shifted_accessor<T, Offset>(accessor_);
+    return AVector<T, Size, decltype(shifted_data_accessor)>(std::move(shifted_data_accessor));
   }
   //@}
 
@@ -916,7 +932,9 @@ template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAcc
           typename OutputType = typename NumTraits<scalar_product_result_t<U, T>>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle(const AVector<U, N, Accessor1>& a,
                                                         const AVector<T, N, Accessor2>& b) {
-  return Kokkos::numbers::pi_v<OutputType> - minor_angle<N, U, T, Accessor1, Accessor2, OutputType>(a, b);
+  // pi - acos(c) == acos(-c): the minor angle between -a and b. Negating in OutputType keeps unsigned inputs from
+  // wrapping, and no pi constant is needed, so custom scalars work too.
+  return static_cast<OutputType>(minor_angle(-cast<OutputType>(a), b));
 }
 
 /// \brief Major angle between two vectors, in radians (integral inputs promote to float).
@@ -1080,10 +1098,9 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 //@}
 
 // Just to double check
-// static_assert(std::is_trivially_copyable_v<AVector<double, 3>>);
-// static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
-// static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
-// static_assert(std::is_move_constructible_v<AVector<double, 3>>);
+static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
+static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
+static_assert(std::is_move_constructible_v<AVector<double, 3>>);
 
 //! \name Type specializations
 //@{
@@ -1241,5 +1258,16 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AVector<T, N, Accessor1>& 
 //@}
 
 }  // namespace mundy
+
+/// \brief The identity of Kokkos::Sum over mundy::Vector, so Vector-valued sums work in any Kokkos::parallel_reduce.
+///
+/// Only Sum is supported: Prod, Max, and Min would need an elementwise product and an ordering, which Vector does not
+/// define.
+template <typename T, size_t N>
+struct Kokkos::reduction_identity<mundy::Vector<T, N>> {
+  KOKKOS_FORCEINLINE_FUNCTION constexpr static mundy::Vector<T, N> sum() {
+    return mundy::Vector<T, N>::zeros();
+  }
+};
 
 #endif  // MUNDY_MATH_VECTOR_HPP_

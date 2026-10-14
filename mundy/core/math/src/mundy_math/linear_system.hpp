@@ -25,11 +25,15 @@
 #include <Kokkos_Core.hpp>
 
 // C++ core:
+#include <concepts>
 #include <ostream>
 #include <type_traits>
 #include <utility>
 
 // Mundy
+#include <mundy_math/cmath.hpp>            // for mundy::sqrt
+#include <mundy_math/linear_ops.hpp>       // for MUNDY_OP_WORKSPACE, MUNDY_OP_WORKSPACE_CHILD, mundy::impl::CommitGroup
+#include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, Preconditioner}
 #include <mundy_math/residuals.hpp>        // for the residual policies (L2Residual, RelativeL2Residual, ...)
 #include <mundy_math/solver_backends.hpp>  // for mundy::{Backend, Workspace, concepts, ...}
 #include <mundy_utils/requires.hpp>
@@ -86,12 +90,14 @@ class LinearSystem {
   using workspace_t = Workspace;
   using value_type = impl::vector_value_type<rhs_vector_t>;
 
+  KOKKOS_INLINE_FUNCTION
   LinearSystem(Backend, LinearOp&& A, RhsVector&& b)
       : A_(std::forward<LinearOp>(A)), b_(std::forward<RhsVector>(b)), workspace_(impl::make_workspace(A_.get())) {
     MUNDY_THROW_ASSERT(Backend::domain_size(A_.get()) == Backend::range_size(A_.get()), std::invalid_argument,
                        "LinearSystem: operator must be square.");
   }
 
+  KOKKOS_INLINE_FUNCTION
   LinearSystem(Backend, LinearOp&& A, RhsVector&& b, workspace_t workspace)
       : A_(std::forward<LinearOp>(A)), b_(std::forward<RhsVector>(b)), workspace_(std::move(workspace)) {
     MUNDY_THROW_ASSERT(Backend::domain_size(A_.get()) == Backend::range_size(A_.get()), std::invalid_argument,
@@ -116,9 +122,9 @@ class LinearSystem {
 
 /// \brief The CG solve state: the x/r/p/Ap vectors and the iteration scalars.
 ///
-/// r_dot_r() (the exact dot(r,r)) and residual() (whatever ResidualPolicy reports) are tracked separately and
-/// must not be conflated: the recurrence always needs dot(r,r) for alpha/beta regardless of which norm the
-/// caller convergence-tests against; only residual() is pluggable.
+/// r_dot_z() (r^T z for z = P r the preconditioned residual, r^T r without a preconditioner) and residual() (whatever
+/// ResidualPolicy reports) are tracked separately and must not be conflated: the recurrence always needs r^T z for
+/// alpha/beta regardless of which norm the caller convergence-tests against; only residual() is pluggable.
 template <class Scalar, class XVector, class RVector, class PVector, class ApVector>
 class CGState {
  public:
@@ -149,9 +155,9 @@ class CGState {
   // residual(): ResidualPolicy's output; convergence-test only.
   KOKKOS_INLINE_FUNCTION value_type& residual()       { return residual_; }
   KOKKOS_INLINE_FUNCTION value_type  residual() const { return residual_; }
-  // r_dot_r(): exact dot(r,r); drives the CG recurrence only. See CGStrategy::iterate.
-  KOKKOS_INLINE_FUNCTION value_type& r_dot_r()        { return r_dot_r_; }
-  KOKKOS_INLINE_FUNCTION value_type  r_dot_r()  const { return r_dot_r_; }
+  // r_dot_z(): r^T z; drives the CG recurrence only. See CGStrategy::iterate.
+  KOKKOS_INLINE_FUNCTION value_type& r_dot_z()        { return r_dot_z_; }
+  KOKKOS_INLINE_FUNCTION value_type  r_dot_z()  const { return r_dot_z_; }
   // clang-format on
 
  private:
@@ -162,41 +168,69 @@ class CGState {
   unsigned iter_{0};
   bool converged_{false};
   Scalar residual_{0};
-  Scalar r_dot_r_{0};
+  Scalar r_dot_z_{0};
 };
 
-/// \brief The CG strategy: initialize/iterate/done/result over (Problem, State).
+/// \brief The CG strategy: initialize/iterate/done/result over (Problem, State), preconditioned by Precond.
 ///
 /// alpha/beta are fixed by the conjugate-direction recurrence, so there is no step policy -- only how the
-/// residual is measured (ResidualPolicy) is pluggable.
-template <class ResidualPolicy, class Config>
+/// residual is measured (ResidualPolicy, a VectorResidualPolicy) and the preconditioner P (a Preconditioner) are
+/// pluggable. The residual measured is that of A x = b, with or without P. CG starts from alpha x for the caller's
+/// guess x, alpha = x^T b / x^T A x, the multiple of x nearest the solution in the A-norm, wherever x^T A x > 0.
+template <class ResidualPolicy, class Config, class Precond = NoPreconditioner>
 class CGStrategy {
  public:
   using value_type = typename Config::value_type;
   using residual_policy_t = ResidualPolicy;
   using config_t = Config;
+  using preconditioner_t = Precond;
   using result_t = CGResult<value_type>;
 
   KOKKOS_INLINE_FUNCTION
   CGStrategy(residual_policy_t resid, config_t cfg = {}) : resid_(resid), cfg_(cfg) {
   }
 
+  KOKKOS_INLINE_FUNCTION
+  CGStrategy(residual_policy_t resid, config_t cfg, Precond&& precond)
+      : resid_(resid), cfg_(cfg), precond_(std::forward<Precond>(precond)) {
+  }
+
+  KOKKOS_INLINE_FUNCTION const auto& precond() const {
+    return precond_.get();
+  }
+
   template <class Problem, class State>
   KOKKOS_FUNCTION void initialize(const Problem& prob, State& state) const {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
+    static_assert(Preconditioner<preconditioner_t, backend_t, std::remove_cvref_t<decltype(state.r())>>,
+                  "CGStrategy: Precond must be a Preconditioner.");
+    constexpr value_type zero = static_cast<value_type>(0);
     constexpr value_type one = static_cast<value_type>(1);
     auto& workspace = prob.workspace();
 
-    // Ap = A x0 (x0 = caller's initial guess on entry -- zero for a cold start, a previous solution for a
-    // warm start; this function never decides which).
+    // Ap = A x for the caller's guess x (zero for a cold start, a previous solution for a warm start), then
+    // x0 = alpha x.
     backend_t::apply(prob.A(), state.x(), state.Ap(), workspace);
+    const value_type x_A_x = backend_t::template dot<value_type>(state.x(), state.Ap());
+    MUNDY_THROW_ASSERT(x_A_x >= zero, std::invalid_argument, "CGStrategy: the initial guess must be finite.");
+    if (x_A_x > zero) {
+      const value_type alpha = backend_t::template dot<value_type>(state.x(), prob.b()) / x_A_x;
+      backend_t::axpby(alpha, state.x(), zero, state.x());
+      backend_t::axpby(alpha, state.Ap(), zero, state.Ap());
+    }
     backend_t::deep_copy(state.r(), prob.b());
     backend_t::axpby(-one, state.Ap(), one, state.r());  // r = b - A x0
-    backend_t::deep_copy(state.p(), state.r());
+    if constexpr (is_preconditioned) {
+      backend_t::apply(precond(), state.r(), state.Ap());  // z = P r, held in Ap until the next A p
+      backend_t::deep_copy(state.p(), state.Ap());
+      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.Ap());
+    } else {
+      backend_t::deep_copy(state.p(), state.r());
+      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.r());
+    }
 
-    state.r_dot_r() = backend_t::template dot<value_type>(state.r(), state.r());
-    state.residual() = resid_(backend, state.r(), prob.b());
+    state.residual() = measure(backend, state, prob.b());
     state.iter() = 0;
     state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
     if (state.converged()) {
@@ -216,15 +250,21 @@ class CGStrategy {
     }
 
     backend_t::apply(prob.A(), state.p(), state.Ap(), workspace);
-    const value_type r_dot_r_old = state.r_dot_r();
+    const value_type r_dot_z_old = state.r_dot_z();
     const value_type p_Ap = backend_t::template dot<value_type>(state.p(), state.Ap());
+    // p^T A p not positive: A is not positive definite on the Krylov space, so CG stops unconverged.
+    if (!(p_Ap > static_cast<value_type>(0))) {
+      return true;
+    }
 
-    const value_type alpha = r_dot_r_old / p_Ap;
+    const value_type alpha = r_dot_z_old / p_Ap;
     backend_t::axpby(alpha, state.p(), one, state.x());
     backend_t::axpby(-alpha, state.Ap(), one, state.r());
 
-    state.r_dot_r() = backend_t::template dot<value_type>(state.r(), state.r());
-    state.residual() = resid_(backend, state.r(), prob.b());
+    if constexpr (!is_preconditioned) {
+      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.r());
+    }
+    state.residual() = measure(backend, state, prob.b());
     ++state.iter();
 
     if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
@@ -233,7 +273,13 @@ class CGStrategy {
       return true;
     }
 
-    backend_t::axpby(one, state.r(), state.r_dot_r() / r_dot_r_old, state.p());
+    if constexpr (is_preconditioned) {
+      backend_t::apply(precond(), state.r(), state.Ap());  // z = P r, held in Ap until the next A p
+      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.Ap());
+      backend_t::axpby(one, state.Ap(), state.r_dot_z() / r_dot_z_old, state.p());
+    } else {
+      backend_t::axpby(one, state.r(), state.r_dot_z() / r_dot_z_old, state.p());
+    }
     return false;
   }
 
@@ -248,8 +294,24 @@ class CGStrategy {
   }
 
  private:
+  static constexpr bool is_preconditioned = !std::same_as<std::remove_cvref_t<Precond>, NoPreconditioner>;
+
+  template <class Backend, class State, class BVector>
+  KOKKOS_FUNCTION value_type measure(const Backend& backend, const State& state, const BVector& b) const {
+    using r_vector_t = std::remove_cvref_t<decltype(state.r())>;
+    static_assert(VectorResidualPolicy<residual_policy_t, Backend, r_vector_t, BVector>,
+                  "CGStrategy: ResidualPolicy must be a VectorResidualPolicy.");
+    if constexpr (!is_preconditioned && std::same_as<residual_policy_t, L2Residual> &&
+                  std::same_as<impl::vector_value_type<r_vector_t>, value_type>) {
+      return sqrt(state.r_dot_z());
+    } else {
+      return resid_(backend, state.r(), b);
+    }
+  }
+
   residual_policy_t resid_;
   config_t cfg_;
+  ::mundy::storage<Precond> precond_;
 };
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
@@ -269,6 +331,9 @@ CGState(XVector&&, RVector&&, PVector&&, ApVector&&)
 
 template <class ResidualPolicy, class Config>
 CGStrategy(ResidualPolicy, Config = {}) -> CGStrategy<ResidualPolicy, Config>;
+
+template <class ResidualPolicy, class Config, class Precond>
+CGStrategy(ResidualPolicy, Config, Precond&&) -> CGStrategy<ResidualPolicy, Config, Precond>;
 //@}
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
@@ -284,6 +349,12 @@ template <class ResidualPolicy, class Scalar>
 KOKKOS_INLINE_FUNCTION auto make_cg_solution_strategy(ResidualPolicy&& residual_policy,
                                                       const CGConfig<Scalar>& cfg = {}) {
   return CGStrategy(std::forward<ResidualPolicy>(residual_policy), cfg);
+}
+//
+template <class ResidualPolicy, class Scalar, class Precond>
+KOKKOS_INLINE_FUNCTION auto make_cg_solution_strategy(ResidualPolicy&& residual_policy, const CGConfig<Scalar>& cfg,
+                                                      Precond&& precond) {
+  return CGStrategy(std::forward<ResidualPolicy>(residual_policy), cfg, std::forward<Precond>(precond));
 }
 //
 template <class Scalar>
@@ -327,83 +398,133 @@ KOKKOS_FUNCTION auto solve_linear_system(const Problem& prob, const Strategy& st
 
 /// \brief Wraps an SPD operator as its inverse: apply(rhs, out) solves op * out = rhs via matrix-free CG.
 ///
-/// x/r/p/Ap and the operator's own workspace are allocated once at construction and reused; only the lightweight
-/// per-call CGState/LinearSystem wrappers are rebuilt in apply(). Warm-starting is an explicit constructor
-/// flag, not hidden in the algorithm -- solve_linear_system always treats state.x() as the caller's initial guess.
-template <typename Backend, typename Op>
+/// Each solve iterates in out, starting from the guess it holds: out must be finite (zero is a cold start) and must
+/// not alias rhs.
+///
+/// \p Precond, when not NoPreconditioner, preconditions every solve.
+template <typename Backend, typename Op, typename Precond = NoPreconditioner>
 class CGInvOp {
  public:
   using backend_t = Backend;
-  using x_vector_t = decltype(Backend::make_domain_vector(std::declval<const Op&>()));
   using range_vector_t = decltype(Backend::make_range_vector(std::declval<const Op&>()));
-  using op_workspace_t = impl::workspace_for_t<Op>;
-  using value_type = impl::vector_value_type<x_vector_t>;
+  using value_type = impl::vector_value_type<range_vector_t>;
   using config_t = CGConfig<value_type>;
 
-  CGInvOp(Backend, Op&& op, const config_t& cfg, bool warm_start = false)
-      : op_storage_(std::forward<Op>(op)),
-        cfg_(cfg),
-        warm_start_(warm_start),
-        x_(Backend::make_domain_vector(op_storage_.get())),
-        r_(Backend::make_range_vector(op_storage_.get())),
-        p_(Backend::make_range_vector(op_storage_.get())),
-        ap_(Backend::make_range_vector(op_storage_.get())),
-        op_workspace_(impl::make_workspace(op_storage_.get())) {
+  template <class RVector, class PVector, class ApVector, class OpWorkspace>
+  struct Workspace : impl::CommitGroup<OpWorkspace> {
+   private:
+    using base_t = impl::CommitGroup<OpWorkspace>;
+
+   public:
+    KOKKOS_INLINE_FUNCTION Workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace,
+                                     bool committed = false)
+        : base_t(std::forward<OpWorkspace>(op_workspace), committed),
+          r_storage_(std::forward<RVector>(r)),
+          p_storage_(std::forward<PVector>(p)),
+          ap_storage_(std::forward<ApVector>(ap)) {
+    }
+
+    KOKKOS_INLINE_FUNCTION Backend backend() const {
+      return Backend{};
+    }
+    MUNDY_OP_WORKSPACE(r, RVector)
+    MUNDY_OP_WORKSPACE(p, PVector)
+    MUNDY_OP_WORKSPACE(ap, ApVector)
+    MUNDY_OP_WORKSPACE_CHILD(op_workspace, 0)
+  };
+
+  KOKKOS_FUNCTION
+  CGInvOp(Backend, Op&& op, const config_t& cfg) : CGInvOp(Backend{}, std::forward<Op>(op), cfg, NoPreconditioner{}) {
+  }
+
+  KOKKOS_FUNCTION
+  CGInvOp(Backend, Op&& op, const config_t& cfg, Precond&& precond)
+      : op_storage_(std::forward<Op>(op)), precond_storage_(std::forward<Precond>(precond)), cfg_(cfg) {
     MUNDY_THROW_ASSERT(Backend::domain_size(op_storage_.get()) == Backend::range_size(op_storage_.get()),
                        std::invalid_argument, "CGInvOp: operator must be square.");
   }
 
   // clang-format off
   KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
-  size_t domain_size() const { return Backend::domain_size(op_storage_.get()); }
-  size_t range_size() const { return Backend::range_size(op_storage_.get()); }
-  auto make_domain_vector() const { return Backend::make_domain_vector(op_storage_.get()); }
-  auto make_range_vector() const { return Backend::make_range_vector(op_storage_.get()); }
+  KOKKOS_INLINE_FUNCTION const auto& op() const { return op_storage_.get(); }
+  KOKKOS_INLINE_FUNCTION size_t domain_size() const { return Backend::domain_size(op_storage_.get()); }
+  KOKKOS_INLINE_FUNCTION size_t range_size() const { return Backend::range_size(op_storage_.get()); }
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_domain_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_domain_size<Op>();
+  }
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_range_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_range_size<Op>();
+  }
+  KOKKOS_INLINE_FUNCTION auto make_domain_vector() const { return Backend::make_domain_vector(op_storage_.get()); }
+  KOKKOS_INLINE_FUNCTION auto make_range_vector() const { return Backend::make_range_vector(op_storage_.get()); }
   // clang-format on
 
-  /// out := op^{-1} rhs, via CG.
-  template <class RhsVector, class OutVector>
-  void apply(const RhsVector& rhs, OutVector& out) const {
-    constexpr value_type zero = static_cast<value_type>(0);
-    if (!warm_start_) {
-      Backend::axpby(zero, x_, zero, x_);  // cold start: x0 = 0
-    }
-    // else: leave x_ at whatever it held after the previous solve (warm start).
+  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+    return make_workspace(Backend::make_range_vector(op()), Backend::make_range_vector(op()),
+                          Backend::make_range_vector(op()), impl::make_workspace(op()), committed);
+  }
 
-    auto prob = LinearSystem(Backend{}, op_storage_.get(), rhs, op_workspace_);
-    auto state = CGState(x_, r_, p_, ap_);
-    auto strat = CGStrategy(L2Residual{}, cfg_);
+  template <class RVector, class PVector, class ApVector, class OpWorkspace>
+  KOKKOS_INLINE_FUNCTION auto make_workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace,
+                                             bool committed = false) const {
+    return Workspace<RVector, PVector, ApVector, OpWorkspace>(std::forward<RVector>(r), std::forward<PVector>(p),
+                                                              std::forward<ApVector>(ap),
+                                                              std::forward<OpWorkspace>(op_workspace), committed);
+  }
+
+  /// out := op^{-1} rhs, via CG from the guess held in out.
+  template <class RhsVector, class OutVector, class WorkspaceType>
+  KOKKOS_FUNCTION void apply(const RhsVector& rhs, OutVector& out, WorkspaceType& workspace) const {
+    auto prob = LinearSystem(Backend{}, op(), rhs, workspace.op_workspace());
+    auto state = CGState(out, workspace.r(), workspace.p(), workspace.ap());
+    auto strat = CGStrategy(L2Residual{}, cfg_, precond_storage_.get());
     last_result_ = solve_linear_system(prob, strat, state);
 
     // A non-converged CG would silently return a wrong answer with no way for us to inform the caller, so we throw.
+    MUNDY_THROW_REQUIRE(last_result_.converged || last_result_.num_iters == cfg_.max_iters, std::runtime_error,
+                        "CGInvOp: CG stopped early: p^T A p <= 0, so the operator is not positive definite.");
     MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error, "CGInvOp: inner CG solve failed to converge.");
-    Backend::deep_copy(out, x_);
   }
 
-  const CGResult<value_type>& last_result() const {
+  // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
+  // direct member call bypasses the Backend::apply dispatch layer, so no separate invalidate is needed here.
+  template <class RhsVector, class OutVector>
+  KOKKOS_FUNCTION void apply(const RhsVector& rhs, OutVector& out) const {
+    auto tmp_workspace = make_workspace();
+    apply(rhs, out, tmp_workspace);
+  }
+
+  KOKKOS_INLINE_FUNCTION const CGResult<value_type>& last_result() const {
     return last_result_;
   }
 
  private:
   ::mundy::storage<Op> op_storage_;
+  ::mundy::storage<Precond> precond_storage_;
   config_t cfg_;
-  bool warm_start_;
-  mutable x_vector_t x_;
-  mutable range_vector_t r_;
-  mutable range_vector_t p_;
-  mutable range_vector_t ap_;
-  mutable op_workspace_t op_workspace_;
   mutable CGResult<value_type> last_result_{};
 };
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <class Backend, class Op, class Scalar>
-CGInvOp(Backend, Op&&, const CGConfig<Scalar>&, bool = false) -> CGInvOp<Backend, Op>;
+CGInvOp(Backend, Op&&, const CGConfig<Scalar>&) -> CGInvOp<Backend, Op>;
+
+template <class Backend, class Op, class Scalar, class Precond>
+MUNDY_REQUIRES(Preconditioner<Precond, Backend,
+                              decltype(Backend::make_domain_vector(std::declval<const std::remove_cvref_t<Op>&>()))>)
+CGInvOp(Backend, Op&&, const CGConfig<Scalar>&, Precond&&) -> CGInvOp<Backend, Op, Precond>;
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 template <class Backend, class Op, class Scalar>
-KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg, bool warm_start = false) {
-  return CGInvOp(Backend{}, std::forward<Op>(op), cfg, warm_start);
+KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg) {
+  return CGInvOp(Backend{}, std::forward<Op>(op), cfg);
+}
+
+template <class Backend, class Op, class Scalar, class Precond>
+MUNDY_REQUIRES(Preconditioner<Precond, Backend,
+                              decltype(Backend::make_domain_vector(std::declval<const std::remove_cvref_t<Op>&>()))>)
+KOKKOS_INLINE_FUNCTION auto make_cg_inv_op(Op&& op, const CGConfig<Scalar>& cfg, Precond&& precond) {
+  return CGInvOp(Backend{}, std::forward<Op>(op), cfg, std::forward<Precond>(precond));
 }
 //@}
 

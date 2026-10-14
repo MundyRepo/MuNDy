@@ -34,6 +34,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <mundy_math/belos_solver.hpp>
+#include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
 #include <stdexcept>
 
 namespace mundy {
@@ -257,16 +258,34 @@ host_view_t ramp(int n, double step = 0.5) {
 // rhs = A * x_exact (x_exact given on host).
 template <class Op>
 view_t known_rhs(const Op& A, const host_view_t& x_exact_h) {
-  const int n = static_cast<int>(A.domain_size());
+  const int n = static_cast<int>(kokkos_backend_t::domain_size(A));
   view_t x(Kokkos::view_alloc(Kokkos::WithoutInitializing, "known_x"), n);
   Kokkos::deep_copy(x, x_exact_h);
   view_t b(Kokkos::view_alloc(Kokkos::WithoutInitializing, "known_b"), n);
-  A.apply(x, b);
+  kokkos_backend_t::apply(A, x, b);
   return b;
 }
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, mem_space>;
+using sparse_matrix_t = KokkosSparse::CrsMatrix<double, int, Kokkos::Device<exec_space, mem_space>, void, size_t>;
+
+/// \brief The n x n tridiagonal matrix with sub, diag and super on its three diagonals.
+dense_matrix_t dense_tridiagonal(int n, double sub, double diag, double super) {
+  dense_matrix_t A("A", n, n);
+  const auto A_host = Kokkos::create_mirror_view(A);
+  for (int i = 0; i < n; ++i) {
+    A_host(i, i) = diag;
+    if (i > 0) A_host(i, i - 1) = sub;
+    if (i + 1 < n) A_host(i, i + 1) = super;
+  }
+  Kokkos::deep_copy(A, A_host);
+  return A;
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+
 // Solve A x = rhs from a cold start via belos_solve; return the result, leaving the solution in x_out.
-template <class Op, class Precond = impl::NoPreconditioner>
+template <class Op, class Precond = NoPreconditioner>
 BelosResult<double> solve_into(const Op& A, const view_t& rhs, view_t& x_out, BelosConfig<double> cfg,
                                const Precond& precond = {}) {
   Kokkos::deep_copy(x_out, 0.0);
@@ -330,39 +349,55 @@ static_assert(LinearOperator<kokkos_backend_t, BelosInvOp<kokkos_backend_t, Nons
 
 // ---- Solver-menu coverage: every BelosSolver enumerator is exercised through a real solve. ----
 
+// The system an operator that applies itself defines, solved through it and, with KokkosKernels, through the dense and
+// the sparse matrix of its entries.
 TEST(BelosSolver, NonsymmetricSolversConverge) {
-  const NonsymTridiagOp A{12};
-  const host_view_t xe = ramp(A.n);
-  const view_t rhs = known_rhs(A, xe);
+  const NonsymTridiagOp op{12};
+  const host_view_t xe = ramp(op.n);
+  const view_t rhs = known_rhs(op, xe);
 
-  for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_GMRES, BelosSolver::BICGSTAB, BelosSolver::TFQMR}) {
-    BelosConfig<double> cfg;
-    cfg.solver = s;
-    cfg.tol = 1e-10;
-    cfg.max_iters = 200;
-    cfg.num_blocks = A.n;
-    view_t x("x", A.n);
-    const auto res = solve_into(A, rhs, x, cfg);
-    EXPECT_TRUE(res.converged) << impl::solver_name_string(s) << " did not converge: " << res;
-    expect_matches(x, xe);
-  }
+  const auto check = [&](const auto& A, const char* kind) {
+    for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_GMRES, BelosSolver::BICGSTAB, BelosSolver::TFQMR}) {
+      BelosConfig<double> cfg;
+      cfg.solver = s;
+      cfg.tol = 1e-10;
+      cfg.max_iters = 200;
+      cfg.num_blocks = op.n;
+      view_t x("x", op.n);
+      const auto res = solve_into(A, rhs, x, cfg);
+      EXPECT_TRUE(res.converged) << kind << ": " << impl::solver_name_string(s) << " did not converge: " << res;
+      expect_matches(x, xe);
+    }
+  };
+  check(op, "applies itself");
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  check(dense_tridiagonal(op.n, -2.0, 4.0, -1.0), "dense");
+  check(make_sparse_matrix<sparse_matrix_t>(dense_tridiagonal(op.n, -2.0, 4.0, -1.0)), "sparse");
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 
 TEST(BelosSolver, SymmetricSolversConvergeOnSpdSystem) {
-  const SymTridiagOp A{12};
-  const host_view_t xe = ramp(A.n);
-  const view_t rhs = known_rhs(A, xe);
+  const SymTridiagOp op{12};
+  const host_view_t xe = ramp(op.n);
+  const view_t rhs = known_rhs(op, xe);
 
-  for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_CG, BelosSolver::MINRES}) {
-    BelosConfig<double> cfg;
-    cfg.solver = s;
-    cfg.tol = 1e-10;
-    cfg.max_iters = 200;
-    view_t x("x", A.n);
-    const auto res = solve_into(A, rhs, x, cfg);
-    EXPECT_TRUE(res.converged) << impl::solver_name_string(s) << " did not converge: " << res;
-    expect_matches(x, xe);
-  }
+  const auto check = [&](const auto& A, const char* kind) {
+    for (const BelosSolver s : {BelosSolver::PSEUDOBLOCK_CG, BelosSolver::MINRES}) {
+      BelosConfig<double> cfg;
+      cfg.solver = s;
+      cfg.tol = 1e-10;
+      cfg.max_iters = 200;
+      view_t x("x", op.n);
+      const auto res = solve_into(A, rhs, x, cfg);
+      EXPECT_TRUE(res.converged) << kind << ": " << impl::solver_name_string(s) << " did not converge: " << res;
+      expect_matches(x, xe);
+    }
+  };
+  check(op, "applies itself");
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  check(dense_tridiagonal(op.n, -1.0, 4.0, -1.0), "dense");
+  check(make_sparse_matrix<sparse_matrix_t>(dense_tridiagonal(op.n, -1.0, 4.0, -1.0)), "sparse");
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 
 TEST(BelosSolver, GcrodrConvergesWithRecycleParams) {
@@ -437,7 +472,7 @@ TEST(BelosSolver, BelosInvOpThrowsOnNonConvergence) {
   cfg.num_blocks = A.n;
   auto inv = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg);
 
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), A.n);
+  view_t out("out", A.n);
   EXPECT_THROW(inv.apply(rhs, out), std::runtime_error);
 }
 
@@ -453,15 +488,15 @@ TEST(BelosSolver, BelosInvOpRecoversKnownSolution) {
   cfg.max_iters = 200;
   auto inv = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg);
 
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), A.n);
+  view_t out("out", A.n);
   inv.apply(rhs, out);
   EXPECT_TRUE(inv.last_result().converged) << "inner solve did not converge: " << inv.last_result();
   expect_matches(out, xe);
 }
 
 TEST(BelosSolver, BelosInvOpReusedAcrossRhsColdStarts) {
-  // Default warm_start = false: each apply() cold-starts, so a second solve of a different system is correct
-  // regardless of the internal buffer left by the first.
+  // An inverse holds no solve history: each solve starts from its own out, so a second system solved into a zeroed out
+  // is correct whatever the first left behind.
   const NonsymTridiagOp A{12};
   BelosConfig<double> cfg;
   cfg.tol = 1e-10;
@@ -470,23 +505,22 @@ TEST(BelosSolver, BelosInvOpReusedAcrossRhsColdStarts) {
 
   const host_view_t x1 = ramp(A.n, 0.5);
   const view_t rhs1 = known_rhs(A, x1);
-  view_t out1(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out1"), A.n);
+  view_t out1("out1", A.n);
   inv.apply(rhs1, out1);
   expect_matches(out1, x1);
 
   const host_view_t x2 = ramp(A.n, -0.3);  // a different solution
   const view_t rhs2 = known_rhs(A, x2);
-  view_t out2(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out2"), A.n);
+  view_t out2("out2", A.n);
   inv.apply(rhs2, out2);
   EXPECT_TRUE(inv.last_result().converged);
   expect_matches(out2, x2);
 }
 
 TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
-  // warm_start = true feeds the previous solve's solution as the next initial guess. With the stopping tolerance
-  // measured against the right-hand-side norm (the regime in which a better guess is worth fewer iterations),
-  // priming the warm operator on one system and then solving a nearby one (same operator, slightly shifted rhs)
-  // takes fewer iterations than an otherwise-identical cold operator solving that same nearby system from zero.
+  // A solve starts from the guess held in out. With the stopping tolerance measured against the right-hand-side norm
+  // (the regime in which a better guess is worth fewer iterations), solving a nearby system (same operator, slightly
+  // shifted rhs) from an out holding the first system's solution takes fewer iterations than solving it from zero.
   // A clustered, well-conditioned spectrum makes convergence residual-driven, so the guess's head start shows up
   // as a clear iteration reduction (a spread spectrum would need ~one iteration per eigenvalue regardless).
   const NonsymTridiagOp A{40};
@@ -501,15 +535,12 @@ TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
   cfg.extra->set("Implicit Residual Scaling", std::string("Norm of RHS"));
   cfg.extra->set("Explicit Residual Scaling", std::string("Norm of RHS"));
 
-  auto warm = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, impl::NoPreconditioner{},
-                                                  /*warm_start=*/true);
-  auto cold = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg, impl::NoPreconditioner{},
-                                                  /*warm_start=*/false);
+  auto inv = make_belos_inv_op<kokkos_backend_t>(NonsymTridiagOp(A), cfg);
 
   const host_view_t x1 = ramp(n, 0.1);
   const view_t rhs1 = known_rhs(A, x1);
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), n);
-  warm.apply(rhs1, out);  // prime the warm operator's internal guess with solution 1
+  view_t warm_out("warm_out", n);
+  inv.apply(rhs1, warm_out);  // warm_out now holds solution 1
 
   host_view_t x2("x2", n);  // a nearby system: solution shifted by a small constant
   for (int i = 0; i < n; ++i) {
@@ -517,12 +548,13 @@ TEST(BelosSolver, BelosInvOpWarmStartConvergesFaster) {
   }
   const view_t rhs2 = known_rhs(A, x2);
 
-  warm.apply(rhs2, out);
-  const unsigned warm_iters = warm.last_result().num_iters;
-  expect_matches(out, x2, 1e-4);
-  cold.apply(rhs2, out);
-  const unsigned cold_iters = cold.last_result().num_iters;
-  expect_matches(out, x2, 1e-4);
+  inv.apply(rhs2, warm_out);
+  const unsigned warm_iters = inv.last_result().num_iters;
+  expect_matches(warm_out, x2, 1e-4);
+  view_t cold_out("cold_out", n);
+  inv.apply(rhs2, cold_out);
+  const unsigned cold_iters = inv.last_result().num_iters;
+  expect_matches(cold_out, x2, 1e-4);
 
   EXPECT_LT(warm_iters, cold_iters) << "warm=" << warm_iters << " cold=" << cold_iters;
 }
@@ -544,7 +576,7 @@ TEST(BelosSolver, BelosInvOpWithPreconditionerRecoversSolution) {
   cfg.num_blocks = n;
   auto inv = make_belos_inv_op<kokkos_backend_t>(VaryingDiagTridiagOp(A), cfg, JacobiPrecond{sys.inv_diag, n});
 
-  view_t out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "out"), n);
+  view_t out("out", n);
   inv.apply(rhs, out);
   EXPECT_TRUE(inv.last_result().converged) << inv.last_result();
   expect_matches(out, xe);

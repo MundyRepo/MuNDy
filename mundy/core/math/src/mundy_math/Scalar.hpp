@@ -35,7 +35,7 @@
 // Mundy
 #include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor, impl::access_at
 #include <mundy_math/Array.hpp>                 // for mundy::Array
-#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::is_passive_scalar_v
 #include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
 #include <mundy_math/Tolerance.hpp>             // for mundy::get_comparison_tolerance
 #include <mundy_utils/requires.hpp>
@@ -148,7 +148,8 @@ class AScalar {
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION constexpr ~AScalar() = default;
 
-  // Same-type copy and move (shallow — copies/moves the accessor, not necessarily the underlying data)
+  // Same-type copy and move: construction copies the accessor, so a view binds to the same data; assignment copies the
+  // data, so a view writes through to it.
 
   /// \brief Copy constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION constexpr AScalar(const AScalar<T, Accessor>&) = default;
@@ -156,13 +157,13 @@ class AScalar {
   /// \brief Move constructor (shallow)
   KOKKOS_DEFAULTED_FUNCTION constexpr AScalar(AScalar<T, Accessor>&&) = default;
 
-  /// \brief Copy assignment (deep — copies the stored value)
+  /// \brief Copy assignment (deep)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(const AScalar<T, Accessor>& other) {
     impl::access_at(accessor_, 0) = impl::access_at(other.accessor_, 0);
     return *this;
   }
 
-  /// \brief Move assignment (deep — copies the stored value)
+  /// \brief Move assignment (deep)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(AScalar<T, Accessor>&& other) {
     impl::access_at(accessor_, 0) = impl::access_at(other.accessor_, 0);
     return *this;
@@ -171,6 +172,8 @@ class AScalar {
   // Cross-accessor copy / move constructors and assignments
 
   /// \brief Deep copy constructor from a different AScalar accessor or ownership
+  /// Deep copy construction from different is often ill-advised since the accessor must be default constructed and then
+  /// populated. For an accessor stored as a pointer (a T* or a T[N]), this is illegal.
   template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar(const OtherScalarType& other)
       MUNDY_REQUIRES(is_scalar_v<std::decay_t<OtherScalarType>> &&
@@ -178,6 +181,24 @@ class AScalar {
                      (std::is_convertible_v<typename OtherScalarType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        !impl::is_stored_as_pointer_v<Accessor>,
+        "Scalar: Deep copy or move constructing a Scalar view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination scalars.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AScalar<double, double*> s2 = get_scalar<double>(a);\n"
+        "\n"
+        "This code fails because get_scalar returns AScalar<double, SomeAccessor<double>> and the destination "
+        "is AScalar<double, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
   }
 
@@ -189,6 +210,24 @@ class AScalar {
                      (std::is_convertible_v<typename std::decay_t<OtherScalarType>::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
+    static_assert(
+        !impl::is_stored_as_pointer_v<Accessor>,
+        "Scalar: Deep copy or move constructing a Scalar view with a pointer-based accessor is illegal.\n"
+        "It would seg-fault, as the pointer would need default constructed (to a nullptr) and then copied into.\n"
+        "First construct your view from a valid pointer, then copy/move assign to it from the other view.\n"
+        "\n"
+        "This error is often encountered when there is a type mismatch between the accessor of the source and "
+        "destination scalars.\n"
+        "For example:\n"
+        "  SomeAccessor<double> a(/*stuff*/);\n"
+        "  AScalar<double, double*> s2 = get_scalar<double>(a);\n"
+        "\n"
+        "This code fails because get_scalar returns AScalar<double, SomeAccessor<double>> and the destination "
+        "is AScalar<double, double*>.\n"
+        "Often, the solution is to just use `auto` to avoid this type mismatch.");
+
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
   }
 
@@ -636,27 +675,27 @@ KOKKOS_INLINE_FUNCTION constexpr auto cast(const ScalarType& s) {
 // These operate on raw T* pointers rather than on AScalar objects so that the same mundy::atomic_add etc.
 // call works regardless of whether you're dealing with a raw scalar or a vector/matrix element.
 //
-// Constrained to arithmetic T: Kokkos atomics are not defined for custom scalars such as autodiff
-// duals, so this excludes them and makes misuse a compile error.
+// Constrained to passive scalars (arithmetic types and custom non-autodiff scalars): autodiff duals are excluded, so
+// misuse is a compile error. Custom scalars go through Kokkos' generic (compare-and-swap or lock-based) atomics.
 //@{
 
 /// \brief Atomic load: s_copy = *s
 template <typename T>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_load(T* const s) {
   return Kokkos::atomic_load(s);
 }
 
 /// \brief Atomic store: *s = value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_store(T* const s, const U& value) {
   Kokkos::atomic_store(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
   Kokkos::atomic_add(s, static_cast<T>(value));
 }
@@ -664,105 +703,105 @@ KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
 /// \brief Atomic *s += value — AScalar overload: operates on the underlying scalar, bypassing
 /// AScalar's operator+ (which returns a different storage type incompatible with CAS loops).
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_add(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_add(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_sub(T* const s, const U& value) {
   Kokkos::atomic_sub(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value — AScalar overload.
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_sub(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_sub(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_mul(T* const s, const U& value) {
   Kokkos::atomic_mul(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value — AScalar overload.
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_mul(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_mul(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_div(T* const s, const U& value) {
   Kokkos::atomic_div(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value — AScalar overload.
 template <typename T, typename Acc, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_div(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_div(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_add(T* const s, const U& value) {
   return Kokkos::atomic_fetch_add(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_sub(T* const s, const U& value) {
   return Kokkos::atomic_fetch_sub(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_mul(T* const s, const U& value) {
   return Kokkos::atomic_fetch_mul(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value; returns old *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_div(T* const s, const U& value) {
   return Kokkos::atomic_fetch_div(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_add_fetch(T* const s, const U& value) {
   return Kokkos::atomic_add_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_sub_fetch(T* const s, const U& value) {
   return Kokkos::atomic_sub_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_mul_fetch(T* const s, const U& value) {
   return Kokkos::atomic_mul_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value; returns new *s
 template <typename T, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(is_passive_scalar_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
   return Kokkos::atomic_div_fetch(s, static_cast<T>(value));
 }
