@@ -27,6 +27,7 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     UnitTestKokkosMbody
     SOURCES UnitTestKokkosMbody.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     MPI_PROC_RANGE 1
+    INSTALLABLE
   )
 
   tribits_add_executable_and_test(
