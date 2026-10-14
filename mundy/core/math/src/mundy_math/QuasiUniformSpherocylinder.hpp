@@ -113,8 +113,8 @@ void quasi_uniform_spherocylinder_rule(unsigned ntheta, double aspect_ratio, std
                 "quasi_uniform_spherocylinder_rule: Scalar must be float or double.");
   MUNDY_THROW_REQUIRE(ntheta >= 3, std::invalid_argument,
                       "quasi_uniform_spherocylinder_rule: at least three circumferential nodes are required.");
-  MUNDY_THROW_REQUIRE(aspect_ratio >= 0.0, std::invalid_argument,
-                      "quasi_uniform_spherocylinder_rule: aspect_ratio must be nonnegative.");
+  MUNDY_THROW_REQUIRE(Kokkos::isfinite(aspect_ratio) && aspect_ratio >= 0.0, std::invalid_argument,
+                      "quasi_uniform_spherocylinder_rule: aspect_ratio must be finite and nonnegative.");
 
   const unsigned nz = impl::compute_num_cylinder_rings(ntheta, aspect_ratio);
   const unsigned ncap = impl::compute_num_cap_points(ntheta);
