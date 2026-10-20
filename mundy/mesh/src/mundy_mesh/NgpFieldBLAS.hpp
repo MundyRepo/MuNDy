@@ -45,6 +45,7 @@ namespace mesh {
 List of available field operations:
   - field_fill
   - field_randomize
+  - field_start_rng_stream
   - field_copy
   - field_swap
   - field_scale
@@ -186,6 +187,26 @@ void field_randomize(size_t seed,                          //
                      stk::mesh::FieldBase& field,          //
                      const ExecSpace& exec_space) {
   impl::ngp_field_randomize(seed, min, max, counter_field, field, nullptr, exec_space);
+}
+
+/// \brief Start a fresh RNG stream for the selected entities: set their (size_t) counters to `stream << 32`, for a
+/// stream that no earlier call has handed out, so that make_philox(seed, counter) draws from that stream.
+/// \note Call this on newly created entities in place of zeroing their counters. An entity id recycled from a destroyed
+///   entity then never replays its predecessor's random numbers. Streams are strided by MPI rank, so calls need not be
+///   collective, and only locally owned entities are written. Stream 0 is never handed out; it belongs to counters
+///   that were simply zeroed.
+template <typename ExecSpace>
+void field_start_rng_stream(stk::mesh::FieldBase& counter_field,  //
+                            const stk::mesh::Selector& selector,  //
+                            const ExecSpace& exec_space) {
+  impl::ngp_field_start_rng_stream(counter_field, &selector, exec_space);
+}
+
+/// \brief Start a fresh RNG stream for all entities with the counter field (see the overload with a selector)
+template <typename ExecSpace>
+void field_start_rng_stream(stk::mesh::FieldBase& counter_field,  //
+                            const ExecSpace& exec_space) {
+  impl::ngp_field_start_rng_stream(counter_field, nullptr, exec_space);
 }
 
 /// \brief Deep copy y = x

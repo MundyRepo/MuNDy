@@ -685,6 +685,44 @@ void ngp_field_fill(const Scalar alpha,                             //
   mark_field_modified_on_space(field, exec_space);
 }
 
+/// \struct RngStreamCounter
+/// \brief Per-`MetaData` count of the RNG streams this rank has started via ngp_field_start_rng_stream.
+///
+/// Stored as a `MetaData` attribute so the count persists with the mesh.
+struct RngStreamCounter {
+  size_t num_started = 0;
+};
+
+/// \brief Fetch (creating if needed) the per-`MetaData` RNG stream counter attribute.
+inline RngStreamCounter& get_or_create_rng_stream_counter(stk::mesh::MetaData& meta_data) {
+  auto* counter = const_cast<RngStreamCounter*>(meta_data.get_attribute<RngStreamCounter>());
+  if (counter == nullptr) {
+    const RngStreamCounter* fresh = new RngStreamCounter();
+    counter = const_cast<RngStreamCounter*>(meta_data.declare_attribute_with_delete(fresh));
+  }
+  return *counter;
+}
+
+/// \brief Set the locally owned, selected entities' counters to the start of a stream no earlier call has handed out
+template <typename ExecSpace>
+void ngp_field_start_rng_stream(stk::mesh::FieldBase& counter_field,            //
+                                const stk::mesh::Selector* const selector_ptr,  //
+                                const ExecSpace& exec_space) {
+  const stk::mesh::BulkData& bulk_data = counter_field.get_mesh();
+  RngStreamCounter& counter = get_or_create_rng_stream_counter(counter_field.mesh_meta_data());
+
+  // Ranks stride through the streams, so no two ranks hand out the same one and calls need not be collective. Stream 0
+  // is skipped, since it belongs to counters that were simply zeroed.
+  const size_t parallel_rank = static_cast<size_t>(bulk_data.parallel_rank());
+  const size_t parallel_size = static_cast<size_t>(bulk_data.parallel_size());
+  const size_t stream = 1 + parallel_rank + parallel_size * counter.num_started++;
+
+  // Only owners write, since a shared or ghosted copy on another rank would otherwise get that rank's stream.
+  const stk::mesh::Selector field_selector =
+      if_nullptr_select_fields(selector_ptr, counter_field) & counter_field.mesh_meta_data().locally_owned_part();
+  ngp_field_fill(stream << 32, counter_field, &field_selector, exec_space);
+}
+
 /// \brief Randomize a component of a field (uniform between 0 and 1)
 template <typename Scalar, typename ExecSpace>
 void ngp_field_randomize_component(const size_t seed,                              //
@@ -1101,7 +1139,9 @@ void ngp_field_print(stk::mesh::FieldBase& field,                    //
   ::mundy::mesh::for_each_entity_run(
       ngp_mesh, ngp_field.get_rank(), field_selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& fmi) {
         unsigned num_components = ngp_field.get_num_components_per_entity(fmi);
-        Kokkos::printf("EntityID: %llu, values: ", static_cast<unsigned long long>(ngp_mesh.identifier(ngp_mesh.get_entity(ngp_field.get_rank(), fmi))));
+        Kokkos::printf(
+            "EntityID: %llu, values: ",
+            static_cast<unsigned long long>(ngp_mesh.identifier(ngp_mesh.get_entity(ngp_field.get_rank(), fmi))));
         for (unsigned d = 0; d < num_components; ++d) {
           if constexpr (std::is_same_v<Scalar, int>) {
             Kokkos::printf("%i ", ngp_field(fmi, d));

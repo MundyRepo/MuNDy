@@ -22,16 +22,23 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // C++ core
+#include <algorithm>   // for std::count
+#include <cstdint>     // for uint64_t
 #include <functional>  // for std::function
 #include <memory>      // for std::unique_ptr
+#include <set>         // for std::set
 #include <vector>      // for std::vector
+
+// External
+#include <openrand/philox.h>  // for openrand::Philox
 
 // STK
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
 #include <stk_io/FillMesh.hpp>  // for stk::io::fill_mesh_with_auto_decomp
 #include <stk_mesh/base/Bucket.hpp>
-#include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
+#include <stk_mesh/base/BulkData.hpp>    // for stk::mesh::BulkData
+#include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 #include <stk_mesh/base/Field.hpp>
 #include <stk_mesh/base/FieldBase.hpp>
 #include <stk_mesh/base/FieldDataManager.hpp>
@@ -51,6 +58,7 @@
 // Mundy
 #include <mundy_math/cmath.hpp>
 #include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill, mundy::mesh::field_copy, etc
+#include <mundy_utils/rng.hpp>          // for mundy::make_philox
 
 namespace mundy {
 
@@ -955,6 +963,110 @@ TEST_F(UnitTestFieldBLAS, field_amin) {
     EXPECT_NEAR(ngp_amin, expected_amin, 1.0e-12);
 
     reset_mesh();
+  }
+}
+
+class UnitTestRngStream : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+    builder.set_spatial_dimension(3);
+    meta_data_ptr_ = builder.create_meta_data();
+    meta_data_ptr_->use_simple_fields();
+    bulk_data_ptr_ = builder.create(meta_data_ptr_);
+
+    part_a_ptr_ = &meta_data_ptr_->declare_part_with_topology("part_a", stk::topology::PARTICLE);
+    part_b_ptr_ = &meta_data_ptr_->declare_part_with_topology("part_b", stk::topology::PARTICLE);
+    counter_field_ptr_ = &meta_data_ptr_->declare_field<size_t>(stk::topology::ELEMENT_RANK, "rng_counter");
+    const size_t zero = 0;
+    stk::mesh::put_field_on_mesh(*counter_field_ptr_, *part_a_ptr_ | *part_b_ptr_, 1, &zero);
+    meta_data_ptr_->commit();
+  }
+
+  /// Ids that are unique to this rank, so every rank can declare its own particles
+  stk::mesh::EntityId local_id(stk::mesh::EntityId i) const {
+    return 1 + 100 * static_cast<stk::mesh::EntityId>(bulk_data_ptr_->parallel_rank()) + i;
+  }
+
+  stk::mesh::Entity declare_particle(stk::mesh::Part& part, stk::mesh::EntityId i) {
+    return stk::mesh::declare_element(*bulk_data_ptr_, part, local_id(i), stk::mesh::EntityIdVector{local_id(i)});
+  }
+
+  size_t counter(stk::mesh::Entity entity) const {
+    counter_field_ptr_->sync_to_host();
+    return stk::mesh::field_data(*counter_field_ptr_, entity)[0];
+  }
+
+  /// The first draw at each of the next few counter values, as a kernel would make them while stepping the counter
+  std::vector<uint64_t> draws(stk::mesh::Entity entity) const {
+    const size_t start = counter(entity);
+    std::vector<uint64_t> result;
+    for (size_t step = 0; step < 4; ++step) {
+      openrand::Philox rng = make_philox(bulk_data_ptr_->identifier(entity), start + step);
+      result.push_back(rng.draw<uint64_t>());
+    }
+    return result;
+  }
+
+  std::shared_ptr<stk::mesh::MetaData> meta_data_ptr_;
+  std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr_;
+  stk::mesh::Part* part_a_ptr_;
+  stk::mesh::Part* part_b_ptr_;
+  stk::mesh::Field<size_t>* counter_field_ptr_;
+};
+
+TEST_F(UnitTestRngStream, field_start_rng_stream_hands_out_distinct_streams) {
+  bulk_data_ptr_->modification_begin();
+  stk::mesh::Entity a = declare_particle(*part_a_ptr_, 0);
+  stk::mesh::Entity b = declare_particle(*part_b_ptr_, 1);
+  bulk_data_ptr_->modification_end();
+
+  // Each call starts a new stream at counter 0 on the selected entities and leaves the rest alone
+  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  const size_t first = counter(a);
+  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  const size_t second = counter(a);
+  EXPECT_EQ(counter(b), 0u) << "field_start_rng_stream does not respect the selector.";
+
+  const uint64_t low_mask = 0xFFFFFFFFu;
+  EXPECT_EQ(first & low_mask, 0u);
+  EXPECT_EQ(second & low_mask, 0u);
+
+  // No stream is 0, and no stream repeats within or across ranks
+  const int parallel_size = bulk_data_ptr_->parallel_size();
+  std::vector<uint64_t> local_streams{first >> 32, second >> 32};
+  std::vector<uint64_t> all_streams(2 * parallel_size);
+  MPI_Allgather(local_streams.data(), 2, MPI_UINT64_T, all_streams.data(), 2, MPI_UINT64_T, MPI_COMM_WORLD);
+  const std::set<uint64_t> unique_streams(all_streams.begin(), all_streams.end());
+  EXPECT_EQ(unique_streams.size(), all_streams.size());
+  EXPECT_EQ(unique_streams.count(0), 0u);
+}
+
+TEST_F(UnitTestRngStream, recycled_id_does_not_replay_its_predecessor) {
+  bulk_data_ptr_->modification_begin();
+  stk::mesh::Entity predecessor = declare_particle(*part_a_ptr_, 0);
+  bulk_data_ptr_->modification_end();
+  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  const std::vector<uint64_t> predecessor_draws = draws(predecessor);
+  const size_t predecessor_stream = counter(predecessor) >> 32;
+
+  bulk_data_ptr_->modification_begin();
+  ASSERT_TRUE(bulk_data_ptr_->destroy_entity(predecessor));
+  bulk_data_ptr_->modification_end();
+
+  bulk_data_ptr_->modification_begin();
+  stk::mesh::Entity newcomer = declare_particle(*part_a_ptr_, 0);
+  bulk_data_ptr_->modification_end();
+  ASSERT_EQ(bulk_data_ptr_->identifier(newcomer), local_id(0));
+
+  // A zeroed newcomer is stream 0, which is distinct here but would replay a zeroed predecessor. Start it properly.
+  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  EXPECT_NE(counter(newcomer) >> 32, predecessor_stream);
+
+  const std::vector<uint64_t> newcomer_draws = draws(newcomer);
+  for (const uint64_t draw : newcomer_draws) {
+    EXPECT_EQ(std::count(predecessor_draws.begin(), predecessor_draws.end(), draw), 0)
+        << "The newcomer replayed a draw of the entity whose id it recycled.";
   }
 }
 

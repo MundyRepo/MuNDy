@@ -35,14 +35,19 @@
 
 namespace mundy {
 
+/// \brief Make a Philox generator from a 64-bit seed and a 64-bit counter.
+///
+/// The low 32 bits of `counter` step through a stream (Philox ctr0) and the high 32 bits pick the stream (Philox ctr1).
+/// The stream is XORed into OpenRAND's default ctr1 (0x12345), so stream 0 reproduces
+/// `openrand::Philox(seed, counter)` exactly. See mundy::mesh::field_start_rng_stream for handing out streams.
 KOKKOS_INLINE_FUNCTION
 openrand::Philox make_philox(size_t seed, size_t counter) {
-  // Philox uses uint64_t seed, uint32_t counter
+  // Philox uses uint64_t seed, uint32_t counters
   MUNDY_THROW_ASSERT(seed <= Kokkos::Experimental::finite_max_v<uint64_t>, std::out_of_range,
                      "Seed value is too large for Philox.");
-  MUNDY_THROW_ASSERT(counter <= Kokkos::Experimental::finite_max_v<uint32_t>, std::out_of_range,
-                     "Counter value is too large for Philox.");
-  return openrand::Philox(static_cast<uint64_t>(seed), static_cast<uint32_t>(counter));
+  const uint32_t ctr = static_cast<uint32_t>(counter);
+  const uint32_t stream = static_cast<uint32_t>(counter >> 32);
+  return openrand::Philox(static_cast<uint64_t>(seed), ctr, openrand::DEFAULT_GLOBAL_SEED, 0x12345u ^ stream);
 }
 
 }  // namespace mundy
