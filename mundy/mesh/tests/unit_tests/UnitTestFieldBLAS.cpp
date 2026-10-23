@@ -26,7 +26,6 @@
 #include <cstdint>     // for uint64_t
 #include <functional>  // for std::function
 #include <memory>      // for std::unique_ptr
-#include <set>         // for std::set
 #include <vector>      // for std::vector
 
 // External
@@ -966,7 +965,7 @@ TEST_F(UnitTestFieldBLAS, field_amin) {
   }
 }
 
-class UnitTestRngStream : public ::testing::Test {
+class UnitTestRngShuffle : public ::testing::Test {
  protected:
   void SetUp() override {
     stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
@@ -1015,40 +1014,40 @@ class UnitTestRngStream : public ::testing::Test {
   stk::mesh::Field<size_t>* counter_field_ptr_;
 };
 
-TEST_F(UnitTestRngStream, field_start_rng_stream_hands_out_distinct_streams) {
+TEST_F(UnitTestRngShuffle, field_shuffle_rng_counter_moves_selected_counters) {
   bulk_data_ptr_->modification_begin();
-  stk::mesh::Entity a = declare_particle(*part_a_ptr_, 0);
-  stk::mesh::Entity b = declare_particle(*part_b_ptr_, 1);
+  stk::mesh::Entity a0 = declare_particle(*part_a_ptr_, 0);
+  stk::mesh::Entity a1 = declare_particle(*part_a_ptr_, 1);
+  stk::mesh::Entity b = declare_particle(*part_b_ptr_, 2);
   bulk_data_ptr_->modification_end();
 
-  // Each call starts a new stream at counter 0 on the selected entities and leaves the rest alone
-  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
-  const size_t first = counter(a);
-  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
-  const size_t second = counter(a);
-  EXPECT_EQ(counter(b), 0u) << "field_start_rng_stream does not respect the selector.";
+  // Each call moves the selected counters to a new spot per entity and leaves the rest alone
+  field_shuffle_rng_counter(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  const size_t first = counter(a0);
+  field_shuffle_rng_counter(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  const size_t second = counter(a0);
+  EXPECT_NE(first, second);
+  EXPECT_NE(counter(a0), counter(a1));
+  EXPECT_EQ(counter(b), 0u) << "field_shuffle_rng_counter does not respect the selector.";
 
-  const uint64_t low_mask = 0xFFFFFFFFu;
-  EXPECT_EQ(first & low_mask, 0u);
-  EXPECT_EQ(second & low_mask, 0u);
+  // The new counter is drawn from (id, current counter) on the stream numbered by the call
+  const size_t id = bulk_data_ptr_->identifier(a0);
+  EXPECT_EQ(first, make_philox(id, 0, openrand::DEFAULT_GLOBAL_SEED, 0).draw<uint32_t>() >> 1);
+  EXPECT_EQ(second, make_philox(id, first, openrand::DEFAULT_GLOBAL_SEED, 1).draw<uint32_t>() >> 1);
 
-  // No stream is 0, and no stream repeats within or across ranks
-  const int parallel_size = bulk_data_ptr_->parallel_size();
-  std::vector<uint64_t> local_streams{first >> 32, second >> 32};
-  std::vector<uint64_t> all_streams(2 * parallel_size);
-  MPI_Allgather(local_streams.data(), 2, MPI_UINT64_T, all_streams.data(), 2, MPI_UINT64_T, MPI_COMM_WORLD);
-  const std::set<uint64_t> unique_streams(all_streams.begin(), all_streams.end());
-  EXPECT_EQ(unique_streams.size(), all_streams.size());
-  EXPECT_EQ(unique_streams.count(0), 0u);
+  // Counters leave room to increment within Philox's 32-bit counter
+  const size_t max_start = size_t{1} << 31;
+  EXPECT_LT(first, max_start);
+  EXPECT_LT(second, max_start);
 }
 
-TEST_F(UnitTestRngStream, recycled_id_does_not_replay_its_predecessor) {
+TEST_F(UnitTestRngShuffle, recycled_id_does_not_replay_its_predecessor) {
   bulk_data_ptr_->modification_begin();
   stk::mesh::Entity predecessor = declare_particle(*part_a_ptr_, 0);
   bulk_data_ptr_->modification_end();
-  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  field_shuffle_rng_counter(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
   const std::vector<uint64_t> predecessor_draws = draws(predecessor);
-  const size_t predecessor_stream = counter(predecessor) >> 32;
+  const size_t predecessor_counter = counter(predecessor);
 
   bulk_data_ptr_->modification_begin();
   ASSERT_TRUE(bulk_data_ptr_->destroy_entity(predecessor));
@@ -1059,9 +1058,9 @@ TEST_F(UnitTestRngStream, recycled_id_does_not_replay_its_predecessor) {
   bulk_data_ptr_->modification_end();
   ASSERT_EQ(bulk_data_ptr_->identifier(newcomer), local_id(0));
 
-  // A zeroed newcomer is stream 0, which is distinct here but would replay a zeroed predecessor. Start it properly.
-  field_start_rng_stream(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
-  EXPECT_NE(counter(newcomer) >> 32, predecessor_stream);
+  // A zeroed newcomer would replay a zeroed predecessor. Shuffle it.
+  field_shuffle_rng_counter(*counter_field_ptr_, *part_a_ptr_, stk::ngp::ExecSpace());
+  EXPECT_NE(counter(newcomer), predecessor_counter);
 
   const std::vector<uint64_t> newcomer_draws = draws(newcomer);
   for (const uint64_t draw : newcomer_draws) {

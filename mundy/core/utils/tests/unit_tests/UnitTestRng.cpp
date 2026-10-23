@@ -39,7 +39,7 @@ void expect_same_draws(openrand::Philox actual, openrand::Philox expected, size_
   }
 }
 
-TEST(UnitTestRng, make_philox_with_stream_zero_matches_openrand) {
+TEST(UnitTestRng, make_philox_matches_openrand) {
   for (const size_t seed : {size_t{0}, size_t{1}, size_t{12345678901234}}) {
     for (const size_t counter : {size_t{0}, size_t{1}, size_t{4294967295}}) {
       expect_same_draws(make_philox(seed, counter), openrand::Philox(seed, static_cast<uint32_t>(counter)), seed,
@@ -48,13 +48,16 @@ TEST(UnitTestRng, make_philox_with_stream_zero_matches_openrand) {
   }
 }
 
-TEST(UnitTestRng, make_philox_passes_high_counter_bits_through_as_stream) {
+TEST(UnitTestRng, make_philox_passes_global_seed_and_ctr1_through_to_openrand) {
   for (const size_t seed : {size_t{0}, size_t{12345678901234}}) {
-    for (const uint32_t low : {uint32_t{0}, uint32_t{3}, uint32_t{4294967295}}) {
-      for (const uint32_t stream : {uint32_t{0}, uint32_t{1}, uint32_t{2}, uint32_t{4294967295}}) {
-        const size_t counter = (static_cast<size_t>(stream) << 32) | low;
-        expect_same_draws(make_philox(seed, counter),
-                          openrand::Philox(seed, low, openrand::DEFAULT_GLOBAL_SEED, 0x12345u ^ stream), seed, counter);
+    for (const size_t counter : {size_t{0}, size_t{3}, size_t{4294967295}}) {
+      for (const uint32_t global_seed : {openrand::DEFAULT_GLOBAL_SEED, uint32_t{7}}) {
+        expect_same_draws(make_philox(seed, counter, global_seed),
+                          openrand::Philox(seed, static_cast<uint32_t>(counter), global_seed), seed, counter);
+        for (const uint32_t ctr1 : {uint32_t{0}, uint32_t{1}, uint32_t{0x12345}, uint32_t{4294967295}}) {
+          expect_same_draws(make_philox(seed, counter, global_seed, ctr1),
+                            openrand::Philox(seed, static_cast<uint32_t>(counter), global_seed, ctr1), seed, counter);
+        }
       }
     }
   }

@@ -685,42 +685,51 @@ void ngp_field_fill(const Scalar alpha,                             //
   mark_field_modified_on_space(field, exec_space);
 }
 
-/// \struct RngStreamCounter
-/// \brief Per-`MetaData` count of the RNG streams this rank has started via ngp_field_start_rng_stream.
+/// \struct RngShuffleCounter
+/// \brief Per-`MetaData` count of the calls to ngp_field_shuffle_rng_counter.
 ///
 /// Stored as a `MetaData` attribute so the count persists with the mesh.
-struct RngStreamCounter {
-  size_t num_started = 0;
+struct RngShuffleCounter {
+  uint32_t num_shuffles = 0;
 };
 
-/// \brief Fetch (creating if needed) the per-`MetaData` RNG stream counter attribute.
-inline RngStreamCounter& get_or_create_rng_stream_counter(stk::mesh::MetaData& meta_data) {
-  auto* counter = const_cast<RngStreamCounter*>(meta_data.get_attribute<RngStreamCounter>());
+/// \brief Fetch (creating if needed) the per-`MetaData` RNG shuffle counter attribute.
+inline RngShuffleCounter& get_or_create_rng_shuffle_counter(stk::mesh::MetaData& meta_data) {
+  auto* counter = const_cast<RngShuffleCounter*>(meta_data.get_attribute<RngShuffleCounter>());
   if (counter == nullptr) {
-    const RngStreamCounter* fresh = new RngStreamCounter();
-    counter = const_cast<RngStreamCounter*>(meta_data.declare_attribute_with_delete(fresh));
+    const RngShuffleCounter* fresh = new RngShuffleCounter();
+    counter = const_cast<RngShuffleCounter*>(meta_data.declare_attribute_with_delete(fresh));
   }
   return *counter;
 }
 
-/// \brief Set the locally owned, selected entities' counters to the start of a stream no earlier call has handed out
+/// \brief Move the selected entities' counters to a pseudo-random spot drawn from (entity id, counter), on a stream
+/// (ctr1) no earlier call has used
 template <typename ExecSpace>
-void ngp_field_start_rng_stream(stk::mesh::FieldBase& counter_field,            //
-                                const stk::mesh::Selector* const selector_ptr,  //
-                                const ExecSpace& exec_space) {
-  const stk::mesh::BulkData& bulk_data = counter_field.get_mesh();
-  RngStreamCounter& counter = get_or_create_rng_stream_counter(counter_field.mesh_meta_data());
+void ngp_field_shuffle_rng_counter(stk::mesh::FieldBase& counter_field,            //
+                                   const stk::mesh::Selector* const selector_ptr,  //
+                                   const ExecSpace& exec_space) {
+  RngShuffleCounter& shuffle_counter = get_or_create_rng_shuffle_counter(counter_field.mesh_meta_data());
+  const uint32_t stream = shuffle_counter.num_shuffles++;
 
-  // Ranks stride through the streams, so no two ranks hand out the same one and calls need not be collective. Stream 0
-  // is skipped, since it belongs to counters that were simply zeroed.
-  const size_t parallel_rank = static_cast<size_t>(bulk_data.parallel_rank());
-  const size_t parallel_size = static_cast<size_t>(bulk_data.parallel_size());
-  const size_t stream = 1 + parallel_rank + parallel_size * counter.num_started++;
+  sync_field_to_space(counter_field, exec_space);
+  stk::mesh::Selector field_selector = if_nullptr_select_fields(selector_ptr, counter_field);
+  using NgpCounterField = stk::mesh::NgpField<size_t>;
+  NgpCounterField ngp_counter_field = stk::mesh::get_updated_ngp_field<size_t>(counter_field);
+  stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(counter_field.get_mesh());
 
-  // Only owners write, since a shared or ghosted copy on another rank would otherwise get that rank's stream.
-  const stk::mesh::Selector field_selector =
-      if_nullptr_select_fields(selector_ptr, counter_field) & counter_field.mesh_meta_data().locally_owned_part();
-  ngp_field_fill(stream << 32, counter_field, &field_selector, exec_space);
+  // Keep the new counter below 2^31, so applications can increment it 2^31 times before it overflows Philox's 32-bit
+  // counter.
+  const stk::mesh::EntityRank rank = ngp_counter_field.get_rank();
+  ::mundy::mesh::for_each_entity_run(
+      ngp_mesh, rank, field_selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& fmi) {
+        const size_t id = ngp_mesh.identifier(ngp_mesh.get_entity(rank, fmi));
+        auto& counter = ngp_counter_field(fmi, 0);
+        openrand::Philox rng = make_philox(id, counter, openrand::DEFAULT_GLOBAL_SEED, stream);
+        counter = rng.draw<uint32_t>() >> 1;
+      });
+
+  mark_field_modified_on_space(counter_field, exec_space);
 }
 
 /// \brief Randomize a component of a field (uniform between 0 and 1)
