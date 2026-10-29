@@ -22,10 +22,8 @@
 #define MUNDY_MBODY_KOKKOSMBODY_HPP_
 
 // C++ core
-#include <array>        // for std::array
-#include <cmath>        // for std::log
-#include <ostream>      // for std::ostream
-#include <type_traits>  // for std::is_same_v
+#include <ostream>  // for std::ostream
+#include <utility>  // for std::move
 
 // Mundy
 #include <mundy_math/linear_system.hpp>                // for mundy::CGConfig
@@ -107,6 +105,40 @@ inline std::ostream& operator<<(std::ostream& os, const MixedSLCPResult& result)
      << ", accepted_lcp_result: {" << result.accepted_lcp_result << "}";
   return os;
 }
+
+/// \brief Numerics of a mixed ReLCP step: its inner mixed LCPs and the sequence of them.
+///
+/// An iterate is accepted once, at the configuration it moves the rods to, no ReLCP pair overlaps by more than
+/// length_tol. With relinearize_bilateral, every bilateral row's residual psi + K^-1 y and the displacement its
+/// constraint force directions would change the step by must also be within length_tol (rows and displacements measured
+/// in length) and angle_tol (in radians). length_tol must be at least the inner outer_tol, the floor of every unilateral
+/// row; re-linearizing, both tolerances must be at least the inner cg_tol.
+struct MixedReLCPConfig {
+  MixedLCPConfig inner_lcp_config;
+  unsigned max_iters = 20;
+  double length_tol = 1e-6;
+  double angle_tol = 1e-6;
+  bool relinearize_bilateral = false;
+};
+
+/// \brief Result of a mixed ReLCP step: the linearization count, the returned iterate's residual, and convergence.
+///
+/// residual is the returned iterate's largest acceptance residual over the tolerance it is tested against, so
+/// converged is residual <= 1, and accepted_lcp_result is that iterate's inner LCP result. Unconverged, the returned
+/// iterate is the first linearization.
+struct MixedReLCPResult {
+  unsigned num_iters{0};
+  double residual{0.0};
+  bool converged{false};
+  MixedLCPResult accepted_lcp_result{};
+};
+
+/// \brief Write a MixedReLCPResult to an ostream.
+inline std::ostream& operator<<(std::ostream& os, const MixedReLCPResult& result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged
+     << ", accepted_lcp_result: {" << result.accepted_lcp_result << "}";
+  return os;
+}
 //@}
 
 /// \brief Move every rod through one step of its velocity, to the configuration C^k (+) G^k dt U.
@@ -115,12 +147,7 @@ inline std::ostream& operator<<(std::ostream& os, const MixedSLCPResult& result)
 /// held over the step, whose rate at dt = 0 is G^k omega.
 template <typename ExecSpace>
 void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
-  Kokkos::parallel_for(
-      "advance_rods", Kokkos::RangePolicy<ExecSpace>(0, rods.size()), KOKKOS_LAMBDA(const int i) {
-        rods.center(i) = rods.center(i) + dt * rods.velocity(i);
-        auto orientation = rods.orientation(i);
-        rotate_quaternion(orientation, Vector3d(rods.omega(i)), dt);
-      });
+  impl::advance_poses(rods, dt);
 }
 
 //! \name Multibody time integrators
@@ -196,12 +223,48 @@ template <typename ExecSpace, typename Model, typename Policy, typename... Famil
 class MixedSLCPIntegrator
     : public impl::IntegratorData<
           ExecSpace, Model, Policy,
-          impl::MixedSLCPWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
+          impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
           Families...> {
  public:
   using impl::IntegratorData<
       ExecSpace, Model, Policy,
-      impl::MixedSLCPWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
+      impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
+      Families...>::IntegratorData;
+};
+
+/// \brief The multibody time integrator by steps of size dt whose ReLCP contacts end without overlap, each solved as a
+/// sequence of mixed LCPs.
+///
+/// A step's configuration is the push-forward C(W) = C^k (+) G^k (dt V_ext + M (F_ext + W)) of the constraint wrench
+/// W. Iterate 0 is MixedLCPIntegrator's step, every row linearized at C^k. Iterate n moves the rods to
+/// C_{n+1} = C(W_n), where each ReLCP family's rule gives its pairs' separations. Every pair overlapping there by more
+/// than length_tol gains a unilateral row of its separation, with
+///   q = Phi(C_{n+1}) - dt J^T M W_n,
+/// the linear model about C_{n+1} of the separation at C(W). Within a step, rows are neither removed nor re-linearized,
+/// so iterate n + 1 constrains all that iterate n did, and other unilateral families keep their rows from C^k. With
+/// relinearize_bilateral the bilateral rows are linearized afresh at C_{n+1} as MixedSLCPIntegrator's are; otherwise
+/// they stay at C^k, as MixedLCPIntegrator's do.
+///
+/// An iterate is accepted once no ReLCP pair overlaps at C_{n+1} by more than length_tol and, re-linearizing, the
+/// bilateral rows hold there. The sequence stops unconverged at max_iters iterates, and the step is then iterate 0.
+/// A new row's separation is linearized about C_{n+1}, which must lie where its rule's separation is smooth: a step
+/// that moves a pair from contact to an overlap of about the rods' radius can leave its rows without a solution, and
+/// the unilateral solve then fails. A step generating more rows than its storage holds grows the storage, which later
+/// steps keep.
+///
+/// It holds its rods, constraints, mobility model, preconditioner policy and storage as MixedLCPIntegrator does. Copies
+/// of an integrator share its storage, so an integrator and its copies must not be used by more than one in-flight
+/// solve_step concurrently; make an integrator per concurrent solve.
+template <typename ExecSpace, typename Model, typename Policy, typename... Families>
+class MixedReLCPIntegrator
+    : public impl::IntegratorData<
+          ExecSpace, Model, Policy,
+          impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
+          Families...> {
+ public:
+  using impl::IntegratorData<
+      ExecSpace, Model, Policy,
+      impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
       Families...>::IntegratorData;
 };
 
@@ -248,6 +311,27 @@ MixedSLCPIntegrator<ExecSpace, Model, Policy, Families...> make_mixed_slcp_integ
     typename MixedSLCPIntegrator<ExecSpace, Model, Policy, Families...>::workspace_t workspace) {
   return MixedSLCPIntegrator<ExecSpace, Model, Policy, Families...>(rods, constraints, mobility_model, dt,
                                                                     preconditioner_policy, std::move(workspace));
+}
+
+/// \brief The mixed ReLCP integrator of rods under constraints, moving with mobility_model's mobility by steps of dt,
+/// with each Schur complement preconditioned by preconditioner_policy, in storage of its own.
+template <typename ExecSpace, typename Model, typename Policy = NoPreconditioner, typename... Families>
+MixedReLCPIntegrator<ExecSpace, Model, Policy, Families...> make_mixed_relcp_integrator(
+    const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints, const Model& mobility_model,
+    double dt, const Policy& preconditioner_policy = Policy{}) {
+  return MixedReLCPIntegrator<ExecSpace, Model, Policy, Families...>(rods, constraints, mobility_model, dt,
+                                                                     preconditioner_policy);
+}
+
+/// \brief The mixed ReLCP integrator above, in workspace's storage if it fits rods and constraints, as for
+/// make_mixed_lcp_integrator.
+template <typename ExecSpace, typename Model, typename Policy, typename... Families>
+MixedReLCPIntegrator<ExecSpace, Model, Policy, Families...> make_mixed_relcp_integrator(
+    const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints, const Model& mobility_model,
+    double dt, const Policy& preconditioner_policy,
+    typename MixedReLCPIntegrator<ExecSpace, Model, Policy, Families...>::workspace_t workspace) {
+  return MixedReLCPIntegrator<ExecSpace, Model, Policy, Families...>(rods, constraints, mobility_model, dt,
+                                                                     preconditioner_policy, std::move(workspace));
 }
 
 /// \brief One step of integrator at its rods' current configuration C^k.
@@ -301,21 +385,9 @@ MixedSLCPResult solve_step(const MixedSLCPIntegrator<ExecSpace, Model, Policy, F
   MUNDY_THROW_REQUIRE(cfg.length_tol > 0.0 && cfg.angle_tol > 0.0, std::invalid_argument,
                       "mbody::solve_step: length_tol and angle_tol must be positive.");
   const RodViews<ExecSpace>& rods = integrator.rods();
-  const ConstraintSet<Families...>& constraints = integrator.constraints();
-  const double dt = integrator.dt();
   auto& workspace = integrator.workspace();
-  auto& linearization = workspace.lcp.linearization;
   const MixedLCPConfig& lcp_cfg = cfg.inner_lcp_config;
-
-  const PGDConfig<double> pgd_cfg{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol};
-  const CGConfig<double> cg_cfg{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol};
-  const auto step = impl::make_step_data(rods, constraints, integrator.mobility_model().make_mobility(rods), dt,
-                                         pgd_cfg, cg_cfg, linearization);
-  const impl::ConstraintIndexMap<Families...>& index_map = step.index_map;
-  if (index_map.num_unilateral == 0 && index_map.num_bilateral == 0) {
-    Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
-    return MixedSLCPResult{1, 0.0, true, MixedLCPResult{0, 0.0, 0.0 <= lcp_cfg.outer_tol}};
-  }
+  const impl::ConstraintIndexMap<Families...>& index_map = workspace.lcp.linearization.index_map();
   MUNDY_THROW_ASSERT(
       index_map.num_unilateral == 0 || index_map.num_bilateral == 0 || lcp_cfg.outer_tol >= lcp_cfg.cg_tol,
       std::invalid_argument, "mbody::solve_step: outer_tol must be at least cg_tol.");
@@ -323,61 +395,54 @@ MixedSLCPResult solve_step(const MixedSLCPIntegrator<ExecSpace, Model, Policy, F
       index_map.num_bilateral == 0 || (cfg.length_tol >= lcp_cfg.cg_tol && cfg.angle_tol >= lcp_cfg.cg_tol),
       std::invalid_argument, "mbody::solve_step: length_tol and angle_tol must be at least cg_tol.");
 
-  impl::linearize(step, linearization, rods, constraints);
-  impl::read_unilateral_multipliers<ExecSpace>(constraints, index_map, workspace.lcp.x_start);
-  impl::LinearizedStep<ExecSpace>& first = workspace.lcp.linearized;
-  impl::solve_linearization(step, linearization, impl::Displacement<ExecSpace>{step.u_free, dt}, workspace.lcp.x_start,
-                            first);
+  const impl::SequenceResult result = impl::solve_sequence(
+      rods, integrator.constraints(), integrator.mobility_model().make_mobility(rods), integrator.dt(),
+      PGDConfig<double>{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol}, CGConfig<double>{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol},
+      cfg.max_iters, /*stop_when_hopeless=*/true, workspace, impl::RelinearizeBilateral{cfg.length_tol, cfg.angle_tol});
+  const PGDResult<double>& accepted = result.accepted_lcp_result;
+  return MixedSLCPResult{result.num_iters, result.residual, result.converged,
+                         MixedLCPResult{accepted.num_iters, accepted.residual, accepted.converged}};
+}
 
-  // Trial configurations C_{n+1} = C^k (+) G^k dt U_n, in storage of their own: the mobility reads rods' poses.
-  RodViews<ExecSpace>& trial = workspace.trial;
-  Kokkos::deep_copy(trial.radius_view(), rods.radius_view());
-  Kokkos::deep_copy(trial.length_view(), rods.length_view());
+/// \brief One step of integrator at its rods' current configuration C^k.
+///
+/// On entry and exit the rods and constraints are as for a mixed SLCP step: every family's lambda holds its multipliers
+/// of the returned iterate, which for a ReLCP family are those of its pairs' rows from the start of the step. The
+/// returned iterate's constraint force includes every row it solved. advance_rods(rods, dt) performs the consistent
+/// time integration, which for a converged iterate reaches the configuration at which it was accepted.
+template <typename ExecSpace, typename Model, typename Policy, typename... Families>
+MixedReLCPResult solve_step(const MixedReLCPIntegrator<ExecSpace, Model, Policy, Families...>& integrator,
+                            const MixedReLCPConfig& cfg) {
+  MUNDY_THROW_REQUIRE(cfg.max_iters >= 1, std::invalid_argument, "mbody::solve_step: max_iters must be >= 1.");
+  MUNDY_THROW_REQUIRE(cfg.length_tol > 0.0 && cfg.angle_tol > 0.0, std::invalid_argument,
+                      "mbody::solve_step: length_tol and angle_tol must be positive.");
+  const RodViews<ExecSpace>& rods = integrator.rods();
+  auto& workspace = integrator.workspace();
+  const MixedLCPConfig& lcp_cfg = cfg.inner_lcp_config;
+  const impl::ConstraintIndexMap<Families...>& index_map = workspace.lcp.linearization.index_map();
+  MUNDY_THROW_ASSERT(
+      index_map.num_unilateral == 0 || index_map.num_bilateral == 0 || lcp_cfg.outer_tol >= lcp_cfg.cg_tol,
+      std::invalid_argument, "mbody::solve_step: outer_tol must be at least cg_tol.");
+  MUNDY_THROW_ASSERT(index_map.num_unilateral == 0 || cfg.length_tol >= lcp_cfg.outer_tol, std::invalid_argument,
+                     "mbody::solve_step: length_tol must be at least outer_tol.");
+  MUNDY_THROW_ASSERT(!cfg.relinearize_bilateral || index_map.num_bilateral == 0 ||
+                         (cfg.length_tol >= lcp_cfg.cg_tol && cfg.angle_tol >= lcp_cfg.cg_tol),
+                     std::invalid_argument, "mbody::solve_step: length_tol and angle_tol must be at least cg_tol.");
 
-  // Iterates after the first alternate between two steps of their own, so the first is kept for the fallback.
-  if (cfg.max_iters >= 2 && !workspace.later) {
-    workspace.later.emplace(std::array{impl::make_linearized_step<ExecSpace>(index_map, rods.size()),
-                                       impl::make_linearized_step<ExecSpace>(index_map, rods.size())});
-  }
-  const impl::LinearizedStep<ExecSpace>* iterate = &first;
-  double first_merit = 0.0;
-  double previous_merit = 0.0;
-  for (unsigned num_iters = 1;; ++num_iters) {
-    Kokkos::deep_copy(trial.center_view(), rods.center_view());
-    Kokkos::deep_copy(trial.orientation_view(), rods.orientation_view());
-    Kokkos::deep_copy(trial.velocity_omega_view(), iterate->velocity);
-    advance_rods(trial, dt);
-    impl::linearize(step, linearization, trial, constraints);
-
-    const double merit = impl::slcp_merit(step, linearization, *iterate, workspace.row_units, workspace.wrench_change,
-                                          workspace.displacement_change, cfg.length_tol, cfg.angle_tol);
-    if (num_iters == 1) {
-      first_merit = merit;
-    }
-    if (merit <= 1.0) {
-      impl::write_step(rods, constraints, index_map, *iterate);
-      return MixedSLCPResult{
-          num_iters, merit, true,
-          MixedLCPResult{iterate->result.num_iters, iterate->result.residual, iterate->result.converged}};
-    }
-
-    // Stop once the contraction observed so far cannot bring the merit to 1 within max_iters.
-    const unsigned remaining = cfg.max_iters - num_iters;
-    const bool hopeless =
-        num_iters >= 2 && static_cast<double>(remaining) * std::log(merit / previous_merit) + std::log(merit) > 0.0;
-    if (remaining == 0 || hopeless) {
-      impl::write_step(rods, constraints, index_map, first);
-      return MixedSLCPResult{num_iters, first_merit, false,
-                             MixedLCPResult{first.result.num_iters, first.result.residual, first.result.converged}};
-    }
-    previous_merit = merit;
-
-    // Never iterate's storage, which is first or later[(num_iters - 1) % 2].
-    impl::LinearizedStep<ExecSpace>& next = (*workspace.later)[num_iters % 2];
-    impl::solve_linearization(step, linearization, impl::Displacement<ExecSpace>{iterate->m_wrench, -dt}, iterate->x,
-                              next);
-    iterate = &next;
-  }
+  const PGDConfig<double> pgd_cfg{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol};
+  const CGConfig<double> cg_cfg{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol};
+  const auto mobility = integrator.mobility_model().make_mobility(rods);
+  const impl::AugmentContacts augment_contacts{cfg.length_tol};
+  const impl::SequenceResult result =
+      cfg.relinearize_bilateral
+          ? impl::solve_sequence(rods, integrator.constraints(), mobility, integrator.dt(), pgd_cfg, cg_cfg,
+                                 cfg.max_iters, /*stop_when_hopeless=*/false, workspace,
+                                 impl::RelinearizeBilateral{cfg.length_tol, cfg.angle_tol}, augment_contacts)
+          : impl::solve_sequence(rods, integrator.constraints(), mobility, integrator.dt(), pgd_cfg, cg_cfg,
+                                 cfg.max_iters, /*stop_when_hopeless=*/false, workspace, augment_contacts);
+  const PGDResult<double>& accepted = result.accepted_lcp_result;
+  return MixedReLCPResult{result.num_iters, result.residual, result.converged,
+                          MixedLCPResult{accepted.num_iters, accepted.residual, accepted.converged}};
 }
 //@}
 

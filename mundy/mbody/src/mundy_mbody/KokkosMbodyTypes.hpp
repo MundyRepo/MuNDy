@@ -32,7 +32,7 @@
 /// return the raw Kokkos::View.
 
 // C++ core
-#include <concepts>     // for std::constructible_from, std::convertible_to, std::same_as
+#include <concepts>     // for std::constructible_from, std::convertible_to, std::default_initializable, std::same_as
 #include <cstddef>      // for size_t
 #include <stdexcept>    // for std::invalid_argument
 #include <type_traits>  // for std::is_same_v, std::remove_cvref_t
@@ -42,6 +42,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_geom/distance.hpp>    // for mundy::{distance, SharedNormalSigned}
+#include <mundy_geom/primitives.hpp>  // for mundy::{LineSegment, Point}
 #include <mundy_math/Quaternion.hpp>
 #include <mundy_math/Scalar.hpp>
 #include <mundy_math/Vector3.hpp>
@@ -180,6 +182,64 @@ struct family_traits<RodViews<ExecSpace>> {
                                c.force_torque_view(), c.velocity_omega_view());
   }
 };
+
+//! \name Pair separations
+//@{
+
+/// \brief A signed separation between rods i and j and its gradient.
+///
+/// The gradient is given as the center-of-mass force and torque a unit multiplier applies to each rod, so the
+/// separation changes at rate force_i . v_i + torque_i . omega_i + force_j . v_j + torque_j . omega_j.
+struct PairSeparation {
+  double value;
+  Vector3d force_i;
+  Vector3d torque_i;
+  Vector3d force_j;
+  Vector3d torque_j;
+};
+
+/// \brief A rule giving the signed separation of any two rods at their current configuration.
+///
+/// A default-constructed Rule is the rule: it is evaluated as Rule{}(rods, i, j).
+template <typename Rule, typename ExecSpace>
+concept PairSeparationRule =
+    std::default_initializable<Rule> && requires(const Rule& rule, const RodViews<ExecSpace>& rods, int i) {
+      { rule(rods, i, i) } -> std::same_as<PairSeparation>;
+    };
+
+/// \brief The shared-normal signed separation of two spherocylinders.
+///
+/// The surface points closest across the two centerlines are joined along their shared normal n, from rod i to rod j.
+/// value is their distance less both radii: the gap between separated rods, and minus the shortest separating
+/// translation of overlapping ones. A unit multiplier pushes the rods apart along n at those points. The centerlines
+/// must not intersect, where n is undefined.
+struct SpherocylinderSeparation {
+  /// \brief The separations a pair is expected to need within one step.
+  static constexpr size_t reserved_rows_per_pair = 5;
+
+  template <typename ExecSpace>
+  KOKKOS_FUNCTION PairSeparation operator()(const RodViews<ExecSpace>& rods, int i, int j) const {
+    const Vector3d tangent_i = rods.orientation(i) * Vector3d{0.0, 0.0, 1.0};
+    const Vector3d tangent_j = rods.orientation(j) * Vector3d{0.0, 0.0, 1.0};
+    const Vector3d pos_i = rods.center(i);
+    const Vector3d pos_j = rods.center(j);
+    const double length_i = rods.length(i);
+    const double length_j = rods.length(j);
+    const LineSegment<double> centerline_i{pos_i - 0.5 * length_i * tangent_i, pos_i + 0.5 * length_i * tangent_i};
+    const LineSegment<double> centerline_j{pos_j - 0.5 * length_j * tangent_j, pos_j + 0.5 * length_j * tangent_j};
+
+    Point<double> contact_point_i, contact_point_j;
+    double arc_i, arc_j;
+    Vector3d rij;
+    const double dist = distance(centerline_i, centerline_j, contact_point_i, contact_point_j, arc_i, arc_j, rij);
+    MUNDY_THROW_ASSERT(dist > 1e-12, std::runtime_error, "Rod-rod contact distance is nearly degenerate.");
+
+    const Vector3d n_ij = rij / dist;
+    return PairSeparation{dist - rods.radius(i) - rods.radius(j), -n_ij, -cross(contact_point_i - pos_i, n_ij), n_ij,
+                          cross(contact_point_j - pos_j, n_ij)};
+  }
+};
+//@}
 
 /// \brief Rod-center-to-rod-center Hookean springs. lambda is the spring force magnitude.
 template <typename ExecSpace>
@@ -911,6 +971,92 @@ struct family_traits<ContactViews<ExecSpace>> {
   }
 };
 
+/// \brief Rod-rod unilateral contacts whose true separation is Rule's, kept by recursive augmentation (ReLCP).
+///
+/// Each entry is a pair of rods, constrained at the start of a step by Rule's separation there, as ContactViews
+/// constrains a pair. An integrator that augments contacts also constrains every pair that Rule finds overlapping at
+/// the configuration a step reaches, so the step ends without overlap. lambda is the force magnitude of each pair's
+/// constraint from the start of the step.
+template <typename ExecSpace, typename Rule = SpherocylinderSeparation>
+class ReLCPContactViews {
+  static_assert(PairSeparationRule<Rule, ExecSpace>, "ReLCPContactViews: Rule must be a PairSeparationRule.");
+
+ public:
+  using execution_space = ExecSpace;
+  using memory_space = typename ExecSpace::memory_space;
+  using int_view_t = Kokkos::View<int*, memory_space>;
+  using scalar_view_t = Kokkos::View<double*, memory_space>;
+  using rule_type = Rule;
+
+  static constexpr ContainerType container_type = ContainerType::CONSTRAINT;
+
+  /// \brief The number of scalar constraints, and so of multipliers, per entry at the start of a step.
+  static constexpr size_t rows_per_entry = 1;
+
+  /// \brief The constraints a pair is expected to need within one step, its own included.
+  static constexpr size_t reserved_rows_per_entry = Rule::reserved_rows_per_pair;
+
+  static constexpr ConstraintType constraint_type = ConstraintType::UNILATERAL;
+
+  /// \brief The number of rods each entry couples.
+  static constexpr size_t bodies_per_entry = 2;
+
+  /// \brief The unit of each row within an entry.
+  KOKKOS_INLINE_FUNCTION static constexpr RowUnit row_unit(size_t /*row_in_entry*/) {
+    return RowUnit::LENGTH;
+  }
+
+  ReLCPContactViews() = default;
+
+  explicit ReLCPContactViews(size_t num_pairs)
+      : rod_i_("rod_i", num_pairs), rod_j_("rod_j", num_pairs), lambda_("lambda", rows_per_entry * num_pairs) {
+  }
+
+  //! \name Per-element accessors: each returns a view into the flat storage below, not a copy.
+  //@{
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION auto rod_i(int p)  const { return get_scalar<int>(&rod_i_(p)); }
+  KOKKOS_INLINE_FUNCTION auto rod_j(int p)  const { return get_scalar<int>(&rod_j_(p)); }
+  KOKKOS_INLINE_FUNCTION auto lambda(int p) const { return get_scalar<double>(&lambda_(p)); }
+  // clang-format on
+  //@}
+
+  //! \name Whole-array accessors
+  //@{
+  // clang-format off
+  int_view_t rod_i_view()     const { return rod_i_; }
+  int_view_t rod_j_view()     const { return rod_j_; }
+  scalar_view_t lambda_view() const { return lambda_; }
+  // clang-format on
+  //@}
+
+  size_t size() const {
+    return rod_i_.extent(0);
+  }
+
+  /// \brief The number of rows all entries occupy at the start of a step, rows_per_entry * size().
+  size_t num_rows() const {
+    return rows_per_entry * size();
+  }
+
+  /// \brief The compliance of row row, zero: a contact is rigid.
+  KOKKOS_INLINE_FUNCTION double row_compliance(size_t /*row*/) const {
+    return 0.0;
+  }
+
+ private:
+  int_view_t rod_i_;
+  int_view_t rod_j_;
+  scalar_view_t lambda_;
+};
+
+template <typename ExecSpace, typename Rule>
+struct family_traits<ReLCPContactViews<ExecSpace, Rule>> {
+  static auto fields(const ReLCPContactViews<ExecSpace, Rule>& c) {
+    return ::mundy::make_tuple(c.rod_i_view(), c.rod_j_view(), c.lambda_view());
+  }
+};
+
 /// \brief A family of constraints: a views container whose entries each own rows_per_entry multipliers.
 template <typename F>
 concept ConstraintFamily =
@@ -923,6 +1069,18 @@ concept ConstraintFamily =
       { f.row_compliance(size_t{0}) } -> std::convertible_to<double>;
       { f.num_rows() } -> std::convertible_to<size_t>;
       f.lambda_view();
+    };
+
+/// \brief A unilateral pair family whose true separation a rule gives at any configuration, so an integrator can
+/// constrain its pairs again where a step leaves them overlapping.
+template <typename F>
+concept ReLCPFamily =
+    ConstraintFamily<F> && (F::constraint_type == ConstraintType::UNILATERAL) && (F::bodies_per_entry == 2) &&
+    (F::rows_per_entry == 1) && PairSeparationRule<typename F::rule_type, typename F::execution_space> &&
+    requires(const F& f) {
+      { F::reserved_rows_per_entry } -> std::convertible_to<size_t>;
+      f.rod_i_view();
+      f.rod_j_view();
     };
 
 /// \brief Whether no type appears twice among Types.
@@ -978,13 +1136,24 @@ ConstraintSet<Families...> make_constraint_set(const Families&... families) {
 // The Kokkos view idioms, lifted to the containers above. A mirror's Space is an execution space. create_mirror always
 // allocates; create_mirror_view aliases its source when the two share a memory space, as a Kokkos view mirror does.
 
-/// \brief Copy every field of src into dst; the two must have the same size.
-template <template <typename> class Views, typename DstSpace, typename SrcSpace>
-  requires ViewsContainer<Views<DstSpace>> && ViewsContainer<Views<SrcSpace>>
-void deep_copy(const Views<DstSpace>& dst, const Views<SrcSpace>& src) {
+/// \brief The container T in Space: the same container and template arguments, with Space for its execution space.
+template <typename T, typename Space>
+struct rebind_space {};
+template <template <typename, typename...> class Views, typename ExecSpace, typename... Params, typename Space>
+struct rebind_space<Views<ExecSpace, Params...>, Space> {
+  using type = Views<Space, Params...>;
+};
+
+template <typename T, typename Space>
+using rebind_space_t = typename rebind_space<T, Space>::type;
+
+/// \brief Copy every field of src into dst, the same container in another space; the two must have the same size.
+template <ViewsContainer Dst, ViewsContainer Src>
+  requires std::same_as<rebind_space_t<Src, typename Dst::execution_space>, Dst>
+void deep_copy(const Dst& dst, const Src& src) {
   MUNDY_THROW_REQUIRE(dst.size() == src.size(), std::invalid_argument, "mbody::deep_copy: size mismatch.");
-  const auto dst_fields = family_traits<Views<DstSpace>>::fields(dst);
-  const auto src_fields = family_traits<Views<SrcSpace>>::fields(src);
+  const auto dst_fields = family_traits<Dst>::fields(dst);
+  const auto src_fields = family_traits<Src>::fields(src);
   [&]<size_t... I>(std::index_sequence<I...>) {
     (Kokkos::deep_copy(::mundy::get<I>(dst_fields), ::mundy::get<I>(src_fields)), ...);
   }(std::make_index_sequence<::mundy::tuple_size_v<std::remove_cvref_t<decltype(dst_fields)>>>{});
@@ -1011,11 +1180,10 @@ template <typename T>
 concept MirrorableType = ViewsContainer<T> || is_constraint_set_v<T>;
 
 /// \brief A new zero-initialized container shaped like src in Space's memory.
-template <typename Space, template <typename> class Views, typename SrcSpace>
-  requires ViewsContainer<Views<SrcSpace>>
-Views<Space> create_mirror(const Space& /*space*/, const Views<SrcSpace>& src) {
+template <typename Space, ViewsContainer T>
+rebind_space_t<T, Space> create_mirror(const Space& /*space*/, const T& src) {
   static_assert(Kokkos::is_execution_space<Space>::value, "create_mirror: Space must be an execution space.");
-  return Views<Space>(src.size());
+  return rebind_space_t<T, Space>(src.size());
 }
 
 /// \brief A new zero-initialized constraint set shaped like src in Space's memory.

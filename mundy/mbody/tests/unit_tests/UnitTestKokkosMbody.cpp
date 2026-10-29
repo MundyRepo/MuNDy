@@ -36,6 +36,7 @@
 #include <map>        // for std::map
 #include <random>     // for std::mt19937, std::uniform_real_distribution
 #include <stdexcept>  // for std::invalid_argument, std::runtime_error
+#include <sstream>    // for std::ostringstream
 #include <string>     // for std::to_string
 #include <utility>    // for std::swap
 #include <vector>     // for std::vector
@@ -327,7 +328,7 @@ static_assert(ViewsContainer<RodViews<HostExecSpace>> && ViewsContainer<LinearSp
                   ViewsContainer<FixedLengthViews<HostExecSpace>> &&
                   ViewsContainer<TriplePointAngularSpringViews<HostExecSpace>> &&
                   ViewsContainer<FixedPositionViews<HostExecSpace>> && ViewsContainer<FixedPoseViews<HostExecSpace>> &&
-                  ViewsContainer<ContactViews<HostExecSpace>>,
+                  ViewsContainer<ContactViews<HostExecSpace>> && ViewsContainer<ReLCPContactViews<HostExecSpace>>,
               "rods and every constraint family must be views containers");
 static_assert(!ViewsContainer<ConstraintSet<PinViews<HostExecSpace>>>, "a constraint set is copied family by family");
 static_assert(ConstraintFamily<LinearSpringViews<HostExecSpace>> &&
@@ -335,9 +336,25 @@ static_assert(ConstraintFamily<LinearSpringViews<HostExecSpace>> &&
                   ConstraintFamily<FixedLengthViews<HostExecSpace>> &&
                   ConstraintFamily<TriplePointAngularSpringViews<HostExecSpace>> &&
                   ConstraintFamily<FixedPositionViews<HostExecSpace>> &&
-                  ConstraintFamily<FixedPoseViews<HostExecSpace>> && ConstraintFamily<ContactViews<HostExecSpace>>,
+                  ConstraintFamily<FixedPoseViews<HostExecSpace>> && ConstraintFamily<ContactViews<HostExecSpace>> &&
+                  ConstraintFamily<ReLCPContactViews<HostExecSpace>>,
               "every constraint family must satisfy ConstraintFamily");
 static_assert(!ConstraintFamily<RodViews<HostExecSpace>>, "rods are bodies, not constraints");
+static_assert(PairSeparationRule<SpherocylinderSeparation, HostExecSpace>,
+              "the spherocylinder separation is a pair separation rule");
+static_assert(ReLCPFamily<ReLCPContactViews<HostExecSpace>> && !ReLCPFamily<ContactViews<HostExecSpace>>,
+              "only a family with a separation rule is constrained again where a step leaves it overlapping");
+
+/// \brief The spherocylinder rule, expecting no constraint beyond each pair's own within a step.
+struct UnreservedSpherocylinderSeparation : SpherocylinderSeparation {
+  static constexpr size_t reserved_rows_per_pair = 1;
+};
+
+static_assert(
+    std::is_same_v<decltype(create_mirror(TestExecSpace{},
+                                          ReLCPContactViews<HostExecSpace, UnreservedSpherocylinderSeparation>{})),
+                   ReLCPContactViews<TestExecSpace, UnreservedSpherocylinderSeparation>>,
+    "a mirror keeps every template argument but the execution space");
 static_assert(MobilityModel<LocalDragMobility, TestExecSpace> && HasSelfMobility<LocalDragMobilityOp<TestExecSpace>>,
               "local drag is a mobility model whose mobility has self blocks");
 static_assert(MobilityModel<IsotropicMobility, TestExecSpace> && !HasSelfMobility<IsotropicMobilityOp<TestExecSpace>>,
@@ -1006,6 +1023,15 @@ TEST(Mbody, CreateMirrorCopiesEveryField) {
   EXPECT_EQ(count_bit_differences(contacts_back.rod_i_view(), contacts.rod_i_view()), 0u);
   EXPECT_EQ(count_bit_differences(contacts_back.rod_j_view(), contacts.rod_j_view()), 0u);
   EXPECT_EQ(count_bit_differences(contacts_back.lambda_view(), contacts.lambda_view()), 0u);
+
+  ReLCPContactViews<HostExecSpace> relcp_contacts(2);
+  fill_distinct(relcp_contacts.rod_i_view(), 0);
+  fill_distinct(relcp_contacts.rod_j_view(), 100);
+  fill_distinct(relcp_contacts.lambda_view(), 200);
+  const auto relcp_contacts_back = round_trip(relcp_contacts);
+  EXPECT_EQ(count_bit_differences(relcp_contacts_back.rod_i_view(), relcp_contacts.rod_i_view()), 0u);
+  EXPECT_EQ(count_bit_differences(relcp_contacts_back.rod_j_view(), relcp_contacts.rod_j_view()), 0u);
+  EXPECT_EQ(count_bit_differences(relcp_contacts_back.lambda_view(), relcp_contacts.lambda_view()), 0u);
 }
 
 // create_mirror allocates even within one memory space, where create_mirror_view aliases.
@@ -1753,6 +1779,32 @@ TEST(Mbody, OuterTolBoundsEndOfStepSeparations) {
     }
     EXPECT_EQ(num_pushing, contacts.size() - 1) << "outer_tol " << outer_tol;
   }
+}
+
+// A ReLCP family is constrained at the start of a step as ContactViews is, so a mixed LCP step treats the two alike.
+TEST(Mbody, ReLCPFamilyInLCPMatchesContacts) {
+  const auto p = make_sphere_row_problem();
+  const auto& contacts = get<ContactViews<HostExecSpace>>(p.constraints);
+  ReLCPContactViews<HostExecSpace> relcp_contacts(contacts.size());
+  Kokkos::deep_copy(relcp_contacts.rod_i_view(), contacts.rod_i_view());
+  Kokkos::deep_copy(relcp_contacts.rod_j_view(), contacts.rod_j_view());
+
+  // Solve
+  const auto rods = copy_to<HostExecSpace>(p.rods);
+  const auto constraints = copy_to<HostExecSpace>(p.constraints);
+  const MixedLCPResult result = solve_on_device(rods, constraints, p.mobility_model, p.dt, p.cfg);
+  const auto relcp_rods = copy_to<HostExecSpace>(p.rods);
+  const MixedLCPResult relcp_result =
+      solve_on_device(relcp_rods, make_constraint_set(relcp_contacts), p.mobility_model, p.dt, p.cfg);
+  ASSERT_TRUE(result.converged) << result;
+  ASSERT_TRUE(relcp_result.converged) << relcp_result;
+
+  EXPECT_EQ(relcp_result.num_iters, result.num_iters);
+  EXPECT_EQ(count_bit_differences(relcp_contacts.lambda_view(),
+                                  get<ContactViews<HostExecSpace>>(constraints).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(relcp_rods.force_torque_view(), rods.force_torque_view()), 0u);
+  EXPECT_EQ(count_bit_differences(relcp_rods.velocity_omega_view(), rods.velocity_omega_view()), 0u);
 }
 
 // Empty families are zero-column operators, and a solve over them converges at once.
@@ -3353,6 +3405,112 @@ TEST(Mbody, SlcpHoldsBilateralRowsAtStepEnd) {
     } else {
       EXPECT_GT(pin_residual.length, 100.0 * cfg.length_tol);
       EXPECT_GT(lin_residual.length, 100.0 * cfg.length_tol);
+    }
+  }
+}
+
+//@}
+
+//! \name Recursive augmentation
+//@{
+
+// MixedReLCPIntegrator: ReLCP pairs constrained again where the configurations its iterates move the rods to leave
+// them overlapping.
+
+/// \brief A rod in the groove between two rails, loaded to roll its far end down into them.
+///
+/// Rails 0 and 1 lie along x at y = -+half_width, held by rigid pose anchors. Rod 2 lies over them, tilted up toward +x
+/// so that each rail's closest point is the rod's -x end, gap above where it rests. A downward push and a torque about
+/// y that lowers the +x end load it. Every rod has radius 0.1 and length 2, so the rod rests level at height
+/// sqrt((2 r)^2 - half_width^2). Its pairs with the rails are ReLCP contacts with Rule's separation.
+template <typename Rule = SpherocylinderSeparation>
+auto make_groove_problem(double dt, double push, double torque) {
+  constexpr double radius = 0.1;
+  constexpr double length = 2.0;
+  constexpr double half_width = 0.1;
+  constexpr double tilt = 0.15;
+  constexpr double gap = 0.02;
+  const double rest_height = std::sqrt(4.0 * radius * radius - half_width * half_width);
+
+  RodViews<HostExecSpace> rods(3);
+  const Quaterniond along_x = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.5 * Kokkos::numbers::pi_v<double>);
+  rods.center(0) = Vector3d{0.0, -half_width, 0.0};
+  rods.center(1) = Vector3d{0.0, half_width, 0.0};
+  rods.orientation(0) = rods.orientation(1) = along_x;
+  rods.orientation(2) = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.5 * Kokkos::numbers::pi_v<double> - tilt);
+  rods.center(2) = Vector3d{0.0, 0.0, rest_height + gap + 0.5 * length * std::sin(tilt)};
+  for (size_t k = 0; k < 3; ++k) {
+    rods.radius(k) = radius;
+    rods.length(k) = length;
+  }
+  zero_rod_state(rods);
+  rods.force(2) = Vector3d{0.0, 0.0, -push};
+  rods.torque(2) = Vector3d{0.0, torque, 0.0};
+
+  FixedPoseViews<HostExecSpace> rails(2);
+  set_fixed_pose(rails, 0, /*rod=*/0, Vector3d(rods.center(0)), along_x);
+  set_fixed_pose(rails, 1, /*rod=*/1, Vector3d(rods.center(1)), along_x);
+  ReLCPContactViews<HostExecSpace, Rule> contacts(2);
+  contacts.rod_i(0) = 2;
+  contacts.rod_j(0) = 0;
+  contacts.rod_i(1) = 2;
+  contacts.rod_j(1) = 1;
+
+  MixedLCPConfig cfg;
+  cfg.max_cg_iters = 1000;
+  cfg.cg_tol = 1e-12;
+  cfg.outer_tol = 1e-12;
+  return SolveInput{rods, make_constraint_set(rails, contacts), LocalDragMobility{.viscosity = 1.0}, dt, cfg};
+}
+
+/// \brief The constraints of a groove problem with its ReLCP contacts as ContactViews, linearized only at C^k.
+template <typename Space, typename Rule>
+auto with_contact_views(const ConstraintSet<FixedPoseViews<Space>, ReLCPContactViews<Space, Rule>>& constraints) {
+  const auto& relcp = get<ReLCPContactViews<Space, Rule>>(constraints);
+  ContactViews<Space> contacts(relcp.size());
+  Kokkos::deep_copy(contacts.rod_i_view(), relcp.rod_i_view());
+  Kokkos::deep_copy(contacts.rod_j_view(), relcp.rod_j_view());
+  return make_constraint_set(copy_to<Space>(get<FixedPoseViews<Space>>(constraints)), contacts);
+}
+
+/// \brief The largest overlap, -Phi, of rods' pairs of rods at their configuration, or zero if none overlaps.
+template <typename Space, typename Rule>
+double largest_overlap(const RodViews<Space>& rods, const ReLCPContactViews<Space, Rule>& pairs) {
+  double largest = 0.0;
+  Kokkos::parallel_reduce(
+      "largest_overlap", Kokkos::RangePolicy<Space>(0, pairs.size()),
+      KOKKOS_LAMBDA(const int p, double& m) { m = Kokkos::max(m, -Rule{}(rods, pairs.rod_i(p), pairs.rod_j(p)).value); },
+      Kokkos::Max<double>(largest));
+  return Kokkos::max(largest, 0.0);
+}
+
+TEST(Mbody, ReLCPProbe) {
+  const double dt = 0.25;
+  const auto p = make_groove_problem(dt, 1.0, 0.5);
+  const auto& pairs = get<ReLCPContactViews<HostExecSpace>>(p.constraints);
+  const auto rods = copy_to<Kokkos::Serial>(p.rods);
+  const auto load = copy_load(rods);
+  const auto c_r = copy_to<Kokkos::Serial>(p.constraints);
+  const auto pairs_s = get<ReLCPContactViews<Kokkos::Serial>>(c_r);
+  const auto relcp_int = make_mixed_relcp_integrator(rods, c_r, p.mobility_model, dt);
+  for (int step = 0; step < 40; ++step) {
+    try {
+      reset_rod_state(rods, load);
+      MixedLCPConfig inner = p.cfg;
+      inner.max_outer_iters = 20000;
+      inner.outer_tol = 1e-10;
+      const auto r = solve_step(relcp_int, MixedReLCPConfig{inner, 20, 1e-9, 1e-9, false});
+      const auto& ws = relcp_int.workspace();
+      std::printf("step %d: %s generated %zu cap %zu lambda %.4e %.4e vel_z %.4e omega_y %.4e\n", step,
+                  (std::ostringstream{} << r).str().c_str(), ws.lcp.linearization.num_generated,
+                  ws.lcp.linearization.generated_capacity(), double(pairs_s.lambda(0)), double(pairs_s.lambda(1)),
+                  double(rods.velocity(2)[2]), double(rods.omega(2)[1]));
+      advance_rods(rods, dt);
+      std::printf("   overlap after %.4e  z %.6e tilt %.6e\n", largest_overlap(rods, pairs_s), double(rods.center(2)[2]),
+                  std::asin((rods.orientation(2) * Vector3d{0.0, 0.0, 1.0})[2]));
+    } catch (const std::exception& e) {
+      std::printf("step %d THROW %s\n", step, e.what());
+      break;
     }
   }
 }

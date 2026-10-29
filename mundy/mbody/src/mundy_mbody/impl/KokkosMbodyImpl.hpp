@@ -28,12 +28,14 @@
 /// The D/D^T and B/B^T Jacobian operators and the geometry kernels that fill them.
 
 // C++ core
-#include <algorithm>    // for std::max, std::count
+#include <algorithm>    // for std::max, std::min, std::count
 #include <array>        // for std::array
+#include <cmath>        // for std::log
 #include <concepts>     // for std::same_as
 #include <optional>     // for std::optional
+#include <stdexcept>    // for std::invalid_argument, std::logic_error, std::runtime_error
 #include <type_traits>  // for std::false_type, std::true_type, std::remove_cvref_t
-#include <utility>      // for std::declval, std::index_sequence, std::move
+#include <utility>      // for std::declval, std::index_sequence, std::move, std::pair
 
 // Kokkos
 #include <Kokkos_Core.hpp>
@@ -719,59 +721,58 @@ template <typename T>
 concept ConstraintValueView =
     Kokkos::is_view<T>::value && (T::rank == 1) && std::same_as<typename T::value_type, double>;
 
-/// \brief Contact normal/lever-arm Jacobian and initial signed separation, via spherocylinder centerlines.
-template <typename ExecSpace, typename Sep0View>
-  requires ConstraintValueView<Sep0View>
-void compute_geometry(const RodViews<ExecSpace>& rods, const ContactViews<ExecSpace>& contacts,
-                      const PairGeometry<ExecSpace>& geo, const Sep0View& sep0) {
-  const size_t n = contacts.size();
-  MUNDY_THROW_ASSERT(geo.size() == n && sep0.extent(0) == n, std::invalid_argument,
-                     "compute_geometry: geo and sep0 must have one entry per contact.");
+/// \brief Each pair's separation by rule and its Jacobian, the separation's gradient, at rods' configuration.
+template <typename ExecSpace, typename Rule, typename ValueView>
+  requires PairSeparationRule<Rule, ExecSpace> && ConstraintValueView<ValueView>
+void compute_pair_separation_geometry(const RodViews<ExecSpace>& rods,
+                                      const Kokkos::View<int*, typename ExecSpace::memory_space>& rod_i,
+                                      const Kokkos::View<int*, typename ExecSpace::memory_space>& rod_j,
+                                      const PairGeometry<ExecSpace>& geo, const ValueView& values) {
+  const size_t n = rod_i.extent(0);
+  MUNDY_THROW_ASSERT(geo.size() == n && values.extent(0) == n, std::invalid_argument,
+                     "compute_geometry: geo and values must have one entry per pair.");
   if (n == 0) {
     return;
   }
 
   auto rods_l = rods;
-  auto contacts_l = contacts;
+  auto rod_i_l = rod_i;
+  auto rod_j_l = rod_j;
   auto geo_l = geo;
   auto owner_i_l = geo.owner_i_view();
   auto owner_j_l = geo.owner_j_view();
-  auto sep0_l = sep0;
+  auto values_l = values;
   Kokkos::parallel_for(
-      "compute_contact_geometry", Kokkos::RangePolicy<ExecSpace>(0, n), KOKKOS_LAMBDA(const int p) {
-        const int i = contacts_l.rod_i(p);
-        const int j = contacts_l.rod_j(p);
+      "compute_pair_separation_geometry", Kokkos::RangePolicy<ExecSpace>(0, n), KOKKOS_LAMBDA(const int p) {
+        const int i = rod_i_l(p);
+        const int j = rod_j_l(p);
         owner_i_l(p) = i;
         owner_j_l(p) = j;
 
-        const double radius_i = rods_l.radius(i);
-        const double radius_j = rods_l.radius(j);
-        const double length_i = rods_l.length(i);
-        const double length_j = rods_l.length(j);
-        const Vector3d tangent_i = rods_l.orientation(i) * Vector3d{0.0, 0.0, 1.0};
-        const Vector3d tangent_j = rods_l.orientation(j) * Vector3d{0.0, 0.0, 1.0};
-        const Vector3d pos_i = rods_l.center(i);
-        const Vector3d pos_j = rods_l.center(j);
-
-        const LineSegment<double> centerline_i{pos_i - 0.5 * length_i * tangent_i, pos_i + 0.5 * length_i * tangent_i};
-        const LineSegment<double> centerline_j{pos_j - 0.5 * length_j * tangent_j, pos_j + 0.5 * length_j * tangent_j};
-
-        Point<double> contact_point_i, contact_point_j;
-        double arc_i, arc_j;
-        Vector3d rij;
-        const double dist = distance(centerline_i, centerline_j, contact_point_i, contact_point_j, arc_i, arc_j, rij);
-        MUNDY_THROW_ASSERT(dist > 1e-12, std::runtime_error, "Rod-rod contact distance is nearly degenerate.");
-
-        const Vector3d n_ij = rij / dist;
-        const Vector3d rel_i = contact_point_i - pos_i;
-        const Vector3d rel_j = contact_point_j - pos_j;
-
-        geo_l.force_i(p) = -n_ij;
-        geo_l.torque_i(p) = -cross(rel_i, n_ij);
-        geo_l.force_j(p) = n_ij;
-        geo_l.torque_j(p) = cross(rel_j, n_ij);
-        sep0_l(p) = dist - radius_i - radius_j;
+        const PairSeparation separation = Rule{}(rods_l, i, j);
+        geo_l.force_i(p) = separation.force_i;
+        geo_l.torque_i(p) = separation.torque_i;
+        geo_l.force_j(p) = separation.force_j;
+        geo_l.torque_j(p) = separation.torque_j;
+        values_l(p) = separation.value;
       });
+}
+
+/// \brief Contact normal/lever-arm Jacobian and initial signed separation, via spherocylinder centerlines.
+template <typename ExecSpace, typename Sep0View>
+  requires ConstraintValueView<Sep0View>
+void compute_geometry(const RodViews<ExecSpace>& rods, const ContactViews<ExecSpace>& contacts,
+                      const PairGeometry<ExecSpace>& geo, const Sep0View& sep0) {
+  compute_pair_separation_geometry<ExecSpace, SpherocylinderSeparation>(rods, contacts.rod_i_view(),
+                                                                        contacts.rod_j_view(), geo, sep0);
+}
+
+/// \brief ReLCP contact Jacobian and initial signed separation, by the family's rule.
+template <typename ExecSpace, typename Rule, typename Sep0View>
+  requires ConstraintValueView<Sep0View>
+void compute_geometry(const RodViews<ExecSpace>& rods, const ReLCPContactViews<ExecSpace, Rule>& contacts,
+                      const PairGeometry<ExecSpace>& geo, const Sep0View& sep0) {
+  compute_pair_separation_geometry<ExecSpace, Rule>(rods, contacts.rod_i_view(), contacts.rod_j_view(), geo, sep0);
 }
 
 /// \brief Linear spring direction Jacobian and initial stretch, via rod centers.
@@ -1333,6 +1334,26 @@ ConstraintIndexMap<Families...> make_constraint_index_map(const ConstraintSet<Fa
   index_map.num_bilateral = bilateral_end;
   return index_map;
 }
+
+/// \brief Whether any of Families is a ReLCP family, whose pairs a step may constrain again.
+template <typename... Families>
+inline constexpr bool has_relcp_family_v = (ReLCPFamily<Families> || ...);
+
+/// \brief The rows family F expects to generate within a step: its pairs' expected rows beyond their own.
+template <typename F, typename... Families>
+size_t family_expected_generated_rows(const ConstraintIndexMap<Families...>& index_map) {
+  if constexpr (ReLCPFamily<F>) {
+    return (F::reserved_rows_per_entry - 1) * index_map.template range<F>().size();
+  } else {
+    return 0;
+  }
+}
+
+/// \brief The rows every ReLCP family expects to generate within a step.
+template <typename... Families>
+size_t expected_generated_rows(const ConstraintIndexMap<Families...>& index_map) {
+  return (size_t{0} + ... + family_expected_generated_rows<Families>(index_map));
+}
 //@}
 
 //! \name The unilateral and bilateral blocks at one configuration
@@ -1454,6 +1475,39 @@ void compute_block_geometry(const RodViews<ExecSpace>& rods, const ConstraintSet
          rods, constraints, index_map, ::mundy::get<I>(geometry.groups), values),
      ...);
   }(std::make_index_sequence<arities::count>{});
+}
+
+/// \brief block with group appended after its others.
+template <typename Geometry, typename... Geometries>
+BlockGeometry<Geometries..., Geometry> append_group(const BlockGeometry<Geometries...>& block, const Geometry& group) {
+  return BlockGeometry<Geometries..., Geometry>{::mundy::tuple_cat(block.groups, ::mundy::make_tuple(group))};
+}
+
+/// \brief Storage for the unilateral block's Jacobian: its families' rows and, with a ReLCP family, num_generated rows
+/// after them for the constraints a step generates.
+template <typename ExecSpace, typename... Families>
+auto make_unilateral_geometry(const ConstraintIndexMap<Families...>& index_map, [[maybe_unused]] size_t num_generated) {
+  const auto families = make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(index_map);
+  if constexpr (has_relcp_family_v<Families...>) {
+    return append_group(families, PairGeometry<ExecSpace>(num_generated));
+  } else {
+    return families;
+  }
+}
+
+/// \brief The generated rows of a unilateral geometry with a ReLCP family, its last group.
+template <typename... Geometries>
+const auto& generated_rows(const BlockGeometry<Geometries...>& geometry) {
+  return ::mundy::get<sizeof...(Geometries) - 1>(geometry.groups);
+}
+
+/// \brief geometry with only the first num_generated of its generated rows.
+template <typename... Geometries>
+BlockGeometry<Geometries...> with_generated_rows(const BlockGeometry<Geometries...>& geometry, size_t num_generated) {
+  BlockGeometry<Geometries...> out = geometry;
+  ::mundy::get<sizeof...(Geometries) - 1>(out.groups) =
+      subrange(generated_rows(geometry), IndexRange{0, num_generated});
+  return out;
 }
 
 //! \name One bilateral row's Jacobian
@@ -1776,15 +1830,17 @@ LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num
 //! \name One step
 //@{
 
-/// \brief The parts of a step that no linearization changes, and how its linearizations are solved.
+/// \brief The parts of a step that no re-linearization changes, and how its linearizations are solved.
 ///
-/// The unilateral block is linearized at the start of the step, C^k: its Jacobian and q = Phi(C^k) + dt D^T U_free.
-/// The mobility is that of C^k, and U_free = V_ext + M F_ext is the velocity without constraint forces.
+/// The unilateral rows are the families', linearized at the start of the step, C^k, then any a step generates at a
+/// later configuration; unilateral_geo and q hold their Jacobian and q. A family row's q is Phi(C^k) + dt D^T U_free,
+/// and a generated row's is the linear model about its configuration of its separation at the step's constraint-free
+/// end. The mobility is that of C^k, and U_free = V_ext + M F_ext is the velocity without constraint forces.
 template <typename ExecSpace, typename MobilityOp, typename... Families>
 struct StepData {
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
-  using unilateral_geometry_t = decltype(make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(
-      std::declval<const ConstraintIndexMap<Families...>&>()));
+  using unilateral_geometry_t = decltype(make_unilateral_geometry<ExecSpace>(
+      std::declval<const ConstraintIndexMap<Families...>&>(), size_t{}));
 
   ConstraintIndexMap<Families...> index_map;
   size_t num_rods;
@@ -1801,7 +1857,7 @@ struct StepData {
 /// \brief One linearization's solution and the wrench and velocity it produces.
 ///
 /// x and y are the unilateral and bilateral multipliers, bilateral_wrench is B y, wrench is W = D x + B y,
-/// m_wrench is M W, and velocity is U_free + M W.
+/// m_wrench is M W, and velocity is U_free + M W. x's leading entries, one per unilateral row solved, are the solution.
 template <typename ExecSpace>
 struct LinearizedStep {
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
@@ -1815,12 +1871,14 @@ struct LinearizedStep {
   PGDResult<double> result;
 };
 
-/// \brief Storage for one linearization of a step of num_rods rods and index_map's constraints.
+/// \brief Storage for one linearization of a step of num_rods rods and index_map's constraints, with room for
+/// num_generated generated unilateral rows.
 template <typename ExecSpace, typename... Families>
-LinearizedStep<ExecSpace> make_linearized_step(const ConstraintIndexMap<Families...>& index_map, size_t num_rods) {
+LinearizedStep<ExecSpace> make_linearized_step(const ConstraintIndexMap<Families...>& index_map, size_t num_rods,
+                                               size_t num_generated) {
   using view_t = typename LinearizedStep<ExecSpace>::view_t;
   const size_t num_rows = RodViews<ExecSpace>::rows_per_entry * num_rods;
-  return LinearizedStep<ExecSpace>{view_t("x", index_map.num_unilateral),
+  return LinearizedStep<ExecSpace>{view_t("x", index_map.num_unilateral + num_generated),
                                    view_t("y", index_map.num_bilateral),
                                    view_t("bilateral_wrench", num_rows),
                                    view_t("wrench", num_rows),
@@ -1927,7 +1985,8 @@ struct schur_preconditioner_of<NoPreconditioner, Linearization> {
 ///
 /// It is sized for one layout of rods and constraints (fits), and each call overwrites it in place. Only the storage of
 /// the blocks the layout has is allocated. S solves from the guess held in its output: S b, S B^T M D x and S y_rhs
-/// start from zero and then from their values at the previous solve.
+/// start from zero and then from their values at the previous solve. With a ReLCP family, the unilateral rows a step
+/// generates follow the families' rows, num_generated of them so far, in room that grows when a step needs more.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
 class LinearizationWorkspace {
  public:
@@ -1977,9 +2036,10 @@ class LinearizationWorkspace {
                          double dt, const Policy& policy)
       : index_map_(index_map),
         num_rods_(num_rods),
-        unilateral_geo(make_block_geometry<ConstraintType::UNILATERAL, ExecSpace>(index_map)),
-        q("q", index_map.num_unilateral),
-        q_rate("q_rate", index_map.num_unilateral),
+        generated_capacity_(expected_generated_rows(index_map)),
+        unilateral_geo(make_unilateral_geometry<ExecSpace>(index_map, generated_capacity_)),
+        q("q", index_map.num_unilateral + generated_capacity_),
+        q_rate("q_rate", index_map.num_unilateral + generated_capacity_),
         kinv("kinv", index_map.num_bilateral),
         u_free("u_free", num_rows()),
         m_force_torque_ext("m_force_torque_ext", num_rows()),
@@ -1989,9 +2049,9 @@ class LinearizationWorkspace {
         b_rate("b_rate", index_map.num_bilateral),
         y_rhs("y_rhs", index_map.num_bilateral),
         s_y("S_y_rhs", index_map.num_bilateral),
-        grad("grad", index_map.num_unilateral),
-        x_tmp("x_tmp", index_map.num_unilateral),
-        grad_tmp("grad_tmp", index_map.num_unilateral),
+        grad("grad", index_map.num_unilateral + generated_capacity_),
+        x_tmp("x_tmp", index_map.num_unilateral + generated_capacity_),
+        grad_tmp("grad_tmp", index_map.num_unilateral + generated_capacity_),
         dx("Dx", has_unilateral() ? num_rows() : 0),
         mdx("MDx", has_unilateral() && has_bilateral() ? num_rows() : 0),
         d_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(unilateral_geo, num_rods))),
@@ -2028,6 +2088,7 @@ class LinearizationWorkspace {
         const auto BT = make_block_rate_op<ExecSpace>(geometry_, num_rods);
         const auto S = make_schur_complement(step, geometry_, cg_cfg, *preconditioner);
         mixed_cqpp_workspace.emplace(make_mixed_cqpp_workspace<backend_t>(DT, M_dt, D, q, B, S, BT, *s_workspace));
+        mixed_g_ = mixed_cqpp_workspace->g;
       } else {
         lcp_workspace.emplace(make_quadratic_form<backend_t>(DT, M_dt, D).make_workspace());
       }
@@ -2051,6 +2112,61 @@ class LinearizationWorkspace {
     return index_map_;
   }
 
+  /// \brief The number of generated unilateral rows it has room for.
+  size_t generated_capacity() const {
+    return generated_capacity_;
+  }
+
+  /// \brief The unilateral rows' Jacobian: the families' and the num_generated generated since the step began.
+  unilateral_geometry_t unilateral_rows() const {
+    if constexpr (has_relcp_family_v<Families...>) {
+      return with_generated_rows(unilateral_geo, num_generated);
+    } else {
+      return unilateral_geo;
+    }
+  }
+
+  /// \brief The unilateral rows' q.
+  view_t unilateral_q() const {
+    return subrange(q, IndexRange{0, index_map_.num_unilateral + num_generated});
+  }
+
+  /// \brief Room for num_rows generated unilateral rows, keeping those generated and their q.
+  void reserve_generated(size_t num_rows) {
+    if constexpr (has_relcp_family_v<Families...>) {
+      if (num_rows <= generated_capacity_) {
+        return;
+      }
+      const PairGeometry<ExecSpace>& held = generated_rows(unilateral_geo);
+      const PairGeometry<ExecSpace> grown(num_rows);
+      const IndexRange rows{0, num_generated};
+      const IndexRange entries{PairGeometry<ExecSpace>::jacobian_width * rows.begin,
+                               PairGeometry<ExecSpace>::jacobian_width * rows.end};
+      Kokkos::deep_copy(subrange(grown.owner_i_view(), rows), subrange(held.owner_i_view(), rows));
+      Kokkos::deep_copy(subrange(grown.owner_j_view(), rows), subrange(held.owner_j_view(), rows));
+      Kokkos::deep_copy(subrange(grown.jacobian_i_view(), entries), subrange(held.jacobian_i_view(), entries));
+      Kokkos::deep_copy(subrange(grown.jacobian_j_view(), entries), subrange(held.jacobian_j_view(), entries));
+      ::mundy::get<::mundy::tuple_size_v<decltype(unilateral_geo.groups)> - 1>(unilateral_geo.groups) = grown;
+
+      const size_t num_unilateral = index_map_.num_unilateral + num_rows;
+      Kokkos::resize(q, num_unilateral);
+      Kokkos::realloc(q_rate, num_unilateral);
+      Kokkos::realloc(grad, num_unilateral);
+      Kokkos::realloc(x_tmp, num_unilateral);
+      Kokkos::realloc(grad_tmp, num_unilateral);
+      if (mixed_cqpp_workspace) {
+        Kokkos::realloc(mixed_g_, num_unilateral);
+      }
+      generated_capacity_ = num_rows;
+    }
+  }
+
+  /// \brief The mixed CQPP's storage, with its g over the first num_rows unilateral rows.
+  mixed_cqpp_workspace_t& mixed_cqpp_workspace_over(size_t num_rows) {
+    mixed_cqpp_workspace->g = subrange(mixed_g_, IndexRange{0, num_rows});
+    return *mixed_cqpp_workspace;
+  }
+
   /// \brief The bilateral block's Jacobian and constraint values psi at the linearization point.
   const bilateral_geometry_t& geometry() const {
     return geometry_;
@@ -2072,8 +2188,10 @@ class LinearizationWorkspace {
 
   ConstraintIndexMap<Families...> index_map_;
   size_t num_rods_;
+  size_t generated_capacity_;
 
  public:
+  size_t num_generated = 0;
   unilateral_geometry_t unilateral_geo;
   view_t q;
   view_t q_rate;
@@ -2105,6 +2223,9 @@ class LinearizationWorkspace {
   std::optional<apply_workspace_t<schur_complement_t>> s_workspace;
   std::optional<lcp_workspace_t> lcp_workspace;
   std::optional<mixed_cqpp_workspace_t> mixed_cqpp_workspace;
+
+ private:
+  view_t mixed_g_;  // g's storage, over every unilateral row it has room for
 };
 
 /// \brief The step data of rods and constraints at their current configuration, where their mobility is mobility,
@@ -2117,25 +2238,30 @@ StepData<ExecSpace, MobilityOp, Families...> make_step_data(
     double dt, const PGDConfig<double>& pgd_cfg, const CGConfig<double>& cg_cfg,
     LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace) {
   using backend_t = KokkosBackend<ExecSpace>;
+  using view_t = typename StepData<ExecSpace, MobilityOp, Families...>::view_t;
   const ConstraintIndexMap<Families...>& index_map = workspace.index_map();
   const size_t num_rods = rods.size();
 
+  const IndexRange family_rows{0, index_map.num_unilateral};
+  workspace.num_generated = 0;
   compute_block_geometry<ConstraintType::UNILATERAL>(rods, constraints, index_map, workspace.unilateral_geo,
-                                                     workspace.q);
+                                                     subrange(workspace.q, family_rows));
+  const auto unilateral_geo = workspace.unilateral_rows();
+  const view_t q = workspace.unilateral_q();
 
   Kokkos::deep_copy(workspace.u_free, rods.velocity_omega_view());
   backend_t::apply(mobility, rods.force_torque_view(), workspace.m_force_torque_ext, workspace.mobility_workspace);
   backend_t::axpby(1.0, workspace.m_force_torque_ext, 1.0, workspace.u_free);
 
   if (index_map.num_unilateral > 0) {
-    make_block_rate_op<ExecSpace>(workspace.unilateral_geo, num_rods).apply(workspace.u_free, workspace.q_rate);
-    backend_t::axpby(dt, workspace.q_rate, 1.0, workspace.q);
+    view_t q_rate = subrange(workspace.q_rate, family_rows);
+    make_block_rate_op<ExecSpace>(unilateral_geo, num_rods).apply(workspace.u_free, q_rate);
+    backend_t::axpby(dt, q_rate, 1.0, q);
   }
 
   fill_compliance_diagonal<ExecSpace>(constraints, index_map, workspace.kinv);
-  return StepData<ExecSpace, MobilityOp, Families...>{index_map,   num_rods,       dt,       workspace.unilateral_geo,
-                                                      workspace.q, workspace.kinv, mobility, workspace.u_free,
-                                                      pgd_cfg,     cg_cfg};
+  return StepData<ExecSpace, MobilityOp, Families...>{
+      index_map, num_rods, dt, unilateral_geo, q, workspace.kinv, mobility, workspace.u_free, pgd_cfg, cg_cfg};
 }
 
 /// \brief Linearize the bilateral block at rods' configuration: its Jacobian and psi, into workspace./// \brief
@@ -2148,13 +2274,140 @@ void linearize(const StepData<ExecSpace, MobilityOp, Families...>& step,
                                                     workspace.psi());
 }
 
+/// \brief The number of family's pairs that rods' configuration leaves overlapping by more than tol, and the largest
+/// overlap, -Phi, of any of its pairs there, or zero if none overlaps.
+template <ReLCPFamily F, typename ExecSpace>
+std::pair<size_t, double> count_overlaps(const F& family, const RodViews<ExecSpace>& rods, double tol) {
+  using rule_t = typename F::rule_type;
+  size_t num_overlapping = 0;
+  double largest = 0.0;
+  if (family.size() == 0) {
+    return {num_overlapping, largest};
+  }
+  auto rods_l = rods;
+  auto rod_i = family.rod_i_view();
+  auto rod_j = family.rod_j_view();
+  Kokkos::parallel_reduce(
+      "count_overlaps", Kokkos::RangePolicy<ExecSpace>(0, family.size()),
+      KOKKOS_LAMBDA(const int p, size_t& count, double& overlap) {
+        const double value = rule_t{}(rods_l, rod_i(p), rod_j(p)).value;
+        count += value < -tol ? 1 : 0;
+        overlap = Kokkos::max(overlap, -value);
+      },
+      Kokkos::Sum<size_t>(num_overlapping), Kokkos::Max<double>(largest));
+  return {num_overlapping, Kokkos::max(largest, 0.0)};
+}
+
+/// \brief Write a row of rule's separation at rods' configuration for every pair of family overlapping there by more
+/// than tol, in pair order, into rows first_row, first_row + 1, ... of generated and values. Returns how many.
+template <ReLCPFamily F, typename ExecSpace, typename ValueView>
+size_t append_overlapping_pairs(const F& family, const RodViews<ExecSpace>& rods, double tol,
+                                const PairGeometry<ExecSpace>& generated, const ValueView& values, size_t first_row) {
+  using rule_t = typename F::rule_type;
+  size_t num_appended = 0;
+  if (family.size() == 0) {
+    return num_appended;
+  }
+  auto rods_l = rods;
+  auto rod_i = family.rod_i_view();
+  auto rod_j = family.rod_j_view();
+  auto generated_l = generated;
+  auto owner_i = generated.owner_i_view();
+  auto owner_j = generated.owner_j_view();
+  auto values_l = values;
+  Kokkos::parallel_scan(
+      "append_overlapping_pairs", Kokkos::RangePolicy<ExecSpace>(0, family.size()),
+      KOKKOS_LAMBDA(const int p, size_t& offset, const bool final) {
+        const int i = rod_i(p);
+        const int j = rod_j(p);
+        const PairSeparation separation = rule_t{}(rods_l, i, j);
+        if (separation.value < -tol) {
+          if (final) {
+            const size_t row = first_row + offset;
+            owner_i(row) = i;
+            owner_j(row) = j;
+            generated_l.force_i(row) = separation.force_i;
+            generated_l.torque_i(row) = separation.torque_i;
+            generated_l.force_j(row) = separation.force_j;
+            generated_l.torque_j(row) = separation.torque_j;
+            values_l(row) = separation.value;
+          }
+          ++offset;
+        }
+      },
+      num_appended);
+  return num_appended;
+}
+
+/// \brief Constrain again every ReLCP pair that rods' configuration leaves overlapping by more than tol, and return the
+/// largest overlap of any ReLCP pair there.
+///
+/// Each such pair gains a unilateral row of its rule's separation at rods' configuration, after the rows step holds,
+/// in pair order. to_free_end is the displacement from rods' configuration to the step's constraint-free end, so the
+/// row's q is the linear model about that configuration of the separation at that end, as b is for a bilateral row.
+/// step comes to hold the new rows, for which workspace makes room if it has too little.
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
+double augment(StepData<ExecSpace, MobilityOp, Families...>& step,
+               LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
+               const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+               const Displacement<ExecSpace>& to_free_end, double tol) {
+  using backend_t = KokkosBackend<ExecSpace>;
+  using view_t = typename StepData<ExecSpace, MobilityOp, Families...>::view_t;
+
+  size_t num_new = 0;
+  double largest = 0.0;
+  (
+      [&] {
+        if constexpr (ReLCPFamily<Families>) {
+          const auto [count, overlap] = count_overlaps(get<Families>(constraints), rods, tol);
+          num_new += count;
+          largest = std::max(largest, overlap);
+        }
+      }(),
+      ...);
+  if (num_new == 0) {
+    return largest;
+  }
+
+  const size_t first = workspace.num_generated;
+  if (first + num_new > workspace.generated_capacity()) {
+    workspace.reserve_generated(std::max(first + num_new, 2 * workspace.generated_capacity()));
+  }
+  const PairGeometry<ExecSpace>& generated = generated_rows(workspace.unilateral_geo);
+  const size_t num_families = step.index_map.num_unilateral;
+  const view_t generated_q = subrange(workspace.q, IndexRange{num_families, workspace.q.extent(0)});
+  size_t end = first;
+  (
+      [&] {
+        if constexpr (ReLCPFamily<Families>) {
+          end += append_overlapping_pairs(get<Families>(constraints), rods, tol, generated, generated_q, end);
+        }
+      }(),
+      ...);
+  MUNDY_THROW_REQUIRE(end == first + num_new, std::logic_error,
+                      "mbody::augment: the pairs appended differ from those counted.");
+
+  // q := Phi + duration J^T velocity on the new rows
+  const IndexRange added{first, end};
+  view_t q_added = subrange(generated_q, added);
+  view_t rate = subrange(workspace.q_rate, IndexRange{num_families + first, num_families + end});
+  make_rate_op(subrange(generated, added), step.num_rods).apply(to_free_end.velocity, rate);
+  backend_t::axpby(to_free_end.duration, rate, 1.0, q_added);
+
+  workspace.num_generated = end;
+  step.unilateral_geo = workspace.unilateral_rows();
+  step.q = workspace.unilateral_q();
+  return largest;
+}
+
 /// \brief Solve the mixed LCP with the step's unilateral block and the bilateral block at workspace's linearization
 /// point, into out.
 ///
 /// to_free_end is the displacement Delta from the linearization point's configuration to the step's constraint-free end
 /// configuration, so the bilateral linear term b = psi + B^T Delta is the linear model about that configuration of psi
-/// at that end. The unilateral solve starts from x_start. out shares no storage with to_free_end or x_start. The Schur
-/// complement's preconditioner is refreshed at the linearization point first.
+/// at that end. The unilateral solve starts from x_start's entries and from zero on any rows past them. out shares no
+/// storage with to_free_end or x_start. The Schur complement's preconditioner is refreshed at the linearization point
+/// first.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
 void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& step,
                          LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
@@ -2163,7 +2416,10 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
                          LinearizedStep<ExecSpace>& out) {
   using backend_t = KokkosBackend<ExecSpace>;
 
+  using view_t = typename StepData<ExecSpace, MobilityOp, Families...>::view_t;
+
   const size_t num_rods = step.num_rods;
+  const size_t num_unilateral = step.q.extent(0);
   const bool has_unilateral = step.index_map.num_unilateral > 0;
   const bool has_bilateral = step.index_map.num_bilateral > 0;
 
@@ -2187,16 +2443,26 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
 
   // x* (unilateral multipliers): the reduced CQPP, which without bilateral rows is the LCP. Without unilateral rows
   // x* is empty, and its projected residual is zero before any iteration.
-  Kokkos::deep_copy(out.x, x_start);
+  const IndexRange unilateral_rows{0, num_unilateral};
+  if (out.x.extent(0) < num_unilateral) {
+    Kokkos::resize(out.x, num_unilateral);
+  }
+  view_t x = subrange(out.x, unilateral_rows);
+  const IndexRange started{0, std::min(x_start.extent(0), num_unilateral)};
+  Kokkos::deep_copy(subrange(x, started), subrange(x_start, started));
+  Kokkos::deep_copy(subrange(x, IndexRange{started.end, num_unilateral}), 0.0);
   out.result = PGDResult<double>{0, 0.0, 0.0 <= step.pgd_config.tol};
   if (has_unilateral) {
+    view_t grad = subrange(workspace.grad, unilateral_rows);
+    view_t x_tmp = subrange(workspace.x_tmp, unilateral_rows);
+    view_t grad_tmp = subrange(workspace.grad_tmp, unilateral_rows);
     auto pgd = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, step.pgd_config);
-    auto pgd_state = make_pgd_state(out.x, workspace.grad, workspace.x_tmp, workspace.grad_tmp);
+    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
     if (has_bilateral) {
       const auto S = make_schur_complement(step, workspace.geometry(), step.cg_config, *workspace.preconditioner);
-      const auto mcqpp =
-          make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, S, BT, workspace.b,
-                                     LowerBoundSpace<double>{.lower_bound = 0.0}, *workspace.mixed_cqpp_workspace);
+      const auto mcqpp = make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, S, BT, workspace.b,
+                                                    LowerBoundSpace<double>{.lower_bound = 0.0},
+                                                    workspace.mixed_cqpp_workspace_over(num_unilateral));
       out.result = solve_mixed_cqpp(mcqpp, pgd, pgd_state);
     } else {
       const auto lcp =
@@ -2208,7 +2474,7 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
 
   // y* = -S (b + B^T M D x*), and the constraint force/torque D x* + B y*.
   if (has_unilateral) {
-    backend_t::apply(D, out.x, workspace.dx, workspace.d_workspace);
+    backend_t::apply(D, x, workspace.dx, workspace.d_workspace);
   }
   if (has_bilateral) {
     if (has_unilateral) {
@@ -2248,7 +2514,7 @@ struct MixedLCPWorkspace {
                     double dt, const Policy& policy)
       : linearization(index_map, num_rods, mobility, dt, policy),
         x_start("x_start", index_map.num_unilateral),
-        linearized(make_linearized_step<ExecSpace>(index_map, num_rods)) {
+        linearized(make_linearized_step<ExecSpace>(index_map, num_rods, linearization.generated_capacity())) {
   }
 
   /// \brief Whether it is sized for num_rods rods under index_map's constraints.
@@ -2261,15 +2527,16 @@ struct MixedLCPWorkspace {
   LinearizedStep<ExecSpace> linearized;
 };
 
-/// \brief Storage for mixed SLCP steps of one layout of rods and constraints, reused across steps.
+/// \brief Storage for steps of one layout of rods and constraints solved as sequences of mixed LCPs, reused across
+/// steps.
 ///
 /// later, the storage of the iterates after the first, is made by the first call that needs it.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
-struct MixedSLCPWorkspace {
+struct SequenceWorkspace {
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
 
-  MixedSLCPWorkspace(const ConstraintIndexMap<Families...>& index_map, size_t num_rods, const MobilityOp& mobility,
-                     double dt, const Policy& policy)
+  SequenceWorkspace(const ConstraintIndexMap<Families...>& index_map, size_t num_rods, const MobilityOp& mobility,
+                    double dt, const Policy& policy)
       : lcp(index_map, num_rods, mobility, dt, policy),
         row_units(make_row_units<ExecSpace>(index_map)),
         wrench_change("wrench_change", RodViews<ExecSpace>::rows_per_entry * num_rods),
@@ -2289,6 +2556,17 @@ struct MixedSLCPWorkspace {
   RodViews<ExecSpace> trial;
   std::optional<std::array<LinearizedStep<ExecSpace>, 2>> later;
 };
+
+/// \brief Move every rod through one step of its velocity: centers by dt v, orientations by exp(dt omega / 2) (x) q.
+template <typename ExecSpace>
+void advance_poses(const RodViews<ExecSpace>& rods, double dt) {
+  Kokkos::parallel_for(
+      "advance_poses", Kokkos::RangePolicy<ExecSpace>(0, rods.size()), KOKKOS_LAMBDA(const int i) {
+        rods.center(i) = rods.center(i) + dt * rods.velocity(i);
+        auto orientation = rods.orientation(i);
+        rotate_quaternion(orientation, Vector3d(rods.omega(i)), dt);
+      });
+}
 
 /// \brief The mobility op Model makes for rods under ExecSpace.
 template <typename Model, typename ExecSpace>
@@ -2429,6 +2707,131 @@ double slcp_merit(const StepData<ExecSpace, MobilityOp, Families...>& step,
       {rows.length / length_tol, rows.angle / angle_tol, moved.length / length_tol, moved.angle / angle_tol});
 }
 
+
+//! \name Sequences of linearizations
+//@{
+// A step solved as a sequence of mixed LCPs: each iterate moves the rods to a trial configuration, the updates there
+// change the linearization, and the next iterate solves it. Each update contributes a residual over its tolerance.
+
+/// \brief The update re-linearizing the bilateral block at the trial configuration; its residual is slcp_merit's.
+struct RelinearizeBilateral {
+  double length_tol;
+  double angle_tol;
+};
+
+/// \brief The update constraining again every ReLCP pair the trial configuration leaves overlapping by more than
+/// length_tol; its residual is the largest overlap over length_tol.
+struct AugmentContacts {
+  double length_tol;
+};
+
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
+double apply_update(const RelinearizeBilateral& update, StepData<ExecSpace, MobilityOp, Families...>& step,
+                    SequenceWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
+                    const RodViews<ExecSpace>& trial, const ConstraintSet<Families...>& constraints,
+                    const LinearizedStep<ExecSpace>& iterate) {
+  linearize(step, workspace.lcp.linearization, trial, constraints);
+  return slcp_merit(step, workspace.lcp.linearization, iterate, workspace.row_units, workspace.wrench_change,
+                    workspace.displacement_change, update.length_tol, update.angle_tol);
+}
+
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
+double apply_update(const AugmentContacts& update, StepData<ExecSpace, MobilityOp, Families...>& step,
+                    SequenceWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
+                    const RodViews<ExecSpace>& trial, const ConstraintSet<Families...>& constraints,
+                    const LinearizedStep<ExecSpace>& iterate) {
+  const Displacement<ExecSpace> to_free_end{iterate.m_wrench, -step.dt};
+  return augment(step, workspace.lcp.linearization, trial, constraints, to_free_end, update.length_tol) /
+         update.length_tol;
+}
+
+/// \brief A sequence's returned iterate: the linearizations taken, its largest residual over its tolerance, whether
+/// that is at most 1, and its unilateral solve's result.
+struct SequenceResult {
+  unsigned num_iters;
+  double residual;
+  bool converged;
+  PGDResult<double> accepted_lcp_result;
+};
+
+/// \brief One step of rods under constraints, whose mobility is mobility, solved as a sequence of mixed LCPs under
+/// updates, written to rods and constraints.
+///
+/// Iterate 0 solves every row linearized at C^k. Iterate n moves the rods to C_{n+1} = C^k (+) dt U_n, applies each
+/// update there, and is accepted once every update's residual is at most 1. Otherwise iterate n + 1 solves the updated
+/// linearization from iterate n's multipliers. With bilateral re-linearization its bilateral linear term is the model
+/// about C_{n+1} at the step's constraint-free end, b = psi - dt B^T M W_n; without, the block stays at C^k. The
+/// sequence stops unconverged at max_iters iterates, or, if stop_when_hopeless, once its contraction predicts it cannot
+/// converge by then, and the step is then iterate 0.
+template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families, typename... Updates>
+SequenceResult solve_sequence(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
+                              const MobilityOp& mobility, double dt, const PGDConfig<double>& pgd_cfg,
+                              const CGConfig<double>& cg_cfg, unsigned max_iters, bool stop_when_hopeless,
+                              SequenceWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
+                              const Updates&... updates) {
+  constexpr bool relinearizes = (std::same_as<Updates, RelinearizeBilateral> || ...);
+  auto& linearization = workspace.lcp.linearization;
+  auto step = make_step_data(rods, constraints, mobility, dt, pgd_cfg, cg_cfg, linearization);
+  const ConstraintIndexMap<Families...>& index_map = step.index_map;
+  if (index_map.num_unilateral == 0 && index_map.num_bilateral == 0) {
+    Kokkos::deep_copy(rods.velocity_omega_view(), step.u_free);
+    return SequenceResult{1, 0.0, true, PGDResult<double>{0, 0.0, 0.0 <= pgd_cfg.tol}};
+  }
+
+  linearize(step, linearization, rods, constraints);
+  read_unilateral_multipliers<ExecSpace>(constraints, index_map, workspace.lcp.x_start);
+  LinearizedStep<ExecSpace>& first = workspace.lcp.linearized;
+  solve_linearization(step, linearization, Displacement<ExecSpace>{step.u_free, dt}, workspace.lcp.x_start, first);
+  size_t num_solved = step.q.extent(0);
+
+  // Trial configurations C_{n+1} = C^k (+) G^k dt U_n, in storage of their own: the mobility reads rods' poses.
+  RodViews<ExecSpace>& trial = workspace.trial;
+  Kokkos::deep_copy(trial.radius_view(), rods.radius_view());
+  Kokkos::deep_copy(trial.length_view(), rods.length_view());
+
+  // Iterates after the first alternate between two steps of their own, so the first is kept for the fallback.
+  if (max_iters >= 2 && !workspace.later) {
+    const size_t num_generated = linearization.generated_capacity();
+    workspace.later.emplace(std::array{make_linearized_step<ExecSpace>(index_map, rods.size(), num_generated),
+                                       make_linearized_step<ExecSpace>(index_map, rods.size(), num_generated)});
+  }
+  const LinearizedStep<ExecSpace>* iterate = &first;
+  double first_merit = 0.0;
+  double previous_merit = 0.0;
+  for (unsigned num_iters = 1;; ++num_iters) {
+    Kokkos::deep_copy(trial.center_view(), rods.center_view());
+    Kokkos::deep_copy(trial.orientation_view(), rods.orientation_view());
+    Kokkos::deep_copy(trial.velocity_omega_view(), iterate->velocity);
+    advance_poses(trial, dt);
+    double merit = 0.0;
+    ((merit = std::max(merit, apply_update(updates, step, workspace, trial, constraints, *iterate))), ...);
+    if (num_iters == 1) {
+      first_merit = merit;
+    }
+    if (merit <= 1.0) {
+      write_step(rods, constraints, index_map, *iterate);
+      return SequenceResult{num_iters, merit, true, iterate->result};
+    }
+
+    // Stop once the contraction observed so far cannot bring the merit to 1 within max_iters.
+    const unsigned remaining = max_iters - num_iters;
+    const bool hopeless = stop_when_hopeless && num_iters >= 2 &&
+                          static_cast<double>(remaining) * std::log(merit / previous_merit) + std::log(merit) > 0.0;
+    if (remaining == 0 || hopeless) {
+      write_step(rods, constraints, index_map, first);
+      return SequenceResult{num_iters, first_merit, false, first.result};
+    }
+    previous_merit = merit;
+
+    // Never iterate's storage, which is first or later[(num_iters - 1) % 2].
+    LinearizedStep<ExecSpace>& next = (*workspace.later)[num_iters % 2];
+    const Displacement<ExecSpace> to_free_end =
+        relinearizes ? Displacement<ExecSpace>{iterate->m_wrench, -dt} : Displacement<ExecSpace>{step.u_free, dt};
+    solve_linearization(step, linearization, to_free_end, subrange(iterate->x, IndexRange{0, num_solved}), next);
+    num_solved = step.q.extent(0);
+    iterate = &next;
+  }
+}
 //@}
 
 }  // namespace impl
