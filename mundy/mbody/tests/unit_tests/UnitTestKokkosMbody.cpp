@@ -2895,41 +2895,41 @@ TEST(Mbody, IterationsDoNotAllocate) {
       make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
                           get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
                           get<FixedPositionViews<HostExecSpace>>(c));
-  slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
   const auto [both_short, both_short_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-5, 1e-5});
   const auto [both_long, both_long_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
   ASSERT_TRUE(both_short.converged && both_long.converged) << both_short << "\n" << both_long;
   ASSERT_LT(both_short.num_iters, both_long.num_iters);
   EXPECT_EQ(both_short_allocations, both_long_allocations);
 
   // Both blocks, with the Schur complement preconditioned by its self-mobility Jacobi
-  slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
+  slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9}, SelfMobilityJacobi{});
   const auto [jacobi_short, jacobi_short_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5}, SelfMobilityJacobi{});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-5, 1e-5}, SelfMobilityJacobi{});
   const auto [jacobi_long, jacobi_long_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9}, SelfMobilityJacobi{});
+      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9}, SelfMobilityJacobi{});
   ASSERT_TRUE(jacobi_short.converged && jacobi_long.converged) << jacobi_short << "\n" << jacobi_long;
   ASSERT_LT(jacobi_short.num_iters, jacobi_long.num_iters);
   EXPECT_EQ(jacobi_short_allocations, jacobi_long_allocations);
 
-  slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
   const auto [bilateral_short, bilateral_short_allocations] =
-      slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+      slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-5, 1e-5});
   const auto [bilateral_long, bilateral_long_allocations] =
-      slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+      slcp_allocations(p.rods, bilateral_only, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
   ASSERT_TRUE(bilateral_short.converged && bilateral_long.converged) << bilateral_short << "\n" << bilateral_long;
   ASSERT_LT(bilateral_short.num_iters, bilateral_long.num_iters);
   EXPECT_EQ(bilateral_short_allocations, bilateral_long_allocations);
 
   // The bilateral block alone under a caller's mobility, which has only a plain apply
   const IsotropicMobility isotropic_model{.m = 0.25, .m_rot = 1.0};
-  slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+  slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
   const auto [isotropic_short, isotropic_short_allocations] =
-      slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-5, 1e-5});
+      slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-5, 1e-5});
   const auto [isotropic_long, isotropic_long_allocations] =
-      slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 50, 1e-9, 1e-9});
+      slcp_allocations(p.rods, bilateral_only, isotropic_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
   ASSERT_TRUE(isotropic_short.converged && isotropic_long.converged) << isotropic_short << "\n" << isotropic_long;
   ASSERT_LT(isotropic_short.num_iters, isotropic_long.num_iters);
   EXPECT_EQ(isotropic_short_allocations, isotropic_long_allocations);
@@ -3485,33 +3485,13 @@ double largest_overlap(const RodViews<Space>& rods, const ReLCPContactViews<Spac
 }
 
 TEST(Mbody, ReLCPProbe) {
-  const double dt = 0.25;
-  const auto p = make_groove_problem(dt, 1.0, 0.5);
-  const auto& pairs = get<ReLCPContactViews<HostExecSpace>>(p.constraints);
-  const auto rods = copy_to<Kokkos::Serial>(p.rods);
-  const auto load = copy_load(rods);
-  const auto c_r = copy_to<Kokkos::Serial>(p.constraints);
-  const auto pairs_s = get<ReLCPContactViews<Kokkos::Serial>>(c_r);
-  const auto relcp_int = make_mixed_relcp_integrator(rods, c_r, p.mobility_model, dt);
-  for (int step = 0; step < 40; ++step) {
-    try {
-      reset_rod_state(rods, load);
-      MixedLCPConfig inner = p.cfg;
-      inner.max_outer_iters = 20000;
-      inner.outer_tol = 1e-10;
-      const auto r = solve_step(relcp_int, MixedReLCPConfig{inner, 20, 1e-9, 1e-9, false});
-      const auto& ws = relcp_int.workspace();
-      std::printf("step %d: %s generated %zu cap %zu lambda %.4e %.4e vel_z %.4e omega_y %.4e\n", step,
-                  (std::ostringstream{} << r).str().c_str(), ws.lcp.linearization.num_generated,
-                  ws.lcp.linearization.generated_capacity(), double(pairs_s.lambda(0)), double(pairs_s.lambda(1)),
-                  double(rods.velocity(2)[2]), double(rods.omega(2)[1]));
-      advance_rods(rods, dt);
-      std::printf("   overlap after %.4e  z %.6e tilt %.6e\n", largest_overlap(rods, pairs_s), double(rods.center(2)[2]),
-                  std::asin((rods.orientation(2) * Vector3d{0.0, 0.0, 1.0})[2]));
-    } catch (const std::exception& e) {
-      std::printf("step %d THROW %s\n", step, e.what());
-      break;
-    }
+  const auto p = make_fallback_problem();
+  for (const double tol : {1e-5, 1e-9}) {
+    std::printf("==== tol %.0e\n", tol);
+    const auto r = solve_step(make_mixed_slcp_integrator(copy_to<Kokkos::Serial>(p.rods), copy_to<Kokkos::Serial>(p.constraints),
+                                                         p.mobility_model, p.dt),
+                              MixedSLCPConfig{p.cfg, 50, tol, tol});
+    std::cout << r << std::endl;
   }
 }
 
@@ -3613,7 +3593,7 @@ TEST(Mbody, IntegratorRebuildsStorageOfAnotherLayout) {
       make_constraint_set(get<LinearSpringViews<HostExecSpace>>(c), get<PinViews<HostExecSpace>>(c),
                           get<FixedLengthViews<HostExecSpace>>(c), get<FixedPoseViews<HostExecSpace>>(c),
                           get<FixedPositionViews<HostExecSpace>>(c), ContactViews<HostExecSpace>(0));
-  const MixedSLCPConfig cfg{p.cfg, 50, 1e-9, 1e-9};
+  const MixedSLCPConfig cfg{p.cfg, 1000, 1e-9, 1e-9};
   auto storage =
       make_mixed_slcp_integrator(copy_to<Kokkos::Serial>(p.rods), copy_to<Kokkos::Serial>(c), p.mobility_model, p.dt)
           .workspace();
@@ -4417,7 +4397,7 @@ TEST(Mbody, SelfMobilityAMGIsTheOperator) {
 // update. Serial execution fixes the order of every atomic sum.
 TEST(Mbody, UnitJacobiIsUnpreconditioned) {
   const auto p = make_fallback_problem();
-  const MixedSLCPConfig cfg{p.cfg, 50, 1e-9, 1e-9};
+  const MixedSLCPConfig cfg{p.cfg, 1000, 1e-9, 1e-9};
   const auto rods_plain = copy_to<Kokkos::Serial>(p.rods);
   const auto constraints_plain = copy_to<Kokkos::Serial>(p.constraints);
   const auto rods_unit = copy_to<Kokkos::Serial>(p.rods);

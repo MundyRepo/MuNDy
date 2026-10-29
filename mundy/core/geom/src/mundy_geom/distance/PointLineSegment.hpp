@@ -167,9 +167,11 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
       if (arch_length < static_cast<Scalar>(0.0)) {
         // CASE 3.1: The parameter for the infinite line is less than 0. Therefore, the closest point is p1.
         closest_point = p1;
+        arch_length = static_cast<Scalar>(0.0);
       } else if (arch_length > static_cast<Scalar>(1.0)) {
         // CASE 3.2: The parameter for the infinite line is greater than 1. Therefore, the closest point is p2.
         closest_point = p2;
+        arch_length = static_cast<Scalar>(1.0);
       } else {
         // CASE 3.3: The closest point is falls within the line segment.
         closest_point = p1 + arch_length * p21;

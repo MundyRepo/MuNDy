@@ -273,14 +273,14 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
       arch_length2 = static_cast<Scalar>(0.0);
       closest_point1 = std::move(closest_point_tmp3);
       closest_point2 = m0;
-      sep = std::move(sep_tmp3);
+      sep = -sep_tmp3;
     } else {
       // CASE 1.4: m1 is closest to the line segment l0-l1.
       arch_length1 = std::move(arch_length_tmp4);
       arch_length2 = static_cast<Scalar>(1.0);
       closest_point1 = std::move(closest_point_tmp4);
       closest_point2 = m1;
-      sep = std::move(sep_tmp4);
+      sep = -sep_tmp4;
     }
 
     return min_distance;

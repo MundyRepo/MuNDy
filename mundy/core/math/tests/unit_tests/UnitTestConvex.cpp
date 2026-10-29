@@ -32,7 +32,7 @@
 #endif
 
 // C++ core
-#include <cmath>        // for std::ldexp
+#include <cmath>        // for std::cos, std::ldexp
 #include <limits>       // for std::numeric_limits
 #include <ostream>      // for std::cout
 #include <string_view>  // for std::string_view
@@ -1136,7 +1136,7 @@ void run_mundy_math_test(const auto& test) {
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -1178,7 +1178,7 @@ void run_mundy_math_congruent_test(const auto& test) {
     // Strategy + state
     PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
     auto pgd = make_pgd_solution_strategy(cfg);
-    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+    auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
     // Solve (can reuse "cqpp" and "pgd" across many states)
     auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -1210,7 +1210,7 @@ void run_mundy_math_congruent_test(const auto& test) {
     // Strategy + state
     PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
     auto pgd = make_pgd_solution_strategy(cfg);
-    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+    auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
     // Solve (can reuse "cqpp" and "pgd" across many states)
     auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -1279,7 +1279,7 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve
   auto result = solve_mixed_cqpp(mixed_cqpp, pgd, pgd_state);
@@ -1312,7 +1312,7 @@ void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test) {
           x[i] = 99.99;
         }
         auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = tol});
-        auto state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+        auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
         const auto result = solve_mixed_cqpp(mixed_cqpp, pgd, state);
 
         double error = 0.0;
@@ -1352,7 +1352,7 @@ void run_kokkos_test(const auto& test) {
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -1404,7 +1404,7 @@ void run_kokkos_congruent_test(const auto& test) {
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -1490,7 +1490,7 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
 
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve
   auto result = solve_mixed_cqpp(mixed_cqpp, pgd, pgd_state);
@@ -1567,7 +1567,7 @@ void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
   // Fresh storage
   vector_t x_fresh("x_fresh", size);
   Kokkos::deep_copy(x_fresh, 99.99);
-  auto fresh_state = make_pgd_state(x_fresh, grad, x_tmp, grad_tmp);
+  auto fresh_state = make_pgd_state(pgd, x_fresh, grad, x_tmp, grad_tmp);
   const auto fresh = solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space), pgd, fresh_state);
   ASSERT_TRUE(fresh.converged) << test.name();
   const auto x_fresh_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_fresh);
@@ -1577,7 +1577,7 @@ void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
   vector_t x_reused("x_reused", size);
   for (int pass = 0; pass < 2; ++pass) {
     Kokkos::deep_copy(x_reused, 99.99);
-    auto state = make_pgd_state(x_reused, grad, x_tmp, grad_tmp);
+    auto state = make_pgd_state(pgd, x_reused, grad, x_tmp, grad_tmp);
     PGDResult<double> result;
     const AllocationCount counted = count_allocations([&] {
       result = solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, workspace), pgd, state);
@@ -1651,13 +1651,13 @@ void run_kokkos_mixed_congruent_shared_s_workspace_test(const auto& test) {
   // Solve
   auto own = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT);
   vector_t x_own("x_own", size);
-  auto own_state = make_pgd_state(x_own, grad, x_tmp, grad_tmp);
+  auto own_state = make_pgd_state(pgd, x_own, grad, x_tmp, grad_tmp);
   const auto own_result =
       solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, own), pgd, own_state);
   const auto s_workspace = S.make_workspace();
   auto shared = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT, s_workspace);
   vector_t x_shared("x_shared", size);
-  auto shared_state = make_pgd_state(x_shared, grad, x_tmp, grad_tmp);
+  auto shared_state = make_pgd_state(pgd, x_shared, grad, x_tmp, grad_tmp);
   const auto shared_result =
       solve_mixed_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, shared), pgd, shared_state);
   ASSERT_TRUE(own_result.converged) << test.name();
@@ -1717,7 +1717,7 @@ TEST(Convex, PGDIsScaleInvariant) {
   // Unscaled
   vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
   x.fill(99.99);
-  auto state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  auto state = make_pgd_state(make_pgd(1e-12), x, grad, x_tmp, grad_tmp);
   const auto unscaled =
       solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A(), test.get_q(), test.get_space()), make_pgd(1e-12), state);
   ASSERT_TRUE(unscaled.converged) << unscaled;
@@ -1727,7 +1727,8 @@ TEST(Convex, PGDIsScaleInvariant) {
     const double c = std::ldexp(1.0, exponent);
     vector_t x_scaled{}, grad_scaled{}, x_tmp_scaled{}, grad_tmp_scaled{};
     x_scaled.fill(99.99);
-    auto scaled_state = make_pgd_state(x_scaled, grad_scaled, x_tmp_scaled, grad_tmp_scaled);
+    auto scaled_state =
+        make_pgd_state(make_pgd(c * 1e-12), x_scaled, grad_scaled, x_tmp_scaled, grad_tmp_scaled);
     const auto scaled = solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A() * c, test.get_q() * c, test.get_space()),
                                    make_pgd(c * 1e-12), scaled_state);
     EXPECT_TRUE(scaled.converged) << "c = 2^" << exponent << ": " << scaled;
@@ -1736,6 +1737,37 @@ TEST(Convex, PGDIsScaleInvariant) {
       EXPECT_EQ(x_scaled[i], x[i]) << "c = 2^" << exponent << ", entry " << i;
     }
   }
+}
+
+// Projected Barzilai-Borwein steps can cycle, and a nonmonotone line search ends the cycle. Two rows at an angle delta,
+// the second asking slightly more: 0 <= A x + q _|_ x >= 0 with A = [[1, cos delta], [cos delta, 1]] and
+// q = -(1, 1 + eps) is solved by x* = (0, 1 + eps) alone, the first row slack by (1 + eps) cos delta - 1 > 0. Started
+// from (0.5, 0), loaded on the first row, plain steps settle into a cycle of period 5 that never reaches x*.
+TEST(Convex, NonmonotonePGDEndsBBCycle) {
+  constexpr double delta = 0.1;
+  constexpr double eps = 0.01;
+  using vector_t = Vector<double, 2>;
+  const Matrix<double, 2, 2> A{1.0, std::cos(delta), std::cos(delta), 1.0};
+  const vector_t q{-1.0, -1.0 - eps};
+  const auto problem = make_cqpp<MundyMathBackend>(A, q, LowerBoundSpace<double>(0.0));
+  const PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-12};
+
+  // Plain Barzilai-Borwein steps
+  const auto bb = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, cfg);
+  vector_t x_bb{0.5, 0.0}, grad{}, x_tmp{}, grad_tmp{};
+  auto bb_state = make_pgd_state(bb, x_bb, grad, x_tmp, grad_tmp);
+  const PGDResult<double> bb_result = solve_cqpp(problem, bb, bb_state);
+  EXPECT_FALSE(bb_result.converged) << bb_result;
+
+  // Under the line search
+  const auto nonmonotone =
+      make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, LinfNormProjectedGradientResidual{}, cfg);
+  vector_t x{0.5, 0.0};
+  auto state = make_pgd_state(nonmonotone, x, grad, x_tmp, grad_tmp);
+  const PGDResult<double> result = solve_cqpp(problem, nonmonotone, state);
+  ASSERT_TRUE(result.converged) << result;
+  EXPECT_EQ(x[0], 0.0);
+  EXPECT_NEAR(x[1], 1.0 + eps, 1e-12);
 }
 
 // Over x >= 0, x is optimal when grad_i = 0 where x_i > 0 and grad_i >= 0 where x_i = 0. Both residuals measure the

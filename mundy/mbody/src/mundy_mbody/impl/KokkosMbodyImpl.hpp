@@ -51,7 +51,7 @@
 #include <mundy_math/lcp.hpp>              // for mundy::{make_lcp, solve_lcp}
 #include <mundy_math/linear_ops.hpp>       // for mundy::{make_concat_domain_op, make_scaled_op, make_sum_op, ...}
 #include <mundy_math/linear_system.hpp>    // for mundy::{CGConfig, make_cg_inv_op}
-#include <mundy_math/pgd.hpp>              // for mundy::{BBStepStrategy, PGDConfig, PGDResult, make_pgd_state, ...}
+#include <mundy_math/pgd.hpp>              // for mundy::{NonmonotoneBBStepStrategy, PGDConfig, PGDResult, ...}
 #include <mundy_math/residuals.hpp>        // for mundy::LinfNormProjectedGradientResidual
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
 #include <mundy_mbody/KokkosMbodyMobility.hpp>         // for mundy::mbody::Mobility
@@ -2456,8 +2456,9 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
     view_t grad = subrange(workspace.grad, unilateral_rows);
     view_t x_tmp = subrange(workspace.x_tmp, unilateral_rows);
     view_t grad_tmp = subrange(workspace.grad_tmp, unilateral_rows);
-    auto pgd = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, step.pgd_config);
-    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+    auto pgd = make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, LinfNormProjectedGradientResidual{},
+                                          step.pgd_config);
+    auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
     if (has_bilateral) {
       const auto S = make_schur_complement(step, workspace.geometry(), step.cg_config, *workspace.preconditioner);
       const auto mcqpp = make_mixed_cqpp<backend_t>(DT, M_dt, D, step.q, B, S, BT, workspace.b,

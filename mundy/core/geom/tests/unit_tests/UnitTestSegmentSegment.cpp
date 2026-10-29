@@ -420,7 +420,6 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
 
 TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
-  // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
   mundy::Vector3d sep_actual;
 
@@ -452,7 +451,6 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
 
 TEST(DistanceBetweenLineSegments, APeskyEdgeCaseCollinear) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
-  // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
   Point<double> a1, a2, b1, b2;
 
   double dist_expected, dist_actual;
@@ -492,6 +490,43 @@ TEST(DistanceToLine, PositiveResult) {
   }
 }
 
+TEST(DistanceToLineSegment, EveryBranch) {
+  // Each case drives one branch to a closest point known exactly on the segment (0,0,0)-(2,0,0), or on a degenerate
+  // segment collapsed to the origin.
+  struct Case {
+    const char* branch;
+    Point<double> p, p1, p2;  // the point and the segment (p1, p2)
+    Point<double> closest;    // closest point on the segment
+    double s;                 // its arch-length parameter
+  };
+  const Case cases[] = {
+      {"interior", {0.5, 1, 0}, {0, 0, 0}, {2, 0, 0}, {0.5, 0, 0}, 0.25},
+      {"projects onto p1", {0, 1, 0}, {0, 0, 0}, {2, 0, 0}, {0, 0, 0}, 0.0},
+      {"before p1", {-1, 1, 0}, {0, 0, 0}, {2, 0, 0}, {0, 0, 0}, 0.0},
+      {"past p2", {3, 1, 0}, {0, 0, 0}, {2, 0, 0}, {2, 0, 0}, 1.0},
+      {"degenerate segment", {1, 1, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 0.0},
+  };
+
+  const double tol = 1e-12;
+  for (const Case& c : cases) {
+    SCOPED_TRACE(c.branch);
+    const LineSegment<double> segment(c.p1, c.p2);
+    const mundy::Vector3d sep_expected = c.closest - c.p;
+    Point<double> closest;
+    double s;
+    mundy::Vector3d sep;
+
+    // sep runs from the point to the segment.
+    const double dist = distance(c.p, segment, closest, s, sep);
+    EXPECT_NEAR(dist, mundy::norm(sep_expected), tol);
+    EXPECT_NEAR(s, c.s, tol);
+    for (unsigned j = 0; j < 3; j++) {
+      EXPECT_NEAR(closest[j], c.closest[j], tol);
+      EXPECT_NEAR(sep[j], sep_expected[j], tol);
+    }
+  }
+}
+
 // ============================================================
 // ScaleInvariantParallelThreshold
 //
@@ -527,6 +562,85 @@ TEST(DistanceBetweenLineSegments, ScaleInvariantParallelThreshold) {
   EXPECT_NEAR(dist, gap, 1e-12);
   EXPECT_NEAR(al1, 0.5, 1e-10);
   EXPECT_NEAR(al2, 0.5, 1e-10);
+}
+
+TEST(DistanceBetweenLineSegments, EveryBranch) {
+  // Each case drives one branch of the closest-point search to a closest pair known exactly. Segment 2 sits a gap h
+  // above segment 1; a tilt delta is small enough that the segments count as parallel.
+  struct Case {
+    const char* branch;
+    Point<double> l0, l1, m0, m1;  // segment 1 = (l0, l1), segment 2 = (m0, m1)
+    Point<double> cp1, cp2;        // closest points on segments 1 and 2
+    double s, t;                   // their arch-length parameters
+  };
+  const double h = 0.25;
+  const double delta = 1e-6;
+  const Case cases[] = {
+      // Parallel: one of the four endpoints is closest.
+      {"parallel, l0 closest", {-0.5, 0, 0}, {0.5, 0, -delta}, {-1, 0, h}, {1, 0, h},  //
+       {-0.5, 0, 0}, {-0.5, 0, h}, 0.0, 0.25},
+      {"parallel, l1 closest", {-0.5, 0, -delta}, {0.5, 0, 0}, {-1, 0, h}, {1, 0, h},  //
+       {0.5, 0, 0}, {0.5, 0, h}, 1.0, 0.75},
+      {"parallel, m0 closest", {-1, 0, 0}, {1, 0, 0}, {-0.5, 0, h}, {0.5, 0, h + delta},  //
+       {-0.5, 0, 0}, {-0.5, 0, h}, 0.25, 0.0},
+      {"parallel, m1 closest", {-1, 0, 0}, {1, 0, 0}, {-0.5, 0, h + delta}, {0.5, 0, h},  //
+       {0.5, 0, 0}, {0.5, 0, h}, 0.75, 1.0},
+      {"exactly parallel, disjoint", {0, 0, 0}, {1, 0, 0}, {1.5, 0, h}, {2.5, 0, h},  //
+       {1, 0, 0}, {1.5, 0, h}, 1.0, 0.0},
+
+      // Skew: segment 1 along x, segment 2 along y.
+      {"skew, interior", {-1, 0, 0}, {1, 0, 0}, {0, -1, h}, {0, 1, h},  //
+       {0, 0, 0}, {0, 0, h}, 0.5, 0.5},
+      {"skew, s = 0", {0, 0, 0}, {1, 0, 0}, {-0.5, -1, h}, {-0.5, 1, h},  //
+       {0, 0, 0}, {-0.5, 0, h}, 0.0, 0.5},
+      {"skew, s = 1", {0, 0, 0}, {1, 0, 0}, {1.5, -1, h}, {1.5, 1, h},  //
+       {1, 0, 0}, {1.5, 0, h}, 1.0, 0.5},
+      {"skew, t = 0, s interior", {-1, 0, 0}, {1, 0, 0}, {0, 0.5, h}, {0, 1.5, h},  //
+       {0, 0, 0}, {0, 0.5, h}, 0.5, 0.0},
+      {"skew, t = 0, s = 0", {0, 0, 0}, {1, 0, 0}, {-0.5, 0.5, h}, {-0.5, 1.5, h},  //
+       {0, 0, 0}, {-0.5, 0.5, h}, 0.0, 0.0},
+      {"skew, t = 0, s = 1", {0, 0, 0}, {1, 0, 0}, {1.5, 0.5, h}, {1.5, 1.5, h},  //
+       {1, 0, 0}, {1.5, 0.5, h}, 1.0, 0.0},
+      {"skew, t = 1, s interior", {-1, 0, 0}, {1, 0, 0}, {0, -1.5, h}, {0, -0.5, h},  //
+       {0, 0, 0}, {0, -0.5, h}, 0.5, 1.0},
+      {"skew, t = 1, s = 0", {0, 0, 0}, {1, 0, 0}, {-0.5, -1.5, h}, {-0.5, -0.5, h},  //
+       {0, 0, 0}, {-0.5, -0.5, h}, 0.0, 1.0},
+      {"skew, t = 1, s = 1", {0, 0, 0}, {1, 0, 0}, {1.5, -1.5, h}, {1.5, -0.5, h},  //
+       {1, 0, 0}, {1.5, -0.5, h}, 1.0, 1.0},
+  };
+
+  const double tol = 1e-12;
+  for (const Case& c : cases) {
+    SCOPED_TRACE(c.branch);
+    const LineSegment<double> segment1(c.l0, c.l1);
+    const LineSegment<double> segment2(c.m0, c.m1);
+    const mundy::Vector3d sep_expected = c.cp2 - c.cp1;
+    Point<double> cp1, cp2;
+    double s, t;
+    mundy::Vector3d sep;
+
+    // sep runs from segment 1 to segment 2.
+    const double dist = distance(segment1, segment2, cp1, cp2, s, t, sep);
+    EXPECT_NEAR(dist, mundy::norm(sep_expected), tol);
+    EXPECT_NEAR(s, c.s, tol);
+    EXPECT_NEAR(t, c.t, tol);
+    for (unsigned j = 0; j < 3; j++) {
+      EXPECT_NEAR(cp1[j], c.cp1[j], tol);
+      EXPECT_NEAR(cp2[j], c.cp2[j], tol);
+      EXPECT_NEAR(sep[j], sep_expected[j], tol);
+    }
+
+    // Swapping the segments swaps the closest points and reverses sep.
+    const double dist_swapped = distance(segment2, segment1, cp2, cp1, t, s, sep);
+    EXPECT_NEAR(dist_swapped, mundy::norm(sep_expected), tol);
+    EXPECT_NEAR(s, c.s, tol);
+    EXPECT_NEAR(t, c.t, tol);
+    for (unsigned j = 0; j < 3; j++) {
+      EXPECT_NEAR(cp1[j], c.cp1[j], tol);
+      EXPECT_NEAR(cp2[j], c.cp2[j], tol);
+      EXPECT_NEAR(sep[j], -sep_expected[j], tol);
+    }
+  }
 }
 
 }  // namespace
