@@ -26,14 +26,12 @@
 
 // C++ core:
 #include <concepts>
-#include <stdexcept>
 
 // Mundy
 #include <mundy_math/Tolerance.hpp>        // for mundy::get_zero_tolerance<T>
 #include <mundy_math/cmath.hpp>            // for mundy::sqrt, mundy::abs, mundy::max
-#include <mundy_math/convex_spaces.hpp>    // for mundy::LowerBoundSpace, mundy::ValidConvexSpace
+#include <mundy_math/convex_spaces.hpp>    // for mundy::{projection, projected_gradient}
 #include <mundy_math/solver_backends.hpp>  // for mundy::impl::vector_value_type and the Backend vector ops
-#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -71,23 +69,11 @@ struct RelativeL2Residual {
   }
 };
 
-/// \brief res = ||r||_inf (max absolute residual entry), via Backend::reduce_max.
+/// \brief res = ||r||_inf, the largest absolute entry of r, or 0 if r has none.
 struct LinfResidual {
   template <class Backend, class RVector, class BVector, class ReductionScalar = impl::vector_value_type<RVector>>
   KOKKOS_FUNCTION ReductionScalar operator()(const Backend& backend, const RVector& r, const BVector&) const {
-    const size_t n = Backend::size(r);
-    if (n == 0) {
-      return ReductionScalar(0);
-    }
-    ReductionScalar max_val;
-    Backend::template reduce_max<ReductionScalar>(
-        r, n,
-        KOKKOS_LAMBDA(const int i, ReductionScalar& m) {
-          const ReductionScalar v = abs(Backend::vector_data(r, i));
-          if (v > m) m = v;
-        },
-        max_val);
-    return max_val;
+    return max(static_cast<ReductionScalar>(reduce_max(backend, abs(Backend::entries(r)))), ReductionScalar(0));
   }
 };
 
@@ -102,79 +88,29 @@ concept ProjectedResidualPolicy = requires(const Policy& policy, const Backend& 
   { policy(backend, x, grad, space) } -> std::convertible_to<impl::vector_value_type<GradVector>>;
 };
 
-/// \brief res = ||proj_grad(x)||_inf, the max absolute projected gradient entry (Eq 2.2 of Dai & Fletcher 2005).
-/// Only defined for a non-negativity lower bound.
+/// \brief res = ||g^P||_inf, the largest absolute entry of the projected gradient of grad at x in space's set (Eq 2.2
+/// of Dai & Fletcher 2005), or 0 if x has none.
 struct LinfNormProjectedGradientResidual {
-  template <typename Backend, typename XVector, typename GradVector,
+  template <typename Backend, typename XVector, typename GradVector, typename Space,
             typename ReductionScalar = impl::vector_value_type<GradVector>>
-  KOKKOS_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
-                                             const XVector& x,                         //
-                                             const GradVector& grad,                   //
-                                             const LowerBoundSpace<ReductionScalar>& convex_space) const {
-    MUNDY_THROW_REQUIRE(convex_space.lower_bound == static_cast<ReductionScalar>(0), std::invalid_argument,
-                        "LinfNormProjectedGradientResidual is only implemented for non-negativity constraints.");
-
-    using value_type = ReductionScalar;
-
-    const size_t n = Backend::size(x);
-    if (n == 0) {
-      return value_type(0);
-    }
-    value_type largest_abs_gradient;
-    Backend::template reduce_max<value_type>(
-        x, n,
-        KOKKOS_LAMBDA(const int i, value_type& max_val) {
-          value_type x_i = Backend::vector_data(x, i);
-          value_type grad_i = Backend::vector_data(grad, i);
-
-          value_type abs_projected_grad;
-          if (x_i < get_zero_tolerance<value_type>()) {
-            abs_projected_grad = max(value_type(0), -grad_i);
-          } else {
-            abs_projected_grad = abs(grad_i);
-          }
-
-          if (abs_projected_grad > max_val) {
-            max_val = abs_projected_grad;
-          }
-        },
-        largest_abs_gradient);
-
-    return largest_abs_gradient;
+  KOKKOS_FUNCTION ReductionScalar operator()(const Backend& backend, const XVector& x, const GradVector& grad,
+                                             const Space& space) const {
+    const auto largest = reduce_max(backend, abs(projected_gradient(backend, space, x, grad)));
+    return max(static_cast<ReductionScalar>(largest), ReductionScalar(0));
   }
 };
 
-/// \brief res = ||x - proj(x - h grad)||_inf / h for a small step h (line 17 / Eq 25 of Mazhar 2015). Works for
-/// any ValidConvexSpace.
+/// \brief res = ||x - P(x - h grad)||_inf / h for the step h = 1e-6 (line 17 / Eq 25 of Mazhar 2015), or 0 if x has
+/// none.
 struct LinfNormProjectedDiffResidual {
-  template <typename Backend, typename XVector, typename GradVector, ValidConvexSpace ConvexSpace,
+  template <typename Backend, typename XVector, typename GradVector, typename Space,
             typename ReductionScalar = impl::vector_value_type<GradVector>>
-  KOKKOS_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
-                                             const XVector& x,                         //
-                                             const GradVector& grad,                   //
-                                             const ConvexSpace& convex_space) const {
-    using value_type = ReductionScalar;
-
-    const size_t num_unknowns = Backend::size(x);
-    if (num_unknowns == 0) {
-      return value_type(0);
-    }
-    constexpr value_type small_step_size = static_cast<value_type>(1e-6);
-    value_type largest_abs_diff;
-    Backend::template reduce_max<value_type>(
-        x, num_unknowns,
-        KOKKOS_LAMBDA(const int i, value_type& max_val) {
-          value_type x_i = Backend::vector_data(x, i);
-          value_type grad_i = Backend::vector_data(grad, i);
-          value_type x_i_proj = convex_space.project(x_i - small_step_size * grad_i);
-          value_type abs_diff = abs(x_i - x_i_proj);
-          if (abs_diff > max_val) {
-            max_val = abs_diff;
-          }
-        },
-        largest_abs_diff);
-
-    return largest_abs_diff / small_step_size;
+  KOKKOS_FUNCTION ReductionScalar operator()(const Backend& backend, const XVector& x, const GradVector& grad,
+                                             const Space& space) const {
+    constexpr ReductionScalar h = static_cast<ReductionScalar>(1e-6);
+    const auto X = Backend::entries(x);
+    const auto largest = reduce_max(backend, abs(X - projection(backend, space, X - h * Backend::entries(grad))));
+    return max(static_cast<ReductionScalar>(largest), ReductionScalar(0)) / h;
   }
 };
 

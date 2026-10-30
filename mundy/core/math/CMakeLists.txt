@@ -34,6 +34,7 @@ set(NOINSTALLHEADERS
   src/mundy_math/impl/belos_solver_impl.hpp
   src/mundy_math/impl/ClenshawCurtisImpl.hpp
   src/mundy_math/impl/cmath_impl.hpp
+  src/mundy_math/impl/convex_spaces_impl.hpp
   src/mundy_math/impl/direct_sum_impl.hpp
   src/mundy_math/impl/DoubleDoubleImpl.hpp
   src/mundy_math/impl/eigenvalues_impl.hpp

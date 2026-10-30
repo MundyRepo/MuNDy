@@ -18,6 +18,19 @@
 // **********************************************************************************************************************
 // @HEADER
 
+/// \file UnitTestConvex.cpp
+/// \brief Projected-gradient descent (pgd.hpp) with Barzilai-Borwein, nonmonotone Barzilai-Borwein, and MPRGP steps on
+/// constrained quadratic programs (cqpp.hpp) with known minimizers, and the projected residuals (residuals.hpp).
+///
+/// Reference problems, each on MundyMathBackend and KokkosBackend:
+///   - A 3 x 3 SPD problem without constraints, and inside a box [0, 2] that its minimizer does not touch and a box
+///     [9, 10] that it does.
+///   - A random LCP, 0 <= A x + q _|_ x >= 0, built from a chosen x* and A x* + q with disjoint supports.
+///   - Each of the above with A congruent to D^T M D (D = I), and a random mixed problem whose unilateral block is
+///     reduced through the Schur complement of its bilateral one.
+///   - Two nearly parallel rows, A = [[1, cos delta], [cos delta, 1]] and q = -(1, 1 + eps), whose minimizer
+///     x* = (0, 1 + eps) leaves the first row slack by (1 + eps) cos delta - 1.
+
 // External
 #include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
 #include <openrand/philox.h>  // for openrand::Philox
@@ -53,13 +66,23 @@ namespace mundy {
 
 namespace {
 
+//! \name Compile-time contracts
+//@{
+
 static_assert(ProjectedResidualPolicy<LinfNormProjectedGradientResidual, MundyMathBackend, Vector3d, Vector3d,
-                                      LowerBoundSpace<double>>);
+                                      LowerBoundSpace<double>>,
+              "The projected-gradient residual measures an iterate against a convex space.");
 static_assert(ProjectedResidualPolicy<LinfNormProjectedDiffResidual, MundyMathBackend, Vector3d, Vector3d,
-                                      LowerBoundSpace<double>>);
-static_assert(!ProjectedResidualPolicy<L2Residual, MundyMathBackend, Vector3d, Vector3d, LowerBoundSpace<double>>);
-static_assert(impl::accumulates_gradient_v<MPRGPStepStrategy<Vector3d&>>);
-static_assert(!impl::accumulates_gradient_v<BBStepStrategy> && !impl::accumulates_gradient_v<NonmonotoneBBStepStrategy<>>);
+                                      LowerBoundSpace<double>>,
+              "The projected-difference residual measures an iterate against a convex space.");
+static_assert(!ProjectedResidualPolicy<L2Residual, MundyMathBackend, Vector3d, Vector3d, LowerBoundSpace<double>>,
+              "A vector residual is not a projected residual.");
+static_assert(impl::accumulates_gradient_v<MPRGPStepStrategy<Vector3d&>>,
+              "MPRGP updates the gradient by recurrence, so PGD recomputes it before accepting an iterate.");
+static_assert(!impl::accumulates_gradient_v<BBStepStrategy> &&
+                  !impl::accumulates_gradient_v<NonmonotoneBBStepStrategy<>>,
+              "Barzilai-Borwein steps form the gradient as A x + q.");
+//@}
 
 //! \name MundyMath backend test problems
 //@{
@@ -1118,19 +1141,37 @@ SparseMatrices<Problem> as_sparse(const Problem& problem) {
 //@}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
-/// \brief PGD with its default steps; they need no direction vector, so p goes unused.
+/// \brief PGD from make_pgd_solution_strategy's defaults; its steps need no direction vector, so p goes unused.
 struct DefaultPGD {
   KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& /*p*/) const {
     return make_pgd_solution_strategy(cfg);
   }
 };
 
-/// \brief PGD with MPRGP steps, carrying their direction in p, and the default residual.
-struct MPRGPPGD {
-  KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& p) const {
-    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), LinfNormProjectedDiffResidual{}, cfg);
+/// \brief PGD with Barzilai-Borwein steps and the given residual; the steps need no direction vector, so p goes unused.
+template <class Residual = LinfNormProjectedDiffResidual>
+struct BBPGD {
+  KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& /*p*/) const {
+    return make_pgd_solution_strategy(BBStepStrategy{}, Residual{}, cfg);
   }
 };
+
+/// \brief PGD with Barzilai-Borwein steps under the nonmonotone line search and the given residual; p goes unused.
+template <class Residual = LinfNormProjectedDiffResidual>
+struct NonmonotoneBBPGD {
+  KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& /*p*/) const {
+    return make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, Residual{}, cfg);
+  }
+};
+
+/// \brief PGD with MPRGP steps, carrying their direction in p, and the given residual.
+template <class Residual = LinfNormProjectedDiffResidual>
+struct MPRGPPGD {
+  KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& p) const {
+    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), Residual{}, cfg);
+  }
+};
+
 
 template <class Test, class MakePGD = DefaultPGD>
 void run_mundy_math_test(const Test& test, const MakePGD& make_pgd = {}) {
@@ -1704,17 +1745,21 @@ void run_kokkos_mixed_congruent_shared_s_workspace_test(const auto& test) {
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
+//! \name Analytical solutions
+//@{
+
 TEST(Convex, MundyMathAnalyticalSolutions) {
   auto test_cases = std::make_tuple(math_backend::UnconstrainedSPD1Problem{},          //
                                     math_backend::InactiveBoxConstrainedSPDProblem{},  //
                                     math_backend::ActiveBoxConstrainedSPDProblem{},    //
                                     math_backend::RandomLCP<3>{},                      //
                                     math_backend::RandomLCP<7>{});
-  std::apply([](auto&&... test_case) { (run_mundy_math_test(test_case), ...); }, test_cases);
-
-  // MPRGP, over the lower-bounded problems
-  run_mundy_math_test(math_backend::RandomLCP<3>{}, MPRGPPGD{});
-  run_mundy_math_test(math_backend::RandomLCP<7>{}, MPRGPPGD{});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_mundy_math_test(test_case), ...);
+        (run_mundy_math_test(test_case, MPRGPPGD{}), ...);
+      },
+      test_cases);
 }
 
 TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
@@ -1724,38 +1769,121 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
                                     CongruentLCPWrapper{math_backend::ActiveBoxConstrainedSPDProblem{}},    //
                                     CongruentLCPWrapper{math_backend::RandomLCP<3>{}},                      //
                                     CongruentLCPWrapper{math_backend::RandomLCP<7>{}});
-  std::apply([](auto&&... test_case) { (run_mundy_math_congruent_test(test_case), ...); }, test_cases);
-
-  // MPRGP, over the lower-bounded problems
-  run_mundy_math_congruent_test(CongruentLCPWrapper{math_backend::RandomLCP<3>{}}, MPRGPPGD{});
-  run_mundy_math_congruent_test(CongruentLCPWrapper{math_backend::RandomLCP<7>{}}, MPRGPPGD{});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_mundy_math_congruent_test(test_case), ...);
+        (run_mundy_math_congruent_test(test_case, MPRGPPGD{}), ...);
+      },
+      test_cases);
 }
 
 TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
   // Template params are <NX, NY, NZ>; make_D_full_rank requires NZ >= NX.
   auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
-  std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
-  std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test_in_kernel(test_case), ...); }, test_cases);
-  std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case, MPRGPPGD{}), ...); },
-             test_cases);
   std::apply(
-      [](auto&&... test_case) { (run_mundy_math_mixed_congruent_test_in_kernel(test_case, MPRGPPGD{}), ...); },
+      [](auto&&... test_case) {
+        (run_mundy_math_mixed_congruent_test(test_case), ...);
+        (run_mundy_math_mixed_congruent_test_in_kernel(test_case), ...);
+        (run_mundy_math_mixed_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_mixed_congruent_test_in_kernel(test_case, MPRGPPGD{}), ...);
+      },
       test_cases);
 }
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+TEST(Convex, KokkosAnalyticalSolutions) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
+  auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
+                                    kokkos_backend::InactiveBoxConstrainedSPDProblem{},  //
+                                    kokkos_backend::ActiveBoxConstrainedSPDProblem{},    //
+                                    kokkos_backend::RandomLCP{3},                        //
+                                    kokkos_backend::RandomLCP{7},                        //
+                                    kokkos_backend::RandomLCP{200});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_test(test_case), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+      },
+      test_cases);
+}
+
+TEST(Convex, KokkosCongruentAnalyticalSolutions) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
+  using kokkos_backend::congruent::CongruentLCPWrapper;
+  auto test_cases = std::make_tuple(CongruentLCPWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
+                                    CongruentLCPWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
+                                    CongruentLCPWrapper{kokkos_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{3}},                        //
+                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{7}},                        //
+                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{200}});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_congruent_test(test_case), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+      },
+      test_cases);
+}
+
+TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
+  // NX <= NZ, so the reduced Hessian D^T (M - M B S B^T M) D can be nonsingular and x* is the unique solution.
+  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
+                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_mixed_congruent_test(test_case), ...);
+        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_mixed_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+      },
+      test_cases);
+}
+
+TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
+  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_mixed_congruent_workspace_test(test_case), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case), ...);
+        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_mixed_congruent_workspace_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+      },
+      test_cases);
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+//@}
+
+//! \name Scale invariance
+//@{
+
 // PGD commutes with scaling the problem: (c A, c q) to tolerance c tol has the same minimizer, its steps scale as 1/c
 // and its gradients as c. A power-of-two c scales exactly, so the scaled solves match the unscaled one bit for bit,
-// under Barzilai-Borwein and under MPRGP steps.
+// under Barzilai-Borwein and under MPRGP steps. Both measure the projected gradient, which scales with c; the projected
+// difference's fixed step does not.
 TEST(Convex, PGDIsScaleInvariant) {
   const math_backend::RandomLCP<7> test;
   using vector_t = decltype(test.get_exact_solution());
-  const auto make_bb = [](const PGDConfig<double>& cfg, vector_t& /*p*/) {
-    return make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, cfg);
-  };
-  const auto make_mprgp = [](const PGDConfig<double>& cfg, vector_t& p) {
-    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), LinfNormProjectedGradientResidual{}, cfg);
-  };
   const auto expect_scale_invariant = [&](const auto& make_pgd, std::string_view steps) {
     // Unscaled
     vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
@@ -1782,47 +1910,54 @@ TEST(Convex, PGDIsScaleInvariant) {
       }
     }
   };
-  expect_scale_invariant(make_bb, "Barzilai-Borwein");
-  expect_scale_invariant(make_mprgp, "MPRGP");
+  expect_scale_invariant(BBPGD<LinfNormProjectedGradientResidual>{}, "Barzilai-Borwein");
+  expect_scale_invariant(MPRGPPGD<LinfNormProjectedGradientResidual>{}, "MPRGP");
 }
+//@}
 
-// Projected Barzilai-Borwein steps can cycle, and a nonmonotone line search ends the cycle. Two rows at an angle delta,
-// the second asking slightly more: 0 <= A x + q _|_ x >= 0 with A = [[1, cos delta], [cos delta, 1]] and
-// q = -(1, 1 + eps) is solved by x* = (0, 1 + eps) alone, the first row slack by (1 + eps) cos delta - 1 > 0. Started
-// from (0.5, 0), loaded on the first row, plain steps settle into a cycle of period 5 that never reaches x*.
+//! \name Nearly parallel rows
+//@{
+
+// Two rows at an angle delta = 0.1, the second asking eps = 0.01 more: 0 <= A x + q _|_ x >= 0 with
+// A = [[1, cos delta], [cos delta, 1]] and q = -(1, 1 + eps) is solved by x* = (0, 1 + eps), the first row slack by
+// (1 + eps) cos delta - 1 > 0. From (1/2, 0), projected Barzilai-Borwein steps alone do not reach x* within 1000 steps,
+// and under the nonmonotone line search they do.
 TEST(Convex, NonmonotonePGDEndsBBCycle) {
   constexpr double delta = 0.1;
   constexpr double eps = 0.01;
   using vector_t = Vector<double, 2>;
   const Matrix<double, 2, 2> A{1.0, std::cos(delta), std::cos(delta), 1.0};
   const vector_t q{-1.0, -1.0 - eps};
-  const auto problem = make_cqpp<MundyMathBackend>(A, q, LowerBoundSpace<double>(0.0));
+  const LowerBoundSpace<double> space(0.0);
+  const auto problem = make_cqpp<MundyMathBackend>(A, q, space);
   const PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-12};
 
   // Plain Barzilai-Borwein steps
-  const auto bb = make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, cfg);
-  vector_t x_bb{0.5, 0.0}, grad{}, x_tmp{}, grad_tmp{};
+  vector_t x_bb{0.5, 0.0}, grad{}, x_tmp{}, grad_tmp{}, p{};
+  const auto bb = BBPGD<LinfNormProjectedGradientResidual>{}(cfg, p);
   auto bb_state = make_pgd_state(bb, x_bb, grad, x_tmp, grad_tmp);
   const PGDResult<double> bb_result = solve_cqpp(problem, bb, bb_state);
   EXPECT_FALSE(bb_result.converged) << bb_result;
 
   // Under the line search
-  const auto nonmonotone =
-      make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, LinfNormProjectedGradientResidual{}, cfg);
   vector_t x{0.5, 0.0};
+  const auto nonmonotone = NonmonotoneBBPGD<LinfNormProjectedGradientResidual>{}(cfg, p);
   auto state = make_pgd_state(nonmonotone, x, grad, x_tmp, grad_tmp);
   const PGDResult<double> result = solve_cqpp(problem, nonmonotone, state);
   ASSERT_TRUE(result.converged) << result;
-  EXPECT_EQ(x[0], 0.0);
-  EXPECT_NEAR(x[1], 1.0 + eps, 1e-12);
+
+  // ||g^P||_inf <= tol at x, and the first row is slack by far more than tol, so x_0 lies on its bound; |g_1| <= tol
+  // then puts x_1 within tol + cos(delta) x_0 of 1 + eps.
+  EXPECT_GE(x[0], 0.0);
+  EXPECT_LE(x[0], std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(x[1], 1.0 + eps, cfg.tol + std::cos(delta) * x[0]);
+  EXPECT_LE(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, A * x + q, space), cfg.tol);
 }
 
-// Rows that nearly duplicate each other stall projected gradient steps; MPRGP's conjugate gradient steps settle them.
-// Two rows at an angle delta = 1e-3, the second asking slightly more, as a row re-linearized at a nearby configuration:
-// 0 <= A x + q _|_ x >= 0 with A = [[1, cos delta], [cos delta, 1]], condition number ~4 / delta^2 = 4e6, and
-// q = -(1, 1 + eps) is solved by x* = (0, 1 + eps) alone, the first row slack by (1 + eps) cos delta - 1 = 5e-7.
-// Started from the first row loaded, x = (1, 0), Barzilai-Borwein steps under the line search do not find within 1000
-// steps that the first row ends slack.
+// Two rows at an angle delta = 1e-3, the second asking eps = 1e-6 more: 0 <= A x + q _|_ x >= 0 with
+// A = [[1, cos delta], [cos delta, 1]], of condition number about 4 / delta^2 = 4e6, and q = -(1, 1 + eps) is solved by
+// x* = (0, 1 + eps), the first row slack by (1 + eps) cos delta - 1 = 5e-7. From (1, 0), Barzilai-Borwein steps under
+// the nonmonotone line search do not reach x* within 1000 steps, and MPRGP's steps do.
 TEST(Convex, MPRGPSettlesNearDuplicateRows) {
   constexpr double delta = 1e-3;
   constexpr double eps = 1e-6;
@@ -1834,23 +1969,30 @@ TEST(Convex, MPRGPSettlesNearDuplicateRows) {
   const PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-12};
 
   // Barzilai-Borwein steps under the line search
-  const auto nonmonotone =
-      make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, LinfNormProjectedGradientResidual{}, cfg);
-  vector_t x_nonmonotone{1.0, 0.0}, grad{}, x_tmp{}, grad_tmp{};
+  vector_t x_nonmonotone{1.0, 0.0}, grad{}, x_tmp{}, grad_tmp{}, p{};
+  const auto nonmonotone = NonmonotoneBBPGD<LinfNormProjectedGradientResidual>{}(cfg, p);
   auto nonmonotone_state = make_pgd_state(nonmonotone, x_nonmonotone, grad, x_tmp, grad_tmp);
   const PGDResult<double> nonmonotone_result = solve_cqpp(problem, nonmonotone, nonmonotone_state);
   EXPECT_FALSE(nonmonotone_result.converged) << nonmonotone_result;
 
   // MPRGP steps
-  vector_t x{1.0, 0.0}, p{};
-  const auto mprgp = MPRGPPGD{}(cfg, p);
+  vector_t x{1.0, 0.0};
+  const auto mprgp = MPRGPPGD<LinfNormProjectedGradientResidual>{}(cfg, p);
   auto state = make_pgd_state(mprgp, x, grad, x_tmp, grad_tmp);
   const PGDResult<double> result = solve_cqpp(problem, mprgp, state);
   ASSERT_TRUE(result.converged) << result;
-  EXPECT_EQ(x[0], 0.0);
-  EXPECT_NEAR(x[1], 1.0 + eps, 1e-12);
+
+  // ||g^P||_inf <= tol at x, and the first row is slack by far more than tol, so x_0 lies on its bound; |g_1| <= tol
+  // then puts x_1 within tol + cos(delta) x_0 of 1 + eps.
+  EXPECT_GE(x[0], 0.0);
+  EXPECT_LE(x[0], std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(x[1], 1.0 + eps, cfg.tol + std::cos(delta) * x[0]);
   EXPECT_LE(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, A * x + q, space), cfg.tol);
 }
+//@}
+
+//! \name Residuals
+//@{
 
 // Over x >= 0, x is optimal when grad_i = 0 where x_i > 0 and grad_i >= 0 where x_i = 0. Both residuals measure the
 // violation: |grad_i| off the bound and max(0, -grad_i) on it. The projected difference resolves its step h = 1e-6
@@ -1880,95 +2022,8 @@ TEST(Convex, EmptyResidualsAreZero) {
   EXPECT_EQ(LinfNormProjectedGradientResidual{}(backend_t{}, x, grad, space), 0.0);
   EXPECT_EQ(LinfNormProjectedDiffResidual{}(backend_t{}, x, grad, space), 0.0);
 }
-
-TEST(Convex, KokkosAnalyticalSolutions) {
-#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
-    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
-  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
-#endif
-  auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
-                                    kokkos_backend::InactiveBoxConstrainedSPDProblem{},  //
-                                    kokkos_backend::ActiveBoxConstrainedSPDProblem{},    //
-                                    kokkos_backend::RandomLCP{3},                        //
-                                    kokkos_backend::RandomLCP{7},                        //
-                                    kokkos_backend::RandomLCP{200});
-  std::apply([](auto&&... test_case) { (run_kokkos_test(test_case), ...); }, test_cases);
-  std::apply([](auto&&... test_case) { (run_kokkos_test(kokkos_backend::as_sparse(test_case)), ...); }, test_cases);
-
-  // MPRGP, over the lower-bounded problems
-  for (const unsigned size : {3u, 7u, 200u}) {
-    run_kokkos_test(kokkos_backend::RandomLCP{size}, MPRGPPGD{});
-    run_kokkos_test(kokkos_backend::as_sparse(kokkos_backend::RandomLCP{size}), MPRGPPGD{});
-  }
-}
-
-TEST(Convex, KokkosCongruentAnalyticalSolutions) {
-#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
-    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
-  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
-#endif
-  using kokkos_backend::congruent::CongruentLCPWrapper;
-  auto test_cases = std::make_tuple(CongruentLCPWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
-                                    CongruentLCPWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
-                                    CongruentLCPWrapper{kokkos_backend::ActiveBoxConstrainedSPDProblem{}},    //
-                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{3}},                        //
-                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{7}},                        //
-                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{200}});
-  std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(test_case), ...); }, test_cases);
-  std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
-             test_cases);
-
-  // MPRGP, over the lower-bounded problems
-  for (const unsigned size : {3u, 7u, 200u}) {
-    run_kokkos_congruent_test(CongruentLCPWrapper{kokkos_backend::RandomLCP{size}}, MPRGPPGD{});
-    run_kokkos_congruent_test(kokkos_backend::as_sparse(CongruentLCPWrapper{kokkos_backend::RandomLCP{size}}),
-                              MPRGPPGD{});
-  }
-}
-
-TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
-#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
-    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
-  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
-#endif
-  // NX <= NZ, so the reduced Hessian D^T (M - M B S B^T M) D can be nonsingular and x* is the unique solution.
-  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
-                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
-  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
-  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
-             test_cases);
-  std::apply(
-      [](auto&&... test_case) {
-        (run_kokkos_mixed_congruent_test(test_case, MPRGPPGD{}), ...);
-        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
-      },
-      test_cases);
-}
-
-TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
-#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
-    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
-  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
-#endif
-  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
-                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
-  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_workspace_test(test_case), ...); }, test_cases);
-  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case), ...); },
-             test_cases);
-  std::apply(
-      [](auto&&... test_case) {
-        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
-        (run_kokkos_mixed_congruent_shared_s_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
-      },
-      test_cases);
-  std::apply(
-      [](auto&&... test_case) {
-        (run_kokkos_mixed_congruent_workspace_test(test_case, MPRGPPGD{}), ...);
-        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
-      },
-      test_cases);
-}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+//@}
 
 }  // namespace
 

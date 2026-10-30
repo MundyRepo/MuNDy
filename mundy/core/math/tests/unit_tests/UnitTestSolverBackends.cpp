@@ -51,6 +51,8 @@
 #include <mundy_math/solver_backends.hpp>
 #include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
 
+#include "TestBackendVectors.hpp"  // for mundy::test::{make_backend_vector, host_entries}
+
 namespace mundy {
 
 namespace {
@@ -158,40 +160,8 @@ std::vector<double> entrywise(const F& f) {
   return entries;
 }
 
-/// \brief The given entries as a Backend vector: a MundyMath vector, or a Kokkos::View on the default space.
-template <class Backend, size_t N>
-auto make_backend_vector(const std::array<double, N>& entries) {
-  if constexpr (Backend::has_static_sizes) {
-    Vector<double, N> v;
-    for (size_t i = 0; i < N; ++i) {
-      v[i] = entries[i];
-    }
-    return v;
-  } else {
-    kokkos_vector_t v("v", N);
-    const auto v_host = Kokkos::create_mirror_view(v);
-    for (size_t i = 0; i < N; ++i) {
-      v_host(i) = entries[i];
-    }
-    Kokkos::deep_copy(v, v_host);
-    return v;
-  }
-}
-
-/// \brief Every entry of a MundyMath vector or a Kokkos::View, on the host.
-template <class Vector>
-std::vector<double> host_entries(const Vector& v) {
-  if constexpr (Kokkos::is_view_v<Vector>) {
-    const auto v_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, v);
-    return std::vector<double>(v_host.data(), v_host.data() + v_host.extent(0));
-  } else {
-    std::vector<double> entries(Vector::size);
-    for (size_t i = 0; i < Vector::size; ++i) {
-      entries[i] = v[i];
-    }
-    return entries;
-  }
-}
+using test::host_entries;
+using test::make_backend_vector;
 
 double host_sum(const std::vector<double>& entries) {
   return std::accumulate(entries.begin(), entries.end(), 0.0);

@@ -230,6 +230,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     NUM_MPI_PROCS 1
     INSTALLABLE
   )
+
+  tribits_add_executable_and_test(
+    UnitTestConvexSpaces
+    SOURCES UnitTestConvexSpaces.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
 else()
   message(STATUS "MundyMath: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
 endif()

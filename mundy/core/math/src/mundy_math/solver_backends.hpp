@@ -287,7 +287,8 @@ KOKKOS_FUNCTION auto reduce_sum(const Backend&, const E& e) {
   return sum;
 }
 
-/// \brief The least of e's entries, or the largest finite value if it has none. e is a vector or an expression.
+/// \brief The least of e's entries, capped at the largest finite value, which it also is if e has none. e is a vector
+/// or an expression.
 template <class Backend, class E>
 MUNDY_REQUIRES(BackendVectorExpr<E> || VectorBackend<Backend, E>)
 KOKKOS_FUNCTION auto reduce_min(const Backend&, const E& e) {
@@ -298,7 +299,8 @@ KOKKOS_FUNCTION auto reduce_min(const Backend&, const E& e) {
   return least;
 }
 
-/// \brief The greatest of e's entries, or the lowest finite value if it has none. e is a vector or an expression.
+/// \brief The greatest of e's entries, floored at the lowest finite value, which it also is if e has none. e is a
+/// vector or an expression.
 template <class Backend, class E>
 MUNDY_REQUIRES(BackendVectorExpr<E> || VectorBackend<Backend, E>)
 KOKKOS_FUNCTION auto reduce_max(const Backend&, const E& e) {
@@ -728,138 +730,6 @@ struct KokkosBackend {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y[,workspace]).");
   }
-
- public:
-  template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>
-  static void wrapped_axpbyz(const Scalar alpha, const XVector& x, const Scalar beta, const YVector& y, ZVector& z,
-                             const Wrapper& wrapper) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == z.extent(0), std::invalid_argument,
-                       "x, y, and z must have the same size.");
-    const bool alpha_is_zero = abs(alpha) < get_zero_tolerance<Scalar>();
-    const bool beta_is_zero = abs(beta) < get_zero_tolerance<Scalar>();
-
-    if (!alpha_is_zero && !beta_is_zero) {
-      Kokkos::parallel_for(
-          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i) + beta * y(i)); });
-    } else if (alpha_is_zero && !beta_is_zero) {
-      Kokkos::parallel_for(
-          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(beta * y(i)); });
-    } else if (!alpha_is_zero && beta_is_zero) {
-      Kokkos::parallel_for(
-          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i)); });
-    } else {
-      Kokkos::parallel_for(
-          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(Scalar(0)); });
-    }
-  }
-
-  /// \brief z_i := f(x_i, y_i), elementwise; z may alias x or y.
-  template <class XVector, class YVector, class ZVector, class Functor>
-  static void elementwise_transform(const XVector& x, const YVector& y, ZVector& z, const Functor& f) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == z.extent(0), std::invalid_argument,
-                       "x, y, and z must have the same size.");
-    Kokkos::parallel_for(
-        "elementwise_transform", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i) { z(i) = f(x(i), y(i)); });
-  }
-
-  /// \brief z_i := f(x_i, y_i, w_i), elementwise; z may alias x, y, or w.
-  template <class XVector, class YVector, class WVector, class ZVector, class Functor>
-  static void elementwise_transform(const XVector& x, const YVector& y, const WVector& w, ZVector& z,
-                                    const Functor& f) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == w.extent(0) && x.extent(0) == z.extent(0),
-                       std::invalid_argument, "x, y, w, and z must have the same size.");
-    Kokkos::parallel_for(
-        "elementwise_transform", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i) { z(i) = f(x(i), y(i), w(i)); });
-  }
-
-  /// \brief The sum of f(x_i, y_i).
-  template <class ReductionScalar, class XVector, class YVector, class Functor>
-  static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y, const Functor& f) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
-    ReductionScalar result = 0;
-    Kokkos::parallel_reduce(
-        "transform_reduce_sum", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i, ReductionScalar& sum) { sum += f(x(i), y(i)); }, result);
-    return result;
-  }
-
-  /// \brief The sum of f(x_i, y_i, w_i).
-  template <class ReductionScalar, class XVector, class YVector, class WVector, class Functor>
-  static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y, const WVector& w,
-                                              const Functor& f) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == w.extent(0), std::invalid_argument,
-                       "x, y, and w must have the same size.");
-    ReductionScalar result = 0;
-    Kokkos::parallel_reduce(
-        "transform_reduce_sum", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i, ReductionScalar& sum) { sum += f(x(i), y(i), w(i)); }, result);
-    return result;
-  }
-
-  /// \brief The least f(x_i, y_i), capped at the largest finite ReductionScalar.
-  template <class ReductionScalar, class XVector, class YVector, class Functor>
-  static ReductionScalar transform_reduce_min(const XVector& x, const YVector& y, const Functor& f) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
-    ReductionScalar result;
-    Kokkos::parallel_reduce(
-        "transform_reduce_min", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i, ReductionScalar& least) {
-          const ReductionScalar v = f(x(i), y(i));
-          least = v < least ? v : least;
-        },
-        Kokkos::Min<ReductionScalar>(result));
-    return result;
-  }
-
-  template <class ReductionScalar, class XVector, class YVector>
-  static ReductionScalar diff_dot(const XVector& x, const YVector& y) {
-    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
-    ReductionScalar result = 0;
-    Kokkos::parallel_reduce(
-        "diff_dot", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i, ReductionScalar& sum) {
-          ReductionScalar diff = x(i) - y(i);
-          sum += diff * diff;
-        },
-        result);
-    return result;
-  }
-
-  template <class ReductionScalar, class X1Vector, class X2Vector, class Y1Vector, class Y2Vector>
-  static ReductionScalar diff_dot(const X1Vector& x1, const X2Vector& x2,  //
-                                  const Y1Vector& y1, const Y2Vector& y2) {
-    MUNDY_THROW_ASSERT(x1.extent(0) == x2.extent(0) && x1.extent(0) == y1.extent(0) && x1.extent(0) == y2.extent(0),
-                       std::invalid_argument, "x1, x2, y1, and y2 must have the same size.");
-    ReductionScalar result = 0;
-    Kokkos::parallel_reduce(
-        "diff_dot", Kokkos::RangePolicy<exec_space>(0, x1.extent(0)),
-        KOKKOS_LAMBDA(const int i, ReductionScalar& sum) {
-          ReductionScalar x_diff = x1(i) - x2(i);
-          ReductionScalar y_diff = y1(i) - y2(i);
-          sum += x_diff * y_diff;
-        },
-        result);
-    return result;
-  }
-
-  template <typename ReductionScalar, typename Functor>
-  static void reduce_max(size_t n, const Functor& func, ReductionScalar& result) {
-    Kokkos::parallel_reduce(
-        "reduce_max", Kokkos::RangePolicy<exec_space>(0, n),
-        KOKKOS_LAMBDA(const int i, ReductionScalar& max_val) { func(i, max_val); },
-        Kokkos::Max<ReductionScalar>(result));
-  }
-
-  template <typename ReductionScalar, typename Functor, class Vector>
-  static void reduce_max(const Vector&, size_t n, const Functor& func, ReductionScalar& result) {
-    reduce_max<ReductionScalar>(n, func, result);
-  }
 };  // KokkosBackend
 
 /// \brief Backend for Mundy math within a kernel
@@ -1152,95 +1022,6 @@ struct MundyMathBackend {
       static_assert(dependent_false_v<LinearOp>,
                     "MundyMathBackend::apply: op must be a native matrix or provide void apply(x,y[,workspace]).");
     }
-  }
-
- public:
-  template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>
-  KOKKOS_INLINE_FUNCTION static void wrapped_axpbyz(const Scalar alpha, const XVector& x, const Scalar beta,
-                                                    const YVector& y, ZVector& z, const Wrapper& wrapper) {
-    z = ::mundy::apply(wrapper, alpha * x + beta * y);
-  }
-
-  /// \brief z_i := f(x_i, y_i), elementwise; z may alias x or y.
-  template <class XVector, class YVector, class ZVector, class Functor>
-  KOKKOS_INLINE_FUNCTION static void elementwise_transform(const XVector& x, const YVector& y, ZVector& z,
-                                                           const Functor& f) {
-    for (size_t i = 0; i < static_size<ZVector>(); ++i) {
-      vector_data(z, i) = f(vector_data(x, i), vector_data(y, i));
-    }
-  }
-
-  /// \brief z_i := f(x_i, y_i, w_i), elementwise; z may alias x, y, or w.
-  template <class XVector, class YVector, class WVector, class ZVector, class Functor>
-  KOKKOS_INLINE_FUNCTION static void elementwise_transform(const XVector& x, const YVector& y, const WVector& w,
-                                                           ZVector& z, const Functor& f) {
-    for (size_t i = 0; i < static_size<ZVector>(); ++i) {
-      vector_data(z, i) = f(vector_data(x, i), vector_data(y, i), vector_data(w, i));
-    }
-  }
-
-  /// \brief The sum of f(x_i, y_i).
-  template <class ReductionScalar, class XVector, class YVector, class Functor>
-  KOKKOS_INLINE_FUNCTION static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y,
-                                                                     const Functor& f) {
-    ReductionScalar sum = 0;
-    for (size_t i = 0; i < static_size<XVector>(); ++i) {
-      sum += f(vector_data(x, i), vector_data(y, i));
-    }
-    return sum;
-  }
-
-  /// \brief The sum of f(x_i, y_i, w_i).
-  template <class ReductionScalar, class XVector, class YVector, class WVector, class Functor>
-  KOKKOS_INLINE_FUNCTION static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y,
-                                                                     const WVector& w, const Functor& f) {
-    ReductionScalar sum = 0;
-    for (size_t i = 0; i < static_size<XVector>(); ++i) {
-      sum += f(vector_data(x, i), vector_data(y, i), vector_data(w, i));
-    }
-    return sum;
-  }
-
-  /// \brief The least f(x_i, y_i), capped at the largest finite ReductionScalar.
-  template <class ReductionScalar, class XVector, class YVector, class Functor>
-  KOKKOS_INLINE_FUNCTION static ReductionScalar transform_reduce_min(const XVector& x, const YVector& y,
-                                                                     const Functor& f) {
-    ReductionScalar least = NumTraits<ReductionScalar>::highest();
-    for (size_t i = 0; i < static_size<XVector>(); ++i) {
-      const ReductionScalar v = f(vector_data(x, i), vector_data(y, i));
-      least = v < least ? v : least;
-    }
-    return least;
-  }
-
-  template <class ReductionScalar, class XVector, class YVector>
-  KOKKOS_INLINE_FUNCTION static ReductionScalar diff_dot(const XVector& x, const YVector& y) {
-    auto diff = x - y;
-    return static_cast<ReductionScalar>(::mundy::dot(diff, diff));
-  }
-
-  template <class ReductionScalar, class X1Vector, class X2Vector, class Y1Vector, class Y2Vector>
-  KOKKOS_INLINE_FUNCTION static ReductionScalar diff_dot(const X1Vector& x1, const X2Vector& x2,  //
-                                                         const Y1Vector& y1, const Y2Vector& y2) {
-    auto x_diff = x1 - x2;
-    auto y_diff = y1 - y2;
-    return static_cast<ReductionScalar>(::mundy::dot(x_diff, y_diff));
-  }
-
-  template <class ReductionScalar, class Functor, class Vector>
-  KOKKOS_INLINE_FUNCTION static void reduce_max(const Vector&, size_t n, const Functor& func, ReductionScalar& result) {
-    constexpr size_t N = std::remove_reference_t<Vector>::size;
-    MUNDY_THROW_ASSERT(n == N, std::invalid_argument, "reduce_max: n must match the size of the vector.");
-    reduce_max_impl(std::make_index_sequence<N>{}, func, result);
-  }
-
- private:
-  template <size_t... Is, class Functor, class ReductionScalar>
-  KOKKOS_INLINE_FUNCTION static void reduce_max_impl(std::index_sequence<Is...>, const Functor& func,
-                                                     ReductionScalar& result) {
-    ReductionScalar max_val = -NumTraits<ReductionScalar>::infinity();
-    ((func(Is, max_val)), ...);
-    result = max_val;
   }
 };  // MundyMathBackend
 //@}
