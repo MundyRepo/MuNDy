@@ -306,7 +306,7 @@ void with_schur_system(const RodViews<ExecSpace>& rods, const ConstraintSet<Fami
   auto bt_workspace = backend_t::make_workspace(bt);
   Kokkos::deep_copy(b, workspace.psi());
   backend_t::apply(bt, step.u_free, b_rate, bt_workspace);
-  backend_t::axpby(dt, b_rate, 1.0, b);
+  axpby(backend_t{}, dt, b_rate, 1.0, b);
   use(linearization, b);
 }
 //@}

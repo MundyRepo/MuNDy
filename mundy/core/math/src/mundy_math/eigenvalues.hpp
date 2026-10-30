@@ -294,9 +294,9 @@ class PowerStrategy {
     using backend_t = decltype(prob.backend());
     constexpr value_type zero = static_cast<value_type>(0);
 
-    const value_type q_norm = sqrt(backend_t::template dot<value_type>(state.q(), state.q()));
+    const value_type q_norm = sqrt(dot(backend_t{}, state.q(), state.q()));
     MUNDY_THROW_REQUIRE(q_norm > zero, std::invalid_argument, "PowerStrategy: the start vector must be nonzero.");
-    backend_t::axpby(zero, state.q(), static_cast<value_type>(1) / q_norm, state.q());
+    axpby(backend_t{}, zero, state.q(), static_cast<value_type>(1) / q_norm, state.q());
 
     state.iter() = 0;
     state.converged() = false;
@@ -318,9 +318,9 @@ class PowerStrategy {
 
     backend_t::apply(prob.A(), state.q(), state.z(), workspace);  // z = A q
     const value_type lambda_prev = state.eigenvalue();
-    const value_type lambda = backend_t::template dot<value_type>(state.q(), state.z());  // q is unit
+    const value_type lambda = dot(backend_t{}, state.q(), state.z());  // q is unit
     backend_t::deep_copy(state.r(), state.z());
-    backend_t::axpby(-lambda, state.q(), one, state.r());  // r = A q - lambda q
+    axpby(backend_t{}, -lambda, state.q(), one, state.r());  // r = A q - lambda q
 
     state.eigenvalue() = lambda;
     state.residual() = measure(backend, state, lambda, lambda_prev);
@@ -332,11 +332,11 @@ class PowerStrategy {
       return true;
     }
 
-    const value_type z_norm = sqrt(backend_t::template dot<value_type>(state.z(), state.z()));
+    const value_type z_norm = sqrt(dot(backend_t{}, state.z(), state.z()));
     MUNDY_THROW_REQUIRE(z_norm > zero, std::runtime_error,
                         "PowerStrategy: A q = 0 before convergence; the iterate has no direction to continue along.");
     backend_t::deep_copy(state.q(), state.z());
-    backend_t::axpby(zero, state.q(), one / z_norm, state.q());  // q = A q / ||A q||
+    axpby(backend_t{}, zero, state.q(), one / z_norm, state.q());  // q = A q / ||A q||
     return false;
   }
 
@@ -405,7 +405,7 @@ class LanczosStrategy {
                         std::invalid_argument, "LanczosStrategy: alpha and beta must have room for max_iters entries.");
 
     precondition(prob, state);
-    const value_type v_z = backend_t::template dot<value_type>(state.v(), state.z());
+    const value_type v_z = dot(backend_t{}, state.v(), state.z());
     MUNDY_THROW_REQUIRE(v_z > static_cast<value_type>(0), std::invalid_argument,
                         "LanczosStrategy: the start vector must be nonzero, with P positive definite on it.");
     normalize(prob, state, sqrt(v_z));
@@ -433,15 +433,15 @@ class LanczosStrategy {
     // Row j of T: alpha_j = z^T A z, and the next v is A z - alpha_j v - beta_{j-1} v_prev.
     const unsigned j = state.iter();
     backend_t::apply(prob.A(), state.z(), state.Az(), workspace);
-    const value_type alpha = backend_t::template dot<value_type>(state.z(), state.Az());
-    backend_t::axpby(-alpha, state.v(), one, state.Az());
+    const value_type alpha = dot(backend_t{}, state.z(), state.Az());
+    axpby(backend_t{}, -alpha, state.v(), one, state.Az());
     if (j > 0) {
-      backend_t::axpby(-state.beta()[j - 1], state.v_prev(), one, state.Az());
+      axpby(backend_t{}, -state.beta()[j - 1], state.v_prev(), one, state.Az());
     }
     backend_t::deep_copy(state.v_prev(), state.v());
     backend_t::deep_copy(state.v(), state.Az());
     precondition(prob, state);
-    const value_type v_z = backend_t::template dot<value_type>(state.v(), state.z());
+    const value_type v_z = dot(backend_t{}, state.v(), state.z());
     state.alpha()[j] = alpha;
     // v^T P v negative: P is not positive definite, so Lanczos stops unconverged.
     if (!(v_z >= zero)) {
@@ -517,8 +517,8 @@ class LanczosStrategy {
   KOKKOS_FUNCTION void normalize([[maybe_unused]] const Problem& prob, State& state, value_type norm) const {
     using backend_t = decltype(prob.backend());
     constexpr value_type zero = static_cast<value_type>(0);
-    backend_t::axpby(zero, state.v(), static_cast<value_type>(1) / norm, state.v());
-    backend_t::axpby(zero, state.z(), static_cast<value_type>(1) / norm, state.z());
+    axpby(backend_t{}, zero, state.v(), static_cast<value_type>(1) / norm, state.v());
+    axpby(backend_t{}, zero, state.z(), static_cast<value_type>(1) / norm, state.z());
   }
 
   config_t cfg_;

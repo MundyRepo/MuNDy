@@ -57,7 +57,7 @@ concept VectorResidualPolicy =
 struct L2Residual {
   template <class Backend, class RVector, class BVector, class ReductionScalar = impl::vector_value_type<RVector>>
   KOKKOS_FUNCTION ReductionScalar operator()(const Backend&, const RVector& r, const BVector&) const {
-    return sqrt(Backend::template dot<ReductionScalar>(r, r));
+    return sqrt(dot(Backend{}, r, r));
   }
 };
 
@@ -65,8 +65,8 @@ struct L2Residual {
 struct RelativeL2Residual {
   template <class Backend, class RVector, class BVector, class ReductionScalar = impl::vector_value_type<RVector>>
   KOKKOS_FUNCTION ReductionScalar operator()(const Backend&, const RVector& r, const BVector& b) const {
-    const ReductionScalar r_norm = sqrt(Backend::template dot<ReductionScalar>(r, r));
-    const ReductionScalar b_norm = sqrt(Backend::template dot<ReductionScalar>(b, b));
+    const ReductionScalar r_norm = sqrt(dot(Backend{}, r, r));
+    const ReductionScalar b_norm = sqrt(dot(Backend{}, b, b));
     return r_norm / max(b_norm, get_zero_tolerance<ReductionScalar>());
   }
 };

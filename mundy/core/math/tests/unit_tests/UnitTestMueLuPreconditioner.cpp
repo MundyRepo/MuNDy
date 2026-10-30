@@ -230,7 +230,7 @@ TEST(MueLu, SymmetricFixedLinearMap) {
   const std::vector<double> ps = applied(P, s);
   vector_t combination("combination", n);
   backend_t::deep_copy(combination, r);
-  backend_t::axpby(-3.0, s, 2.0, combination);
+  axpby(backend_t{}, -3.0, s, 2.0, combination);
   const std::vector<double> p_combination = applied(P, combination);
   const double linearity_bound = 10.0 * n * eps * (2.0 * norm_inf(pr) + 3.0 * norm_inf(ps));
   for (size_t i = 0; i < n; ++i) {

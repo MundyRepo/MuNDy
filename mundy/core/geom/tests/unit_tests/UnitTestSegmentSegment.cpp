@@ -26,6 +26,7 @@
 #include <algorithm>   // for std::max
 #include <concepts>    // for std::convertible_to
 #include <functional>  // for std::hash
+#include <limits>      // for std::numeric_limits
 #include <string>      // for std::string
 
 // Trilinos includes
@@ -492,7 +493,7 @@ TEST(DistanceToLine, PositiveResult) {
 
 TEST(DistanceToLineSegment, EveryBranch) {
   // Each case drives one branch to a closest point known exactly on the segment (0,0,0)-(2,0,0), or on a degenerate
-  // segment collapsed to the origin.
+  // segment at the origin.
   struct Case {
     const char* branch;
     Point<double> p, p1, p2;  // the point and the segment (p1, p2)
@@ -505,20 +506,23 @@ TEST(DistanceToLineSegment, EveryBranch) {
       {"before p1", {-1, 1, 0}, {0, 0, 0}, {2, 0, 0}, {0, 0, 0}, 0.0},
       {"past p2", {3, 1, 0}, {0, 0, 0}, {2, 0, 0}, {2, 0, 0}, 1.0},
       {"degenerate segment", {1, 1, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 0.0},
+      {"nearly degenerate segment", {1, 1, 0}, {0, 0, 0}, {1e-8, 0, 0}, {0, 0, 0}, 0.0},
   };
 
   const double tol = 1e-12;
+  constexpr double nan = std::numeric_limits<double>::quiet_NaN();
   for (const Case& c : cases) {
     SCOPED_TRACE(c.branch);
     const LineSegment<double> segment(c.p1, c.p2);
     const mundy::Vector3d sep_expected = c.closest - c.p;
-    Point<double> closest;
-    double s;
-    mundy::Vector3d sep;
+    Point<double> closest{nan, nan, nan};
+    double s = nan;
+    mundy::Vector3d sep{nan, nan, nan};
 
     // sep runs from the point to the segment.
     const double dist = distance(c.p, segment, closest, s, sep);
     EXPECT_NEAR(dist, mundy::norm(sep_expected), tol);
+    EXPECT_NEAR(distance(c.p, segment), mundy::norm(sep_expected), tol);
     EXPECT_NEAR(s, c.s, tol);
     for (unsigned j = 0; j < 3; j++) {
       EXPECT_NEAR(closest[j], c.closest[j], tol);
@@ -607,21 +611,37 @@ TEST(DistanceBetweenLineSegments, EveryBranch) {
        {0, 0, 0}, {-0.5, -0.5, h}, 0.0, 1.0},
       {"skew, t = 1, s = 1", {0, 0, 0}, {1, 0, 0}, {1.5, -1.5, h}, {1.5, -0.5, h},  //
        {1, 0, 0}, {1.5, -0.5, h}, 1.0, 1.0},
+
+      // Oblique: segment 1 along x, segment 2 along (1, 1, 0), so clamping one parameter moves the other.
+      {"oblique, t = 0 moves s", {0, 0, 0}, {2, 0, 0}, {1.5, 0.5, h}, {2.5, 1.5, h},  //
+       {1.5, 0, 0}, {1.5, 0.5, h}, 0.75, 0.0},
+      {"oblique, t = 1 moves s", {0, 0, 0}, {2, 0, 0}, {0, -1.5, h}, {1, -0.5, h},  //
+       {1, 0, 0}, {1, -0.5, h}, 0.5, 1.0},
+      {"oblique, s = 0 moves t", {0, 0, 0}, {2, 0, 0}, {-1, 0, h}, {0, 1, h},  //
+       {0, 0, 0}, {-0.5, 0.5, h}, 0.0, 0.5},
+      {"oblique, s = 1 moves t", {0, 0, 0}, {2, 0, 0}, {2, -1, h}, {3, 0, h},  //
+       {2, 0, 0}, {2.5, -0.5, h}, 1.0, 0.5},
+      {"oblique, s = 0 then t = 0 moves s", {0, 0, 0}, {2, 0, 0}, {0.5, 1, h}, {1.5, 2, h},  //
+       {0.5, 0, 0}, {0.5, 1, h}, 0.25, 0.0},
+      {"oblique, s = 1 then t = 1 moves s", {0, 0, 0}, {2, 0, 0}, {0.5, -2, h}, {1.5, -1, h},  //
+       {1.5, 0, 0}, {1.5, -1, h}, 0.75, 1.0},
   };
 
   const double tol = 1e-12;
+  constexpr double nan = std::numeric_limits<double>::quiet_NaN();
   for (const Case& c : cases) {
     SCOPED_TRACE(c.branch);
     const LineSegment<double> segment1(c.l0, c.l1);
     const LineSegment<double> segment2(c.m0, c.m1);
     const mundy::Vector3d sep_expected = c.cp2 - c.cp1;
-    Point<double> cp1, cp2;
-    double s, t;
-    mundy::Vector3d sep;
+    Point<double> cp1{nan, nan, nan}, cp2{nan, nan, nan};
+    double s = nan, t = nan;
+    mundy::Vector3d sep{nan, nan, nan};
 
     // sep runs from segment 1 to segment 2.
     const double dist = distance(segment1, segment2, cp1, cp2, s, t, sep);
     EXPECT_NEAR(dist, mundy::norm(sep_expected), tol);
+    EXPECT_NEAR(distance(segment1, segment2), mundy::norm(sep_expected), tol);
     EXPECT_NEAR(s, c.s, tol);
     EXPECT_NEAR(t, c.t, tol);
     for (unsigned j = 0; j < 3; j++) {
@@ -631,8 +651,12 @@ TEST(DistanceBetweenLineSegments, EveryBranch) {
     }
 
     // Swapping the segments swaps the closest points and reverses sep.
+    cp1 = cp2 = Point<double>{nan, nan, nan};
+    s = t = nan;
+    sep = mundy::Vector3d{nan, nan, nan};
     const double dist_swapped = distance(segment2, segment1, cp2, cp1, t, s, sep);
     EXPECT_NEAR(dist_swapped, mundy::norm(sep_expected), tol);
+    EXPECT_NEAR(distance(segment2, segment1), mundy::norm(sep_expected), tol);
     EXPECT_NEAR(s, c.s, tol);
     EXPECT_NEAR(t, c.t, tol);
     for (unsigned j = 0; j < 3; j++) {

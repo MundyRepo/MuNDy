@@ -1288,7 +1288,8 @@ struct ConstraintIndexMap {
   /// \brief The range of family F's rows in its block's vector.
   template <typename F>
   KOKKOS_INLINE_FUNCTION IndexRange range() const {
-    return ranges[::mundy::index_finder_v<F, Families...>];
+    constexpr size_t index = ::mundy::index_finder_v<F, Families...>;
+    return ranges[index];
   }
 };
 
@@ -1314,7 +1315,8 @@ void place_family(ConstraintIndexMap<Families...>& index_map, const F& family, s
     return;
   }
   size_t& end = F::constraint_type == ConstraintType::UNILATERAL ? unilateral_end : bilateral_end;
-  index_map.ranges[::mundy::index_finder_v<F, Families...>] = IndexRange{end, end + family.num_rows()};
+  constexpr size_t index = ::mundy::index_finder_v<F, Families...>;
+  index_map.ranges[index] = IndexRange{end, end + family.num_rows()};
   end += family.num_rows();
 }
 
@@ -2251,12 +2253,12 @@ StepData<ExecSpace, MobilityOp, Families...> make_step_data(
 
   Kokkos::deep_copy(workspace.u_free, rods.velocity_omega_view());
   backend_t::apply(mobility, rods.force_torque_view(), workspace.m_force_torque_ext, workspace.mobility_workspace);
-  backend_t::axpby(1.0, workspace.m_force_torque_ext, 1.0, workspace.u_free);
+  axpby(backend_t{}, 1.0, workspace.m_force_torque_ext, 1.0, workspace.u_free);
 
   if (index_map.num_unilateral > 0) {
     view_t q_rate = subrange(workspace.q_rate, family_rows);
     make_block_rate_op<ExecSpace>(unilateral_geo, num_rods).apply(workspace.u_free, q_rate);
-    backend_t::axpby(dt, q_rate, 1.0, q);
+    axpby(backend_t{}, dt, q_rate, 1.0, q);
   }
 
   fill_compliance_diagonal<ExecSpace>(constraints, index_map, workspace.kinv);
@@ -2392,7 +2394,7 @@ double augment(StepData<ExecSpace, MobilityOp, Families...>& step,
   view_t q_added = subrange(generated_q, added);
   view_t rate = subrange(workspace.q_rate, IndexRange{num_families + first, num_families + end});
   make_rate_op(subrange(generated, added), step.num_rods).apply(to_free_end.velocity, rate);
-  backend_t::axpby(to_free_end.duration, rate, 1.0, q_added);
+  axpby(backend_t{}, to_free_end.duration, rate, 1.0, q_added);
 
   workspace.num_generated = end;
   step.unilateral_geo = workspace.unilateral_rows();
@@ -2438,7 +2440,7 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
     }
     Kokkos::deep_copy(workspace.b, workspace.psi());
     backend_t::apply(BT, to_free_end.velocity, workspace.b_rate, workspace.bt_workspace);
-    backend_t::axpby(to_free_end.duration, workspace.b_rate, 1.0, workspace.b);
+    axpby(backend_t{}, to_free_end.duration, workspace.b_rate, 1.0, workspace.b);
   }
 
   // x* (unilateral multipliers): the reduced CQPP, which without bilateral rows is the LCP. Without unilateral rows
@@ -2482,29 +2484,29 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
     if (has_unilateral) {
       backend_t::apply(M_dt, workspace.dx, workspace.mdx, workspace.m_dt_workspace);
       backend_t::apply(BT, workspace.mdx, workspace.y_rhs, workspace.bt_workspace);
-      backend_t::axpby(1.0, workspace.b, 1.0, workspace.y_rhs);  // y_rhs = b + B^T M D x*
+      axpby(backend_t{}, 1.0, workspace.b, 1.0, workspace.y_rhs);  // y_rhs = b + B^T M D x*
 
       // S y_rhs = S b + S B^T M D x*, both left by the unilateral solve at x*, so S y_rhs is solved from their sum.
       Kokkos::deep_copy(workspace.s_y, workspace.mixed_cqpp_workspace->l_workspace.u());
-      backend_t::axpby(1.0, workspace.mixed_cqpp_workspace->s_b, 1.0, workspace.s_y);
+      axpby(backend_t{}, 1.0, workspace.mixed_cqpp_workspace->s_b, 1.0, workspace.s_y);
     } else {
       Kokkos::deep_copy(workspace.y_rhs, workspace.b);
     }
     const auto S = make_schur_complement(step, workspace.geometry(), step.cg_config, *workspace.preconditioner);
     backend_t::apply(S, workspace.y_rhs, workspace.s_y, *workspace.s_workspace);
-    backend_t::axpby(-1.0, workspace.s_y, 0.0, out.y);  // y = -S y_rhs
+    axpby(backend_t{}, -1.0, workspace.s_y, 0.0, out.y);  // y = -S y_rhs
     backend_t::apply(B, out.y, out.bilateral_wrench, workspace.b_workspace);
   } else {
     Kokkos::deep_copy(out.bilateral_wrench, 0.0);
   }
   Kokkos::deep_copy(out.wrench, out.bilateral_wrench);
   if (has_unilateral) {
-    backend_t::axpby(1.0, workspace.dx, 1.0, out.wrench);
+    axpby(backend_t{}, 1.0, workspace.dx, 1.0, out.wrench);
   }
 
   backend_t::apply(step.mobility, out.wrench, out.m_wrench, workspace.mobility_workspace);
   Kokkos::deep_copy(out.velocity, step.u_free);
-  backend_t::axpby(1.0, out.m_wrench, 1.0, out.velocity);
+  axpby(backend_t{}, 1.0, out.m_wrench, 1.0, out.velocity);
 }
 
 /// \brief Storage for mixed LCP steps of one layout of rods and constraints, reused across steps.
@@ -2669,7 +2671,7 @@ template <typename ExecSpace, typename... Families>
 void write_step(const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints,
                 const ConstraintIndexMap<Families...>& index_map, const LinearizedStep<ExecSpace>& step) {
   auto force_torque = rods.force_torque_view();
-  KokkosBackend<ExecSpace>::axpby(1.0, step.wrench, 1.0, force_torque);
+  axpby(KokkosBackend<ExecSpace>{}, 1.0, step.wrench, 1.0, force_torque);
   Kokkos::deep_copy(rods.velocity_omega_view(), step.velocity);
 
   (Kokkos::deep_copy(get<Families>(constraints).lambda_view(),
@@ -2700,7 +2702,7 @@ double slcp_merit(const StepData<ExecSpace, MobilityOp, Families...>& step,
 
   backend_t::apply(make_block_force_op<ExecSpace>(workspace.geometry(), num_rods), iterate.y, wrench_change,
                    workspace.b_workspace);
-  backend_t::axpby(-1.0, iterate.bilateral_wrench, 1.0, wrench_change);
+  axpby(backend_t{}, -1.0, iterate.bilateral_wrench, 1.0, wrench_change);
   backend_t::apply(make_scaled_op<backend_t>(step.dt, step.mobility), wrench_change, displacement_change,
                    workspace.m_dt_workspace);
   const LengthAngleMax moved = max_displacement<ExecSpace>(displacement_change, num_rods);

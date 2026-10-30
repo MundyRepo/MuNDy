@@ -212,22 +212,22 @@ class CGStrategy {
     // Ap = A x for the caller's guess x (zero for a cold start, a previous solution for a warm start), then
     // x0 = alpha x.
     backend_t::apply(prob.A(), state.x(), state.Ap(), workspace);
-    const value_type x_A_x = backend_t::template dot<value_type>(state.x(), state.Ap());
+    const value_type x_A_x = dot(backend_t{}, state.x(), state.Ap());
     MUNDY_THROW_ASSERT(x_A_x >= zero, std::invalid_argument, "CGStrategy: the initial guess must be finite.");
     if (x_A_x > zero) {
-      const value_type alpha = backend_t::template dot<value_type>(state.x(), prob.b()) / x_A_x;
-      backend_t::axpby(alpha, state.x(), zero, state.x());
-      backend_t::axpby(alpha, state.Ap(), zero, state.Ap());
+      const value_type alpha = dot(backend_t{}, state.x(), prob.b()) / x_A_x;
+      axpby(backend_t{}, alpha, state.x(), zero, state.x());
+      axpby(backend_t{}, alpha, state.Ap(), zero, state.Ap());
     }
     backend_t::deep_copy(state.r(), prob.b());
-    backend_t::axpby(-one, state.Ap(), one, state.r());  // r = b - A x0
+    axpby(backend_t{}, -one, state.Ap(), one, state.r());  // r = b - A x0
     if constexpr (is_preconditioned) {
       backend_t::apply(precond(), state.r(), state.Ap());  // z = P r, held in Ap until the next A p
       backend_t::deep_copy(state.p(), state.Ap());
-      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.Ap());
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.Ap());
     } else {
       backend_t::deep_copy(state.p(), state.r());
-      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.r());
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.r());
     }
 
     state.residual() = measure(backend, state, prob.b());
@@ -251,18 +251,18 @@ class CGStrategy {
 
     backend_t::apply(prob.A(), state.p(), state.Ap(), workspace);
     const value_type r_dot_z_old = state.r_dot_z();
-    const value_type p_Ap = backend_t::template dot<value_type>(state.p(), state.Ap());
+    const value_type p_Ap = dot(backend_t{}, state.p(), state.Ap());
     // p^T A p not positive: A is not positive definite on the Krylov space, so CG stops unconverged.
     if (!(p_Ap > static_cast<value_type>(0))) {
       return true;
     }
 
     const value_type alpha = r_dot_z_old / p_Ap;
-    backend_t::axpby(alpha, state.p(), one, state.x());
-    backend_t::axpby(-alpha, state.Ap(), one, state.r());
+    axpby(backend_t{}, alpha, state.p(), one, state.x());
+    axpby(backend_t{}, -alpha, state.Ap(), one, state.r());
 
     if constexpr (!is_preconditioned) {
-      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.r());
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.r());
     }
     state.residual() = measure(backend, state, prob.b());
     ++state.iter();
@@ -275,10 +275,10 @@ class CGStrategy {
 
     if constexpr (is_preconditioned) {
       backend_t::apply(precond(), state.r(), state.Ap());  // z = P r, held in Ap until the next A p
-      state.r_dot_z() = backend_t::template dot<value_type>(state.r(), state.Ap());
-      backend_t::axpby(one, state.Ap(), state.r_dot_z() / r_dot_z_old, state.p());
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.Ap());
+      axpby(backend_t{}, one, state.Ap(), state.r_dot_z() / r_dot_z_old, state.p());
     } else {
-      backend_t::axpby(one, state.r(), state.r_dot_z() / r_dot_z_old, state.p());
+      axpby(backend_t{}, one, state.r(), state.r_dot_z() / r_dot_z_old, state.p());
     }
     return false;
   }

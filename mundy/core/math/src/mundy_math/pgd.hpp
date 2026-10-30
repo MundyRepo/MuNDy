@@ -202,20 +202,20 @@ KOKKOS_FUNCTION typename State::value_type initial_step_size(const Problem& prob
   using backend_t = decltype(prob.backend());
   constexpr value_type zero = static_cast<value_type>(0);
   constexpr value_type one = static_cast<value_type>(1);
-  if (!(backend_t::template dot<value_type>(state.x_tmp(), state.x_tmp()) > zero)) {
+  if (!(dot(backend_t{}, state.x_tmp(), state.x_tmp()) > zero)) {
     return one / state.residual();
   }
 
   // grad = g_p: g where a trial step x - g / residual leaves the projection, 0 where it projects back onto x
   backend_t::wrapped_axpbyz(one, state.x_tmp(), -one / state.residual(), state.grad_tmp(), state.grad(), prob.space());
-  backend_t::axpby(-one, state.x_tmp(), one, state.grad());
+  axpby(backend_t{}, -one, state.x_tmp(), one, state.grad());
   backend_t::wrapped_axpbyz(one, state.grad(), zero, state.grad(), state.grad(), NonzeroIndicator<value_type>{});
-  backend_t::elementwise_mul(state.grad(), state.grad_tmp(), state.grad());
+  elementwise_mul(backend_t{}, state.grad(), state.grad_tmp(), state.grad());
 
   // x = A g_p, then restored
   backend_t::apply(prob.A(), state.grad(), state.x(), prob.workspace());
-  const value_type gp_gp = backend_t::template dot<value_type>(state.grad(), state.grad());
-  const value_type gp_A_gp = backend_t::template dot<value_type>(state.grad(), state.x());
+  const value_type gp_gp = dot(backend_t{}, state.grad(), state.grad());
+  const value_type gp_A_gp = dot(backend_t{}, state.grad(), state.x());
   MUNDY_THROW_ASSERT(gp_A_gp >= -get_zero_tolerance<value_type>(), std::invalid_argument,
                      "PGD: g_p^T A g_p < -tolerance, so A is not positive semi-definite.");
   backend_t::deep_copy(state.x(), state.x_tmp());
@@ -230,7 +230,7 @@ KOKKOS_FUNCTION void projected_step(const Problem& prob, State& state, typename 
   constexpr value_type one = static_cast<value_type>(1);
   backend_t::wrapped_axpbyz(one, state.x_tmp(), -step_size, state.grad_tmp(), state.x(), prob.space());
   backend_t::apply(prob.A(), state.x(), state.grad(), prob.workspace());
-  backend_t::axpby(one, prob.q(), one, state.grad());
+  axpby(backend_t{}, one, prob.q(), one, state.grad());
 }
 
 /// \brief The Barzilai-Borwein step length from the last step, x_tmp to x.
@@ -321,8 +321,8 @@ struct NonmonotoneBBStepStrategy {
     auto& memory = state.step_state();
 
     impl::projected_step(prob, state, memory.step_size);
-    const value_type grad_d = backend_t::template dot<value_type>(state.x(), state.grad_tmp()) -
-                              backend_t::template dot<value_type>(state.x_tmp(), state.grad_tmp());
+    const value_type grad_d = dot(backend_t{}, state.x(), state.grad_tmp()) -
+                              dot(backend_t{}, state.x_tmp(), state.grad_tmp());
     const value_type d_A_d =
         backend_t::template diff_dot<value_type>(state.x(), state.x_tmp(), state.grad(), state.grad_tmp());
     value_type f = objective(prob, state.x(), state.grad());
@@ -331,8 +331,8 @@ struct NonmonotoneBBStepStrategy {
     const bool descends = grad_d < static_cast<value_type>(0) && d_A_d > static_cast<value_type>(0);
     if (descends && f > reference(memory) + static_cast<value_type>(sufficient_decrease) * grad_d) {
       const value_type t = -grad_d / d_A_d;
-      backend_t::axpby(one - t, state.x_tmp(), t, state.x());
-      backend_t::axpby(one - t, state.grad_tmp(), t, state.grad());
+      axpby(backend_t{}, one - t, state.x_tmp(), t, state.x());
+      axpby(backend_t{}, one - t, state.grad_tmp(), t, state.grad());
       f = latest(memory) + t * grad_d + half * t * t * d_A_d;
     }
     record(memory, f);
@@ -345,8 +345,8 @@ struct NonmonotoneBBStepStrategy {
   KOKKOS_FUNCTION static auto objective(const Problem& prob, const XVector& x, const GradVector& grad) {
     using value_type = impl::vector_value_type<XVector>;
     using backend_t = decltype(prob.backend());
-    return static_cast<value_type>(0.5) * (backend_t::template dot<value_type>(x, grad) +
-                                           backend_t::template dot<value_type>(x, prob.q()));
+    return static_cast<value_type>(0.5) * (dot(backend_t{}, x, grad) +
+                                           dot(backend_t{}, x, prob.q()));
   }
 
   template <class Scalar>
@@ -550,20 +550,20 @@ class MPRGPStepStrategy {
       // Proportioning: the exact minimizer along -beta, with beta in x and A beta in grad
       backend_t::elementwise_transform(x_tmp, grad_tmp, x, impl::ChoppedGradient<value_type>{lower_bound});
       backend_t::apply(prob.A(), x, grad, prob.workspace());
-      const value_type beta_A_beta = backend_t::template dot<value_type>(x, grad);
+      const value_type beta_A_beta = dot(backend_t{}, x, grad);
       MUNDY_THROW_ASSERT(beta_A_beta > zero, std::invalid_argument,
                          "MPRGPStepStrategy: the objective is unbounded below along the chopped gradient.");
       const value_type step = chopped / beta_A_beta;  // grad^T beta = ||beta||^2
-      backend_t::axpby(one, x_tmp, -step, x);
-      backend_t::axpby(one, grad_tmp, -step, grad);
+      axpby(backend_t{}, one, x_tmp, -step, x);
+      axpby(backend_t{}, one, grad_tmp, -step, grad);
       backend_t::elementwise_transform(x, grad, p, impl::FreeGradient<value_type>{lower_bound});
       return;
     }
 
     // A p in grad, until grad is formed from it
     backend_t::apply(prob.A(), p, grad, prob.workspace());
-    const value_type p_A_p = backend_t::template dot<value_type>(p, grad);
-    const value_type grad_p = backend_t::template dot<value_type>(grad_tmp, p);
+    const value_type p_A_p = dot(backend_t{}, p, grad);
+    const value_type grad_p = dot(backend_t{}, grad_tmp, p);
     const value_type to_bound =
         backend_t::template transform_reduce_min<value_type>(x_tmp, p, impl::StepToBound<value_type>{lower_bound});
     if (p_A_p > zero && grad_p / p_A_p <= to_bound) {
@@ -573,7 +573,7 @@ class MPRGPStepStrategy {
       const value_type gamma = backend_t::template transform_reduce_sum<value_type>(
                                    x, grad_tmp, grad, impl::FreeGradientAfterStepTimes<value_type>{lower_bound, step}) /
                                p_A_p;
-      backend_t::axpby(one, grad_tmp, -step, grad);
+      axpby(backend_t{}, one, grad_tmp, -step, grad);
       backend_t::elementwise_transform(x, grad, p, p, impl::ConjugateDirection<value_type>{lower_bound, gamma});
       return;
     }
@@ -583,11 +583,11 @@ class MPRGPStepStrategy {
     MUNDY_THROW_ASSERT(to_bound_step < NumTraits<value_type>::highest(), std::invalid_argument,
                        "MPRGPStepStrategy: the objective is unbounded below along p.");
     backend_t::wrapped_axpbyz(one, x_tmp, -to_bound_step, p, x, prob.space());
-    backend_t::axpby(one, grad_tmp, -to_bound_step, grad);
+    axpby(backend_t{}, one, grad_tmp, -to_bound_step, grad);
     backend_t::elementwise_transform(x, grad, x,
                                      impl::ProjectedFreeGradientStep<value_type>{lower_bound, expansion_step});
     backend_t::apply(prob.A(), x, grad, prob.workspace());
-    backend_t::axpby(one, prob.q(), one, grad);
+    axpby(backend_t{}, one, prob.q(), one, grad);
     backend_t::elementwise_transform(x, grad, p, impl::FreeGradient<value_type>{lower_bound});
   }
 
@@ -628,7 +628,7 @@ class PGDStrategy {
 
     // grad_tmp = A x_tmp + q
     backend_t::apply(prob.A(), state.x_tmp(), state.grad_tmp(), workspace);
-    backend_t::axpby(one, prob.q(), one, state.grad_tmp());
+    axpby(backend_t{}, one, prob.q(), one, state.grad_tmp());
 
     state.residual() = measure(backend, state.x_tmp(), state.grad_tmp(), prob.space());
 
@@ -665,7 +665,7 @@ class PGDStrategy {
       if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
         constexpr value_type one = static_cast<value_type>(1);
         backend_t::apply(prob.A(), state.x(), state.grad(), workspace);
-        backend_t::axpby(one, prob.q(), one, state.grad());
+        axpby(backend_t{}, one, prob.q(), one, state.grad());
         state.residual() = measure(backend, state.x(), state.grad(), prob.space());
       }
     }

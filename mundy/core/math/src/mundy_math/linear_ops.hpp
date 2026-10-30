@@ -266,7 +266,7 @@ class MixedReducedOp {
     Backend::apply(L_storage_.get(), workspace.ax(), workspace.lax(), workspace.l_workspace());
 
     // workspace.lax = x - L (A x) = (I - L A) x
-    Backend::axpby(one, x, -one, workspace.lax());
+    axpby(Backend{}, one, x, -one, workspace.lax());
 
     // y = A (I - L A) x
     Backend::apply(A_storage_.get(), workspace.lax(), y, workspace.a_workspace());
@@ -389,7 +389,7 @@ class CongruentMixedReducedOp {
     Backend::apply(D(), x, workspace.dx(), workspace.d_workspace());
     Backend::apply(M(), workspace.dx(), workspace.mdx(), workspace.m_workspace());
     Backend::apply(L(), workspace.mdx(), workspace.lmdx(), workspace.l_workspace());
-    Backend::axpby(one, workspace.dx(), -one, workspace.lmdx());
+    axpby(Backend{}, one, workspace.dx(), -one, workspace.lmdx());
     Backend::apply(M(), workspace.lmdx(), workspace.mdx(), workspace.m_workspace());
     Backend::apply(DT(), workspace.mdx(), y, workspace.dt_workspace());
   }
@@ -493,7 +493,7 @@ class SumOp {
     constexpr auto one = static_cast<impl::vector_value_type<YVector>>(1);
     Backend::apply(op1(), x, y, workspace.op1_workspace());
     Backend::apply(op2(), x, workspace.tmp(), workspace.op2_workspace());
-    Backend::axpby(one, workspace.tmp(), one, y);
+    axpby(Backend{}, one, workspace.tmp(), one, y);
   }
 
   template <class XVector, class YVector>
@@ -586,7 +586,7 @@ class ScaledOp {
       Backend::apply(alpha, op(), x, zero, y, workspace.op_workspace());
     } else {
       Backend::apply(op(), x, y, workspace.op_workspace());
-      Backend::axpby(alpha, y, zero, y);
+      axpby(Backend{}, alpha, y, zero, y);
     }
   }
 
@@ -674,7 +674,7 @@ class ShiftedOp {
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     using value_type = impl::vector_value_type<YVector>;
     Backend::apply(op(), x, y, workspace.op_workspace());
-    Backend::axpby(static_cast<value_type>(-sigma_), x, static_cast<value_type>(1), y);
+    axpby(Backend{}, static_cast<value_type>(-sigma_), x, static_cast<value_type>(1), y);
   }
 
   template <class XVector, class YVector>
@@ -801,7 +801,7 @@ class ConcatDomainOp {
     constexpr auto one = static_cast<impl::vector_value_type<YVector>>(1);
     Backend::apply(op1(), x1, y, workspace.op1_workspace());
     Backend::apply(op2(), x2, workspace.y2(), workspace.op2_workspace());
-    Backend::axpby(one, workspace.y2(), one, y);
+    axpby(Backend{}, one, workspace.y2(), one, y);
   }
 
   op1_storage_t op1_storage_;
@@ -966,7 +966,7 @@ class DiagonalOp {
   template <class XVector, class YVector>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     MUNDY_THROW_ASSERT(Backend::size(x) == Backend::size(diag()), std::invalid_argument, "DiagonalOp: size mismatch.");
-    Backend::elementwise_mul(diag(), x, y);
+    elementwise_mul(Backend{}, diag(), x, y);
   }
 
  private:

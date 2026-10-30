@@ -97,7 +97,7 @@ class JacobiPreconditioner {
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     MUNDY_THROW_ASSERT(Backend::size(x) == Backend::size(diag()), std::invalid_argument,
                        "JacobiPreconditioner: size mismatch.");
-    Backend::elementwise_div(x, diag(), y);
+    elementwise_div(Backend{}, x, diag(), y);
   }
 
  private:

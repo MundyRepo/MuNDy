@@ -711,7 +711,7 @@ struct RandomLCP {
     // 3. q that makes (z*, w*) solve the LCP
     // q_ = grad_star_ - A_ * x_star_;
     q_ = vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), size_);
-    backend_t::axpby(1.0, grad_star_, 0.0, q_);
+    axpby(backend_t{}, 1.0, grad_star_, 0.0, q_);
     backend_t::apply(-1.0, A_, x_star_, 1.0, q_);
   }
 
@@ -1125,10 +1125,10 @@ struct DefaultPGD {
   }
 };
 
-/// \brief PGD with MPRGP steps, carrying their direction in p.
+/// \brief PGD with MPRGP steps, carrying their direction in p, and the default residual.
 struct MPRGPPGD {
   KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& p) const {
-    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), LinfNormProjectedGradientResidual{}, cfg);
+    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), LinfNormProjectedDiffResidual{}, cfg);
   }
 };
 
@@ -1753,6 +1753,9 @@ TEST(Convex, PGDIsScaleInvariant) {
   const auto make_bb = [](const PGDConfig<double>& cfg, vector_t& /*p*/) {
     return make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, cfg);
   };
+  const auto make_mprgp = [](const PGDConfig<double>& cfg, vector_t& p) {
+    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), LinfNormProjectedGradientResidual{}, cfg);
+  };
   const auto expect_scale_invariant = [&](const auto& make_pgd, std::string_view steps) {
     // Unscaled
     vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
@@ -1780,7 +1783,7 @@ TEST(Convex, PGDIsScaleInvariant) {
     }
   };
   expect_scale_invariant(make_bb, "Barzilai-Borwein");
-  expect_scale_invariant(MPRGPPGD{}, "MPRGP");
+  expect_scale_invariant(make_mprgp, "MPRGP");
 }
 
 // Projected Barzilai-Borwein steps can cycle, and a nonmonotone line search ends the cycle. Two rows at an angle delta,

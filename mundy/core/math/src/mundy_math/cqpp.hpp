@@ -389,7 +389,7 @@ KOKKOS_FUNCTION auto to_cqpp(
   auto l_workspace = P.l_workspace();
 
   backend_t::apply(P.A(), P.f_b(), P.g(), a_workspace);                                       // g = A f_b
-  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), P.g());  // g = q - A f_b
+  axpby(backend_t{}, static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), P.g());  // g = q - A f_b
 
   auto g = P.g();
   auto ax = P.ax();
@@ -424,7 +424,7 @@ KOKKOS_FUNCTION auto to_cqpp(
   // M f_b is held in mdx, which the reduced operator overwrites only once it is applied.
   backend_t::apply(P.M(), P.f_b(), P.mdx(), m_workspace);
   backend_t::apply(P.DT(), P.mdx(), P.g(), dt_workspace);                                     // g = D^T M f_b
-  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), P.g());  // g = q - D^T M f_b
+  axpby(backend_t{}, static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), P.g());  // g = q - D^T M f_b
 
   auto g = P.g();
   auto dx = P.dx();
@@ -587,8 +587,8 @@ template <typename Backend, typename Workspace>
 KOKKOS_FUNCTION void zero_s_guesses(Workspace& workspace) {
   using value_type = vector_value_type<std::remove_cvref_t<decltype(workspace.s_b)>>;
   constexpr value_type zero = static_cast<value_type>(0);
-  Backend::axpby(zero, workspace.s_b, zero, workspace.s_b);
-  Backend::axpby(zero, workspace.l_workspace.u(), zero, workspace.l_workspace.u());
+  axpby(Backend{}, zero, workspace.s_b, zero, workspace.s_b);
+  axpby(Backend{}, zero, workspace.l_workspace.u(), zero, workspace.l_workspace.u());
 }
 
 }  // namespace impl
