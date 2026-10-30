@@ -452,6 +452,66 @@ struct KokkosBackend {
     }
   }
 
+  /// \brief z_i := f(x_i, y_i), elementwise; z may alias x or y.
+  template <class XVector, class YVector, class ZVector, class Functor>
+  static void elementwise_transform(const XVector& x, const YVector& y, ZVector& z, const Functor& f) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == z.extent(0), std::invalid_argument,
+                       "x, y, and z must have the same size.");
+    Kokkos::parallel_for(
+        "elementwise_transform", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i) { z(i) = f(x(i), y(i)); });
+  }
+
+  /// \brief z_i := f(x_i, y_i, w_i), elementwise; z may alias x, y, or w.
+  template <class XVector, class YVector, class WVector, class ZVector, class Functor>
+  static void elementwise_transform(const XVector& x, const YVector& y, const WVector& w, ZVector& z,
+                                    const Functor& f) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == w.extent(0) && x.extent(0) == z.extent(0),
+                       std::invalid_argument, "x, y, w, and z must have the same size.");
+    Kokkos::parallel_for(
+        "elementwise_transform", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i) { z(i) = f(x(i), y(i), w(i)); });
+  }
+
+  /// \brief The sum of f(x_i, y_i).
+  template <class ReductionScalar, class XVector, class YVector, class Functor>
+  static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y, const Functor& f) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
+    ReductionScalar result = 0;
+    Kokkos::parallel_reduce(
+        "transform_reduce_sum", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i, ReductionScalar& sum) { sum += f(x(i), y(i)); }, result);
+    return result;
+  }
+
+  /// \brief The sum of f(x_i, y_i, w_i).
+  template <class ReductionScalar, class XVector, class YVector, class WVector, class Functor>
+  static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y, const WVector& w,
+                                              const Functor& f) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == w.extent(0), std::invalid_argument,
+                       "x, y, and w must have the same size.");
+    ReductionScalar result = 0;
+    Kokkos::parallel_reduce(
+        "transform_reduce_sum", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i, ReductionScalar& sum) { sum += f(x(i), y(i), w(i)); }, result);
+    return result;
+  }
+
+  /// \brief The least f(x_i, y_i), capped at the largest finite ReductionScalar.
+  template <class ReductionScalar, class XVector, class YVector, class Functor>
+  static ReductionScalar transform_reduce_min(const XVector& x, const YVector& y, const Functor& f) {
+    MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
+    ReductionScalar result;
+    Kokkos::parallel_reduce(
+        "transform_reduce_min", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+        KOKKOS_LAMBDA(const int i, ReductionScalar& least) {
+          const ReductionScalar v = f(x(i), y(i));
+          least = v < least ? v : least;
+        },
+        Kokkos::Min<ReductionScalar>(result));
+    return result;
+  }
+
   template <class ReductionScalar, class XVector, class YVector>
   static ReductionScalar dot(const XVector& x, const YVector& y) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
@@ -763,6 +823,58 @@ struct MundyMathBackend {
   KOKKOS_INLINE_FUNCTION static void wrapped_axpbyz(const Scalar alpha, const XVector& x, const Scalar beta,
                                                     const YVector& y, ZVector& z, const Wrapper& wrapper) {
     z = ::mundy::apply(wrapper, alpha * x + beta * y);
+  }
+
+  /// \brief z_i := f(x_i, y_i), elementwise; z may alias x or y.
+  template <class XVector, class YVector, class ZVector, class Functor>
+  KOKKOS_INLINE_FUNCTION static void elementwise_transform(const XVector& x, const YVector& y, ZVector& z,
+                                                           const Functor& f) {
+    for (size_t i = 0; i < static_size<ZVector>(); ++i) {
+      vector_data(z, i) = f(vector_data(x, i), vector_data(y, i));
+    }
+  }
+
+  /// \brief z_i := f(x_i, y_i, w_i), elementwise; z may alias x, y, or w.
+  template <class XVector, class YVector, class WVector, class ZVector, class Functor>
+  KOKKOS_INLINE_FUNCTION static void elementwise_transform(const XVector& x, const YVector& y, const WVector& w,
+                                                           ZVector& z, const Functor& f) {
+    for (size_t i = 0; i < static_size<ZVector>(); ++i) {
+      vector_data(z, i) = f(vector_data(x, i), vector_data(y, i), vector_data(w, i));
+    }
+  }
+
+  /// \brief The sum of f(x_i, y_i).
+  template <class ReductionScalar, class XVector, class YVector, class Functor>
+  KOKKOS_INLINE_FUNCTION static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y,
+                                                                     const Functor& f) {
+    ReductionScalar sum = 0;
+    for (size_t i = 0; i < static_size<XVector>(); ++i) {
+      sum += f(vector_data(x, i), vector_data(y, i));
+    }
+    return sum;
+  }
+
+  /// \brief The sum of f(x_i, y_i, w_i).
+  template <class ReductionScalar, class XVector, class YVector, class WVector, class Functor>
+  KOKKOS_INLINE_FUNCTION static ReductionScalar transform_reduce_sum(const XVector& x, const YVector& y,
+                                                                     const WVector& w, const Functor& f) {
+    ReductionScalar sum = 0;
+    for (size_t i = 0; i < static_size<XVector>(); ++i) {
+      sum += f(vector_data(x, i), vector_data(y, i), vector_data(w, i));
+    }
+    return sum;
+  }
+
+  /// \brief The least f(x_i, y_i), capped at the largest finite ReductionScalar.
+  template <class ReductionScalar, class XVector, class YVector, class Functor>
+  KOKKOS_INLINE_FUNCTION static ReductionScalar transform_reduce_min(const XVector& x, const YVector& y,
+                                                                     const Functor& f) {
+    ReductionScalar least = NumTraits<ReductionScalar>::highest();
+    for (size_t i = 0; i < static_size<XVector>(); ++i) {
+      const ReductionScalar v = f(vector_data(x, i), vector_data(y, i));
+      least = v < least ? v : least;
+    }
+    return least;
   }
 
   template <class ReductionScalar, class XVector, class YVector>

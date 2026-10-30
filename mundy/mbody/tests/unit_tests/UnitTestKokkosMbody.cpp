@@ -3485,13 +3485,47 @@ double largest_overlap(const RodViews<Space>& rods, const ReLCPContactViews<Spac
 }
 
 TEST(Mbody, ReLCPProbe) {
-  const auto p = make_fallback_problem();
-  for (const double tol : {1e-5, 1e-9}) {
-    std::printf("==== tol %.0e\n", tol);
-    const auto r = solve_step(make_mixed_slcp_integrator(copy_to<Kokkos::Serial>(p.rods), copy_to<Kokkos::Serial>(p.constraints),
-                                                         p.mobility_model, p.dt),
-                              MixedSLCPConfig{p.cfg, 50, tol, tol});
-    std::cout << r << std::endl;
+  const double rest_height = std::sqrt(0.04 - 0.01);
+  const double outer_tol = std::getenv("PROBE_OUTER_TOL") ? std::atof(std::getenv("PROBE_OUTER_TOL")) : 1e-12;
+  const unsigned max_outer = std::getenv("PROBE_MAX_OUTER") ? std::atoi(std::getenv("PROBE_MAX_OUTER")) : 1000;
+  for (const double dt : {0.3, 0.1, 0.05, 0.02}) {
+    for (const bool relcp : {true}) {
+      auto p = make_groove_problem(dt, 1.0, 0.4);
+      p.cfg.outer_tol = outer_tol;
+      p.cfg.max_outer_iters = max_outer;
+      const auto rods = copy_to<TestExecSpace>(p.rods);
+      const auto load = copy_load(rods);
+      const auto pairs = copy_to<TestExecSpace>(get<ReLCPContactViews<HostExecSpace>>(p.constraints));
+      double overlap = 0.0;
+      unsigned most_iters = 0, unconverged = 0;
+      int steps = 0;
+      const int num_steps = static_cast<int>(std::lround(30.0 / dt));
+      try {
+        if (relcp) {
+          const auto integrator = make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt);
+          for (; steps < num_steps; ++steps) {
+            const auto r = step_rods(integrator, MixedReLCPConfig{p.cfg, 50, 1e-6, 1e-6, false}, load);
+            most_iters = std::max(most_iters, r.num_iters);
+            unconverged += !r.converged;
+            overlap = std::max(overlap, largest_overlap(rods, pairs));
+          }
+        } else {
+          const auto integrator = make_mixed_lcp_integrator(rods, with_contact_views(copy_to<TestExecSpace>(p.constraints)), p.mobility_model, dt);
+          for (; steps < num_steps; ++steps) {
+            step_rods(integrator, p.cfg, load);
+            overlap = std::max(overlap, largest_overlap(rods, pairs));
+          }
+        }
+      } catch (const std::exception& e) {
+        std::printf("dt %.3g %s threw at step %d: %s\n", dt, relcp ? "ReLCP" : "LCP", steps, e.what());
+        continue;
+      }
+      const auto h = copy_to<HostExecSpace>(rods);
+      const Vector3d t = Quaterniond(h.orientation(2)) * Vector3d{0.0, 0.0, 1.0};
+      std::printf("dt %.3g %-5s speed %.2e overlap %.3e height_err %+.3e tilt %+.3e most_iters %u unconverged %u\n", dt,
+                  relcp ? "ReLCP" : "LCP", max_step_displacement(rods, dt) / dt, overlap,
+                  h.center(2)[2] - rest_height, std::asin(t[2]), most_iters, unconverged);
+    }
   }
 }
 

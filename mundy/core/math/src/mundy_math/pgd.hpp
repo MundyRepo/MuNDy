@@ -40,7 +40,11 @@
 #include <utility>
 
 // Mundy
+#include <mundy_math/NumTraits.hpp>        // for mundy::NumTraits
 #include <mundy_math/Tolerance.hpp>        // for mundy::get_relaxed_zero_tolerance<T>
+#include <mundy_math/cmath.hpp>            // for mundy::{min, max}
+#include <mundy_math/convex_spaces.hpp>    // for mundy::LowerBoundSpace
+#include <mundy_math/eigenvalues.hpp>      // for mundy::{EigenProblem, PowerConfig, solve_eigen_problem}
 #include <mundy_math/residuals.hpp>        // for the default projected-gradient residual policy
 #include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, workspace_commit}
 #include <mundy_utils/requires.hpp>
@@ -164,6 +168,9 @@ class PGDState {
 /// converged; it sets state.step_state(). step(prob, state) takes x_tmp and grad_tmp as the current iterate x_k and its
 /// gradient, writes the next iterate, a point of prob's space, into x and its gradient A x + q into grad, and updates
 /// state.step_state() for the next step. A strategy names its memory as step_state_t<Scalar>.
+///
+/// A strategy that updates grad by recurrence, so that it equals A x + q only up to rounding, declares
+/// static constexpr bool accumulates_gradient = true; PGD then recomputes A x + q before it accepts an iterate.
 template <class S, class Problem, class State>
 concept PGDStepStrategy = ProjectedProblem<Problem> && requires(const S& s, const Problem& prob, State& state) {
   typename S::template step_state_t<typename State::value_type>;
@@ -172,6 +179,10 @@ concept PGDStepStrategy = ProjectedProblem<Problem> && requires(const S& s, cons
 };
 
 namespace impl {
+/// \brief Whether StepStrategy declares that it updates grad by recurrence.
+template <class StepStrategy>
+inline constexpr bool accumulates_gradient_v = requires { requires StepStrategy::accumulates_gradient; };
+
 /// \brief 1 where v is nonzero and 0 where it is zero.
 template <class Scalar>
 struct NonzeroIndicator {
@@ -360,6 +371,230 @@ struct NonmonotoneBBStepStrategy {
   }
 };
 
+namespace impl {
+// Entries of MPRGP's gradients over x >= lower_bound. A row is free where x lies above the bound.
+
+/// \brief phi(x, g): g on free rows, 0 on the bound.
+template <class Scalar>
+struct FreeGradient {
+  Scalar lower_bound;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g) const {
+    return x > lower_bound ? g : Scalar(0);
+  }
+};
+
+/// \brief beta(x, g): min(g, 0) on the bound, 0 on free rows.
+template <class Scalar>
+struct ChoppedGradient {
+  Scalar lower_bound;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g) const {
+    return x > lower_bound ? Scalar(0) : min(g, Scalar(0));
+  }
+};
+
+/// \brief beta_i^2.
+template <class Scalar>
+struct ChoppedGradientSquared {
+  Scalar lower_bound;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g) const {
+    const Scalar beta = ChoppedGradient<Scalar>{lower_bound}(x, g);
+    return beta * beta;
+  }
+};
+
+/// \brief phi~_i phi_i, for phi~ = min((x - lower_bound) / step, g) on free rows: the part of phi a step of length step
+/// can follow before the bound.
+template <class Scalar>
+struct ReducedTimesFreeGradient {
+  Scalar lower_bound;
+  Scalar step;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g) const {
+    return x > lower_bound ? min((x - lower_bound) / step, g) * g : Scalar(0);
+  }
+};
+
+/// \brief The step t at which x - t p reaches the bound, or the largest finite Scalar where p does not approach it.
+template <class Scalar>
+struct StepToBound {
+  Scalar lower_bound;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar p) const {
+    return p > Scalar(0) ? (x - lower_bound) / p : NumTraits<Scalar>::highest();
+  }
+};
+
+/// \brief phi_i(x, g - step Ap) Ap_i: the free gradient after a step of length step along p, against A p.
+template <class Scalar>
+struct FreeGradientAfterStepTimes {
+  Scalar lower_bound;
+  Scalar step;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g, Scalar Ap) const {
+    return x > lower_bound ? (g - step * Ap) * Ap : Scalar(0);
+  }
+};
+
+/// \brief The next conjugate direction, phi(x, g) - gamma p.
+template <class Scalar>
+struct ConjugateDirection {
+  Scalar lower_bound;
+  Scalar gamma;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g, Scalar p) const {
+    return FreeGradient<Scalar>{lower_bound}(x, g) - gamma * p;
+  }
+};
+
+/// \brief Proj(x - step phi(x, g)).
+template <class Scalar>
+struct ProjectedFreeGradientStep {
+  Scalar lower_bound;
+  Scalar step;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar x, Scalar g) const {
+    return x > lower_bound ? max(x - step * g, lower_bound) : x;
+  }
+};
+
+/// \brief value, whatever the entry.
+template <class Scalar>
+struct Constant {
+  Scalar value;
+  KOKKOS_INLINE_FUNCTION Scalar operator()(Scalar) const {
+    return value;
+  }
+};
+}  // namespace impl
+
+/// \brief The expansion step an MPRGP strategy fixes at its start.
+template <class Scalar>
+struct MPRGPStepState {
+  Scalar expansion_step{0};
+};
+
+/// \brief Modified proportioning with reduced gradient projections (MPRGP; Dostal & Schoberl 2005), for x at or above a
+/// lower bound.
+///
+/// Rows above the bound are free. The free gradient phi is grad on the free rows and 0 elsewhere; the chopped gradient
+/// beta is min(grad, 0) on rows at the bound, the pull that would lift them off it, and 0 elsewhere. While beta is
+/// small against phi, ||beta||^2 <= proportioning^2 phi~^T phi with phi~ = min((x - bound) / step, phi) on free rows,
+/// each step is a conjugate gradient step over the free rows along a direction p, unless that step would cross the
+/// bound; it then goes to the bound along p and takes the projected step x = Proj(x - step phi). Otherwise the step is
+/// the exact minimizer along -beta, which lifts rows off the bound. The projected step is expansion_step_fraction /
+/// lambda, for lambda the largest eigenvalue of A estimated by power iterations to a relative change of
+/// norm_estimate.tol, and the fraction must lie in (0, 2).
+///
+/// Conjugate gradient steps find which rows end at the bound in few steps where projected gradient steps can take many,
+/// as when rows nearly duplicate each other. grad is accumulated by recurrence.
+///
+/// p holds the direction from one step to the next: it must not alias any vector of the PGD state, the problem's
+/// workspace, or anything else in use during the solve.
+template <class PVector>
+class MPRGPStepStrategy {
+ public:
+  static constexpr bool accumulates_gradient = true;
+
+  double proportioning = 1.0;
+  double expansion_step_fraction = 1.8;
+  PowerConfig<double> norm_estimate{.max_iters = 50, .tol = 1e-2};
+
+  template <class Scalar>
+  using step_state_t = MPRGPStepState<Scalar>;
+
+  KOKKOS_INLINE_FUNCTION
+  explicit MPRGPStepStrategy(PVector&& p) : p_(std::forward<PVector>(p)) {
+  }
+
+  template <class Problem, class State>
+  KOKKOS_FUNCTION void initialize(const Problem& prob, State& state) const {
+    using value_type = typename State::value_type;
+    using backend_t = decltype(prob.backend());
+    static_assert(std::same_as<std::remove_cvref_t<decltype(prob.space())>, LowerBoundSpace<value_type>>,
+                  "MPRGPStepStrategy: the problem's space must be a LowerBoundSpace.");
+    constexpr value_type zero = static_cast<value_type>(0);
+    constexpr value_type one = static_cast<value_type>(1);
+    auto& p = p_.get();
+
+    // lambda_max(A) by power iterations from the all-ones vector, through p and grad; x holds their residual
+    backend_t::wrapped_axpbyz(zero, state.x_tmp(), zero, state.x_tmp(), p, impl::Constant<value_type>{one});
+    const auto eigen_problem = EigenProblem(prob.backend(), prob.A(), prob.workspace());
+    auto power_state = make_power_state(p, state.grad(), state.x());
+    const auto largest = solve_eigen_problem(
+        eigen_problem, make_power_strategy(RelativeChangeResidual{}, norm_estimate), power_state);
+    MUNDY_THROW_ASSERT(largest.eigenvalue > zero, std::invalid_argument,
+                       "MPRGPStepStrategy: A must have a positive eigenvalue.");
+    state.step_state().expansion_step = static_cast<value_type>(expansion_step_fraction) / largest.eigenvalue;
+    backend_t::deep_copy(state.x(), state.x_tmp());
+
+    const value_type lower_bound = prob.space().lower_bound;
+    backend_t::elementwise_transform(state.x_tmp(), state.grad_tmp(), p, impl::FreeGradient<value_type>{lower_bound});
+  }
+
+  template <class Problem, class State>
+  KOKKOS_FUNCTION void step(const Problem& prob, State& state) const {
+    using value_type = typename State::value_type;
+    using backend_t = decltype(prob.backend());
+    constexpr value_type zero = static_cast<value_type>(0);
+    constexpr value_type one = static_cast<value_type>(1);
+    const value_type lower_bound = prob.space().lower_bound;
+    const value_type expansion_step = state.step_state().expansion_step;
+    auto& p = p_.get();
+    auto& x = state.x();
+    auto& grad = state.grad();
+    const auto& x_tmp = state.x_tmp();
+    const auto& grad_tmp = state.grad_tmp();
+
+    const value_type chopped = backend_t::template transform_reduce_sum<value_type>(
+        x_tmp, grad_tmp, impl::ChoppedGradientSquared<value_type>{lower_bound});
+    const value_type free = backend_t::template transform_reduce_sum<value_type>(
+        x_tmp, grad_tmp, impl::ReducedTimesFreeGradient<value_type>{lower_bound, expansion_step});
+    const value_type proportioning_sq = static_cast<value_type>(proportioning * proportioning);
+
+    if (chopped > proportioning_sq * free) {
+      // Proportioning: the exact minimizer along -beta, with beta in x and A beta in grad
+      backend_t::elementwise_transform(x_tmp, grad_tmp, x, impl::ChoppedGradient<value_type>{lower_bound});
+      backend_t::apply(prob.A(), x, grad, prob.workspace());
+      const value_type beta_A_beta = backend_t::template dot<value_type>(x, grad);
+      MUNDY_THROW_ASSERT(beta_A_beta > zero, std::invalid_argument,
+                         "MPRGPStepStrategy: the objective is unbounded below along the chopped gradient.");
+      const value_type step = chopped / beta_A_beta;  // grad^T beta = ||beta||^2
+      backend_t::axpby(one, x_tmp, -step, x);
+      backend_t::axpby(one, grad_tmp, -step, grad);
+      backend_t::elementwise_transform(x, grad, p, impl::FreeGradient<value_type>{lower_bound});
+      return;
+    }
+
+    // A p in grad, until grad is formed from it
+    backend_t::apply(prob.A(), p, grad, prob.workspace());
+    const value_type p_A_p = backend_t::template dot<value_type>(p, grad);
+    const value_type grad_p = backend_t::template dot<value_type>(grad_tmp, p);
+    const value_type to_bound =
+        backend_t::template transform_reduce_min<value_type>(x_tmp, p, impl::StepToBound<value_type>{lower_bound});
+    if (p_A_p > zero && grad_p / p_A_p <= to_bound) {
+      // Conjugate gradient step
+      const value_type step = grad_p / p_A_p;
+      backend_t::wrapped_axpbyz(one, x_tmp, -step, p, x, prob.space());
+      const value_type gamma = backend_t::template transform_reduce_sum<value_type>(
+                                   x, grad_tmp, grad, impl::FreeGradientAfterStepTimes<value_type>{lower_bound, step}) /
+                               p_A_p;
+      backend_t::axpby(one, grad_tmp, -step, grad);
+      backend_t::elementwise_transform(x, grad, p, p, impl::ConjugateDirection<value_type>{lower_bound, gamma});
+      return;
+    }
+
+    // Expansion: to the bound along p, where p descends, then the projected step along the free gradient there
+    const value_type to_bound_step = (p_A_p > zero || grad_p > zero) ? to_bound : zero;
+    MUNDY_THROW_ASSERT(to_bound_step < NumTraits<value_type>::highest(), std::invalid_argument,
+                       "MPRGPStepStrategy: the objective is unbounded below along p.");
+    backend_t::wrapped_axpbyz(one, x_tmp, -to_bound_step, p, x, prob.space());
+    backend_t::axpby(one, grad_tmp, -to_bound_step, grad);
+    backend_t::elementwise_transform(x, grad, x,
+                                     impl::ProjectedFreeGradientStep<value_type>{lower_bound, expansion_step});
+    backend_t::apply(prob.A(), x, grad, prob.workspace());
+    backend_t::axpby(one, prob.q(), one, grad);
+    backend_t::elementwise_transform(x, grad, p, impl::FreeGradient<value_type>{lower_bound});
+  }
+
+ private:
+  mutable ::mundy::storage<PVector> p_;
+};
+
 /// \brief The PGD strategy: initialize/iterate/done/result over (Problem, State). StepStrategy is a PGDStepStrategy and
 /// ResidualPolicy a ProjectedResidualPolicy.
 template <class StepStrategy, class ResidualPolicy, class Config>
@@ -423,8 +658,16 @@ class PGDStrategy {
     // x, grad = the next iterate and its gradient
     step_.step(prob, state);
 
-    // residual & test
+    // residual & test, on A x + q itself before an iterate whose gradient was accumulated is accepted
     state.residual() = measure(backend, state.x(), state.grad(), prob.space());
+    if constexpr (impl::accumulates_gradient_v<step_strategy_t>) {
+      if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
+        constexpr value_type one = static_cast<value_type>(1);
+        backend_t::apply(prob.A(), state.x(), state.grad(), workspace);
+        backend_t::axpby(one, prob.q(), one, state.grad());
+        state.residual() = measure(backend, state.x(), state.grad(), prob.space());
+      }
+    }
     if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
       state.converged() = true;
       impl::workspace_commit(workspace);
@@ -492,6 +735,12 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const PGDConfig<Scalar>& 
   using DefaultStepStrategy = BBStepStrategy;
   using DefaultResidualPolicy = LinfNormProjectedDiffResidual;
   return PGDStrategy(DefaultStepStrategy{}, DefaultResidualPolicy{}, cfg);
+}
+//
+/// \brief MPRGP steps, carrying their direction in p.
+template <class PVector>
+KOKKOS_INLINE_FUNCTION auto make_mprgp_step_strategy(PVector&& p) {
+  return MPRGPStepStrategy<PVector>(std::forward<PVector>(p));
 }
 //
 /// \brief The state pgd iterates, over x, grad and their previous values, with the memory of pgd's step strategy.

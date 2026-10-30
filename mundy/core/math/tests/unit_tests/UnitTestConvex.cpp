@@ -58,6 +58,8 @@ static_assert(ProjectedResidualPolicy<LinfNormProjectedGradientResidual, MundyMa
 static_assert(ProjectedResidualPolicy<LinfNormProjectedDiffResidual, MundyMathBackend, Vector3d, Vector3d,
                                       LowerBoundSpace<double>>);
 static_assert(!ProjectedResidualPolicy<L2Residual, MundyMathBackend, Vector3d, Vector3d, LowerBoundSpace<double>>);
+static_assert(impl::accumulates_gradient_v<MPRGPStepStrategy<Vector3d&>>);
+static_assert(!impl::accumulates_gradient_v<BBStepStrategy> && !impl::accumulates_gradient_v<NonmonotoneBBStepStrategy<>>);
 
 //! \name MundyMath backend test problems
 //@{
@@ -1116,7 +1118,22 @@ SparseMatrices<Problem> as_sparse(const Problem& problem) {
 //@}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
-void run_mundy_math_test(const auto& test) {
+/// \brief PGD with its default steps; they need no direction vector, so p goes unused.
+struct DefaultPGD {
+  KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& /*p*/) const {
+    return make_pgd_solution_strategy(cfg);
+  }
+};
+
+/// \brief PGD with MPRGP steps, carrying their direction in p.
+struct MPRGPPGD {
+  KOKKOS_INLINE_FUNCTION auto operator()(const PGDConfig<double>& cfg, auto& p) const {
+    return make_pgd_solution_strategy(make_mprgp_step_strategy(p), LinfNormProjectedGradientResidual{}, cfg);
+  }
+};
+
+template <class Test, class MakePGD = DefaultPGD>
+void run_mundy_math_test(const Test& test, const MakePGD& make_pgd = {}) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1126,7 +1143,7 @@ void run_mundy_math_test(const auto& test) {
   auto x_exact = test.get_exact_solution();
 
   using vector_t = decltype(x_exact);
-  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+  vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
 
   x.fill(99.99);  // use a bad initial guess to force more iterations
 
@@ -1135,7 +1152,7 @@ void run_mundy_math_test(const auto& test) {
 
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd = make_pgd(cfg, p);
   auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
@@ -1149,7 +1166,8 @@ void run_mundy_math_test(const auto& test) {
   }
 }
 
-void run_mundy_math_congruent_test(const auto& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
   std::cout << "Running congruent test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1165,7 +1183,7 @@ void run_mundy_math_congruent_test(const auto& test) {
   // Solving via explicit quadratic form
   {
     using vector_t = decltype(x_exact);
-    vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+    vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
     vector_t f{}, u{};
 
     x.fill(99.99);  // use a bad initial guess to force more iterations
@@ -1177,7 +1195,7 @@ void run_mundy_math_congruent_test(const auto& test) {
 
     // Strategy + state
     PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-    auto pgd = make_pgd_solution_strategy(cfg);
+    auto pgd = make_pgd(cfg, p);
     auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
     // Solve (can reuse "cqpp" and "pgd" across many states)
@@ -1197,7 +1215,7 @@ void run_mundy_math_congruent_test(const auto& test) {
   // Solving via quadratic form helper
   {
     using vector_t = decltype(x_exact);
-    vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+    vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
     vector_t f{}, u{};
 
     x.fill(99.99);  // use a bad initial guess to force more iterations
@@ -1209,7 +1227,7 @@ void run_mundy_math_congruent_test(const auto& test) {
 
     // Strategy + state
     PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-    auto pgd = make_pgd_solution_strategy(cfg);
+    auto pgd = make_pgd(cfg, p);
     auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
     // Solve (can reuse "cqpp" and "pgd" across many states)
@@ -1227,7 +1245,8 @@ void run_mundy_math_congruent_test(const auto& test) {
   }
 }
 
-void run_mundy_math_mixed_congruent_test(const auto& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_mundy_math_mixed_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1244,7 +1263,7 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   auto y_exact = test.get_exact_y();
 
   using vector_t = decltype(x_exact);
-  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+  vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
 
   x.fill(99.99);  // use a bad initial guess to force more iterations
 
@@ -1278,7 +1297,7 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
 
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd = make_pgd(cfg, p);
   auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve
@@ -1293,8 +1312,8 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
 }
 
 // The full mixed-CQPP chain (make_mixed_cqpp through solve_mixed_cqpp) constructed and solved inside a kernel.
-template <class Test>
-void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test, const MakePGD& make_pgd = {}) {
   constexpr double tol = 1e-6;
   Kokkos::View<double, Kokkos::DefaultExecutionSpace::memory_space> max_error("max_error");
   Kokkos::View<bool, Kokkos::DefaultExecutionSpace::memory_space> converged("converged");
@@ -1308,10 +1327,11 @@ void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test) {
         auto grad = x_exact;
         auto x_tmp = x_exact;
         auto grad_tmp = x_exact;
+        auto p = x_exact;
         for (size_t i = 0; i < x.size; ++i) {
           x[i] = 99.99;
         }
-        auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = tol});
+        auto pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = tol}, p);
         auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
         const auto result = solve_mixed_cqpp(mixed_cqpp, pgd, state);
 
@@ -1327,7 +1347,8 @@ void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test) {
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
-void run_kokkos_test(const auto& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_kokkos_test(const Test& test, const MakePGD& make_pgd = {}) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1343,6 +1364,7 @@ void run_kokkos_test(const auto& test) {
   vector_t grad(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad"), size);
   vector_t x_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_tmp"), size);
   vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
+  vector_t p(Kokkos::view_alloc(Kokkos::WithoutInitializing, "p"), size);
 
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
@@ -1351,7 +1373,7 @@ void run_kokkos_test(const auto& test) {
 
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd = make_pgd(cfg, p);
   auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
@@ -1371,7 +1393,8 @@ void run_kokkos_test(const auto& test) {
   }
 }
 
-void run_kokkos_congruent_test(const auto& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_kokkos_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1393,6 +1416,7 @@ void run_kokkos_congruent_test(const auto& test) {
   vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
   vector_t f(Kokkos::view_alloc(Kokkos::WithoutInitializing, "f"), size);
   vector_t u(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u"), size);
+  vector_t p(Kokkos::view_alloc(Kokkos::WithoutInitializing, "p"), size);
 
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
@@ -1403,7 +1427,7 @@ void run_kokkos_congruent_test(const auto& test) {
 
   // Strategy + state
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd = make_pgd(cfg, p);
   auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
@@ -1434,7 +1458,8 @@ void run_kokkos_congruent_test(const auto& test) {
   }
 }
 
-void run_kokkos_mixed_congruent_test(const auto& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_kokkos_mixed_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   auto exec_space = test.get_exec_space();
@@ -1486,10 +1511,11 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   vector_t grad(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad"), size);
   vector_t x_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_tmp"), size);
   vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
+  vector_t p(Kokkos::view_alloc(Kokkos::WithoutInitializing, "p"), size);
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
   PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd = make_pgd(cfg, p);
   auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
 
   // Solve
@@ -1546,7 +1572,8 @@ AllocationCount count_allocations(F&& f) {
 
 // A mixed CQPP formed in a reused workspace solves exactly as one formed in fresh storage, and forming and solving it
 // through that workspace allocates nothing but the allocations its sparse applies make.
-void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
+template <class Test, class MakePGD = DefaultPGD>
+void run_kokkos_mixed_congruent_workspace_test(const Test& test, const MakePGD& make_pgd = {}) {
   using exec_space = decltype(test.get_exec_space());
   using backend_t = KokkosBackend<exec_space>;
   const auto DT = test.get_DT();
@@ -1561,8 +1588,8 @@ void run_kokkos_mixed_congruent_workspace_test(const auto& test) {
   using vector_t = decltype(test.get_exact_x());
   const size_t size = test.get_exact_x().extent(0);
 
-  const auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = 1e-6});
-  vector_t grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size);
+  vector_t grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size), p("p", size);
+  const auto pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = 1e-6}, p);
 
   // Fresh storage
   vector_t x_fresh("x_fresh", size);
@@ -1684,6 +1711,10 @@ TEST(Convex, MundyMathAnalyticalSolutions) {
                                     math_backend::RandomLCP<3>{},                      //
                                     math_backend::RandomLCP<7>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_test(test_case), ...); }, test_cases);
+
+  // MPRGP, over the lower-bounded problems
+  run_mundy_math_test(math_backend::RandomLCP<3>{}, MPRGPPGD{});
+  run_mundy_math_test(math_backend::RandomLCP<7>{}, MPRGPPGD{});
 }
 
 TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
@@ -1694,6 +1725,10 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
                                     CongruentLCPWrapper{math_backend::RandomLCP<3>{}},                      //
                                     CongruentLCPWrapper{math_backend::RandomLCP<7>{}});
   std::apply([](auto&&... test_case) { (run_mundy_math_congruent_test(test_case), ...); }, test_cases);
+
+  // MPRGP, over the lower-bounded problems
+  run_mundy_math_congruent_test(CongruentLCPWrapper{math_backend::RandomLCP<3>{}}, MPRGPPGD{});
+  run_mundy_math_congruent_test(CongruentLCPWrapper{math_backend::RandomLCP<7>{}}, MPRGPPGD{});
 }
 
 TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
@@ -1702,41 +1737,50 @@ TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test_in_kernel(test_case), ...); }, test_cases);
+  std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case, MPRGPPGD{}), ...); },
+             test_cases);
+  std::apply(
+      [](auto&&... test_case) { (run_mundy_math_mixed_congruent_test_in_kernel(test_case, MPRGPPGD{}), ...); },
+      test_cases);
 }
 
 // PGD commutes with scaling the problem: (c A, c q) to tolerance c tol has the same minimizer, its steps scale as 1/c
-// and its gradients as c. A power-of-two c scales exactly, so the scaled solves match the unscaled one bit for bit.
+// and its gradients as c. A power-of-two c scales exactly, so the scaled solves match the unscaled one bit for bit,
+// under Barzilai-Borwein and under MPRGP steps.
 TEST(Convex, PGDIsScaleInvariant) {
   const math_backend::RandomLCP<7> test;
   using vector_t = decltype(test.get_exact_solution());
-  const auto make_pgd = [](double tol) {
-    return make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{},
-                                      PGDConfig<double>{.max_iters = 1000, .tol = tol});
+  const auto make_bb = [](const PGDConfig<double>& cfg, vector_t& /*p*/) {
+    return make_pgd_solution_strategy(BBStepStrategy{}, LinfNormProjectedGradientResidual{}, cfg);
   };
+  const auto expect_scale_invariant = [&](const auto& make_pgd, std::string_view steps) {
+    // Unscaled
+    vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
+    x.fill(99.99);
+    const auto pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = 1e-12}, p);
+    auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
+    const auto unscaled =
+        solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A(), test.get_q(), test.get_space()), pgd, state);
+    ASSERT_TRUE(unscaled.converged) << steps << ": " << unscaled;
 
-  // Unscaled
-  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
-  x.fill(99.99);
-  auto state = make_pgd_state(make_pgd(1e-12), x, grad, x_tmp, grad_tmp);
-  const auto unscaled =
-      solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A(), test.get_q(), test.get_space()), make_pgd(1e-12), state);
-  ASSERT_TRUE(unscaled.converged) << unscaled;
-
-  // Scaled by 2^-20 and 2^-40
-  for (const int exponent : {-20, -40}) {
-    const double c = std::ldexp(1.0, exponent);
-    vector_t x_scaled{}, grad_scaled{}, x_tmp_scaled{}, grad_tmp_scaled{};
-    x_scaled.fill(99.99);
-    auto scaled_state =
-        make_pgd_state(make_pgd(c * 1e-12), x_scaled, grad_scaled, x_tmp_scaled, grad_tmp_scaled);
-    const auto scaled = solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A() * c, test.get_q() * c, test.get_space()),
-                                   make_pgd(c * 1e-12), scaled_state);
-    EXPECT_TRUE(scaled.converged) << "c = 2^" << exponent << ": " << scaled;
-    EXPECT_EQ(scaled.num_iters, unscaled.num_iters) << "c = 2^" << exponent;
-    for (size_t i = 0; i < vector_t::size; ++i) {
-      EXPECT_EQ(x_scaled[i], x[i]) << "c = 2^" << exponent << ", entry " << i;
+    // Scaled by 2^-20 and 2^-40
+    for (const int exponent : {-20, -40}) {
+      const double c = std::ldexp(1.0, exponent);
+      vector_t x_scaled{}, grad_scaled{}, x_tmp_scaled{}, grad_tmp_scaled{}, p_scaled{};
+      x_scaled.fill(99.99);
+      const auto scaled_pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = c * 1e-12}, p_scaled);
+      auto scaled_state = make_pgd_state(scaled_pgd, x_scaled, grad_scaled, x_tmp_scaled, grad_tmp_scaled);
+      const auto scaled = solve_cqpp(
+          make_cqpp<MundyMathBackend>(test.get_A() * c, test.get_q() * c, test.get_space()), scaled_pgd, scaled_state);
+      EXPECT_TRUE(scaled.converged) << steps << ", c = 2^" << exponent << ": " << scaled;
+      EXPECT_EQ(scaled.num_iters, unscaled.num_iters) << steps << ", c = 2^" << exponent;
+      for (size_t i = 0; i < vector_t::size; ++i) {
+        EXPECT_EQ(x_scaled[i], x[i]) << steps << ", c = 2^" << exponent << ", entry " << i;
+      }
     }
-  }
+  };
+  expect_scale_invariant(make_bb, "Barzilai-Borwein");
+  expect_scale_invariant(MPRGPPGD{}, "MPRGP");
 }
 
 // Projected Barzilai-Borwein steps can cycle, and a nonmonotone line search ends the cycle. Two rows at an angle delta,
@@ -1768,6 +1812,41 @@ TEST(Convex, NonmonotonePGDEndsBBCycle) {
   ASSERT_TRUE(result.converged) << result;
   EXPECT_EQ(x[0], 0.0);
   EXPECT_NEAR(x[1], 1.0 + eps, 1e-12);
+}
+
+// Rows that nearly duplicate each other stall projected gradient steps; MPRGP's conjugate gradient steps settle them.
+// Two rows at an angle delta = 1e-3, the second asking slightly more, as a row re-linearized at a nearby configuration:
+// 0 <= A x + q _|_ x >= 0 with A = [[1, cos delta], [cos delta, 1]], condition number ~4 / delta^2 = 4e6, and
+// q = -(1, 1 + eps) is solved by x* = (0, 1 + eps) alone, the first row slack by (1 + eps) cos delta - 1 = 5e-7.
+// Started from the first row loaded, x = (1, 0), Barzilai-Borwein steps under the line search do not find within 1000
+// steps that the first row ends slack.
+TEST(Convex, MPRGPSettlesNearDuplicateRows) {
+  constexpr double delta = 1e-3;
+  constexpr double eps = 1e-6;
+  using vector_t = Vector<double, 2>;
+  const Matrix<double, 2, 2> A{1.0, std::cos(delta), std::cos(delta), 1.0};
+  const vector_t q{-1.0, -1.0 - eps};
+  const LowerBoundSpace<double> space(0.0);
+  const auto problem = make_cqpp<MundyMathBackend>(A, q, space);
+  const PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-12};
+
+  // Barzilai-Borwein steps under the line search
+  const auto nonmonotone =
+      make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, LinfNormProjectedGradientResidual{}, cfg);
+  vector_t x_nonmonotone{1.0, 0.0}, grad{}, x_tmp{}, grad_tmp{};
+  auto nonmonotone_state = make_pgd_state(nonmonotone, x_nonmonotone, grad, x_tmp, grad_tmp);
+  const PGDResult<double> nonmonotone_result = solve_cqpp(problem, nonmonotone, nonmonotone_state);
+  EXPECT_FALSE(nonmonotone_result.converged) << nonmonotone_result;
+
+  // MPRGP steps
+  vector_t x{1.0, 0.0}, p{};
+  const auto mprgp = MPRGPPGD{}(cfg, p);
+  auto state = make_pgd_state(mprgp, x, grad, x_tmp, grad_tmp);
+  const PGDResult<double> result = solve_cqpp(problem, mprgp, state);
+  ASSERT_TRUE(result.converged) << result;
+  EXPECT_EQ(x[0], 0.0);
+  EXPECT_NEAR(x[1], 1.0 + eps, 1e-12);
+  EXPECT_LE(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, A * x + q, space), cfg.tol);
 }
 
 // Over x >= 0, x is optimal when grad_i = 0 where x_i > 0 and grad_i >= 0 where x_i = 0. Both residuals measure the
@@ -1812,6 +1891,12 @@ TEST(Convex, KokkosAnalyticalSolutions) {
                                     kokkos_backend::RandomLCP{200});
   std::apply([](auto&&... test_case) { (run_kokkos_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_kokkos_test(kokkos_backend::as_sparse(test_case)), ...); }, test_cases);
+
+  // MPRGP, over the lower-bounded problems
+  for (const unsigned size : {3u, 7u, 200u}) {
+    run_kokkos_test(kokkos_backend::RandomLCP{size}, MPRGPPGD{});
+    run_kokkos_test(kokkos_backend::as_sparse(kokkos_backend::RandomLCP{size}), MPRGPPGD{});
+  }
 }
 
 TEST(Convex, KokkosCongruentAnalyticalSolutions) {
@@ -1829,6 +1914,13 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
   std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
              test_cases);
+
+  // MPRGP, over the lower-bounded problems
+  for (const unsigned size : {3u, 7u, 200u}) {
+    run_kokkos_congruent_test(CongruentLCPWrapper{kokkos_backend::RandomLCP{size}}, MPRGPPGD{});
+    run_kokkos_congruent_test(kokkos_backend::as_sparse(CongruentLCPWrapper{kokkos_backend::RandomLCP{size}}),
+                              MPRGPPGD{});
+  }
 }
 
 TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
@@ -1842,6 +1934,12 @@ TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case)), ...); },
              test_cases);
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_mixed_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+      },
+      test_cases);
 }
 
 TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
@@ -1858,6 +1956,12 @@ TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
       [](auto&&... test_case) {
         (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
         (run_kokkos_mixed_congruent_shared_s_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
+      },
+      test_cases);
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_mixed_congruent_workspace_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
       },
       test_cases);
 }

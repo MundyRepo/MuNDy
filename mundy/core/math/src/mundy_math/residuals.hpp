@@ -195,6 +195,14 @@ struct ChangeResidual {
     return abs(current - previous);
   }
 };
+
+/// \brief res = |current - previous| / |current| (relative). Scale-independent, unlike ChangeResidual.
+struct RelativeChangeResidual {
+  template <class Scalar>
+  KOKKOS_FUNCTION Scalar operator()(Scalar current, Scalar previous) const {
+    return abs(current - previous) / abs(current);
+  }
+};
 //@}
 
 }  // namespace mundy
