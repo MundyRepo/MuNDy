@@ -29,16 +29,15 @@
 // C++ core
 #include <algorithm>  // for std::max
 #include <bit>        // for std::bit_cast
-#include <cmath>      // for std::abs, std::sqrt, std::pow, std::exp, std::log, std::atan2
+#include <cmath>      // for std::abs, std::sqrt, std::pow, std::exp, std::log, std::atan2, std::asin, std::lround
 #include <cstdint>    // for uint64_t
 #include <cstring>    // for std::memcmp
 #include <limits>     // for std::numeric_limits
 #include <map>        // for std::map
 #include <random>     // for std::mt19937, std::uniform_real_distribution
 #include <stdexcept>  // for std::invalid_argument, std::runtime_error
-#include <sstream>    // for std::ostringstream
 #include <string>     // for std::to_string
-#include <utility>    // for std::swap
+#include <utility>    // for std::pair, std::swap
 #include <vector>     // for std::vector
 
 // Mundy
@@ -548,6 +547,11 @@ bool lcp_converged(const MixedLCPResult& result) {
 
 /// \brief Whether the mixed LCP solve of a mixed SLCP step's returned linearization converged.
 bool lcp_converged(const MixedSLCPResult& result) {
+  return result.accepted_lcp_result.converged;
+}
+
+/// \brief Whether the mixed LCP solve of a mixed ReLCP step's returned linearization converged.
+bool lcp_converged(const MixedReLCPResult& result) {
   return result.accepted_lcp_result.converged;
 }
 
@@ -2934,20 +2938,18 @@ TEST(Mbody, IterationsDoNotAllocate) {
   ASSERT_LT(isotropic_short.num_iters, isotropic_long.num_iters);
   EXPECT_EQ(isotropic_short_allocations, isotropic_long_allocations);
 
-  // The unilateral block alone, by PGD to different tolerances
+  // The unilateral block alone, by PGD from its solution and from zero
   const auto row = make_sphere_row_problem();
-  MixedLCPConfig loose = row.cfg;
-  loose.outer_tol = 1e-4;
-  MixedLCPConfig tight = row.cfg;
-  tight.outer_tol = 1e-12;
-  lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, tight);
-  const auto [unilateral_loose, unilateral_loose_allocations] =
-      lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, loose);
-  const auto [unilateral_tight, unilateral_tight_allocations] =
-      lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, tight);
-  ASSERT_TRUE(unilateral_loose.converged && unilateral_tight.converged) << unilateral_loose << "\n" << unilateral_tight;
-  ASSERT_LT(unilateral_loose.num_iters, unilateral_tight.num_iters);
-  EXPECT_EQ(unilateral_loose_allocations, unilateral_tight_allocations);
+  const auto solved = copy_to<HostExecSpace>(row.constraints);
+  ASSERT_TRUE(solve_on_device(copy_to<HostExecSpace>(row.rods), solved, row.mobility_model, row.dt, row.cfg).converged);
+  lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, row.cfg);
+  const auto [unilateral_solved, unilateral_solved_allocations] =
+      lcp_allocations(row.rods, solved, row.mobility_model, row.dt, row.cfg);
+  const auto [unilateral_zero, unilateral_zero_allocations] =
+      lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, row.cfg);
+  ASSERT_TRUE(unilateral_solved.converged && unilateral_zero.converged) << unilateral_solved << "\n" << unilateral_zero;
+  ASSERT_LT(unilateral_solved.num_iters, unilateral_zero.num_iters);
+  EXPECT_EQ(unilateral_solved_allocations, unilateral_zero_allocations);
 }
 
 /// \brief A pendulum's angle from -y before and after each step, its constraint error after each, and their results.
@@ -3424,12 +3426,11 @@ TEST(Mbody, SlcpHoldsBilateralRowsAtStepEnd) {
 /// y that lowers the +x end load it. Every rod has radius 0.1 and length 2, so the rod rests level at height
 /// sqrt((2 r)^2 - half_width^2). Its pairs with the rails are ReLCP contacts with Rule's separation.
 template <typename Rule = SpherocylinderSeparation>
-auto make_groove_problem(double dt, double push, double torque) {
+auto make_groove_problem(double dt, double push, double torque, double gap = 0.02) {
   constexpr double radius = 0.1;
   constexpr double length = 2.0;
   constexpr double half_width = 0.1;
   constexpr double tilt = 0.15;
-  constexpr double gap = 0.02;
   const double rest_height = std::sqrt(4.0 * radius * radius - half_width * half_width);
 
   RodViews<HostExecSpace> rods(3);
@@ -3484,49 +3485,293 @@ double largest_overlap(const RodViews<Space>& rods, const ReLCPContactViews<Spac
   return Kokkos::max(largest, 0.0);
 }
 
-TEST(Mbody, ReLCPProbe) {
+/// \brief The groove problem under torque with a free rod 3 hanging from rod 2's +x tip by a rigid tip-to-tip link of
+/// length 0.3.
+///
+/// Rod 3 lies along y, its -y tip 0.3 beyond rod 2's +x tip in x, and is pulled by (0, -2, -1) and twisted about x,
+/// so that the link swings through the step.
+auto make_linked_groove_problem(double dt, double torque) {
+  const auto groove = make_groove_problem(dt, 1.0, torque);
+  RodViews<HostExecSpace> rods(4);
+  zero_rod_state(rods);
+  for (size_t k = 0; k < 3; ++k) {
+    rods.center(k) = Vector3d(groove.rods.center(k));
+    rods.orientation(k) = Quaterniond(groove.rods.orientation(k));
+    rods.radius(k) = groove.rods.radius(k);
+    rods.length(k) = groove.rods.length(k);
+    rods.force(k) = Vector3d(groove.rods.force(k));
+    rods.torque(k) = Vector3d(groove.rods.torque(k));
+  }
+  const double half_length = 0.5 * rods.length(2);
+  const Vector3d tip_2 = Vector3d(rods.center(2)) + Quaterniond(rods.orientation(2)) * Vector3d{0.0, 0.0, half_length};
+  rods.orientation(3) = axis_angle_to_quaternion(Vector3d{1.0, 0.0, 0.0}, -0.5 * Kokkos::numbers::pi_v<double>);
+  rods.center(3) = tip_2 + Vector3d{0.3, half_length, 0.0};
+  rods.radius(3) = rods.radius(2);
+  rods.length(3) = rods.length(2);
+  rods.force(3) = Vector3d{0.0, -2.0, -1.0};
+  rods.torque(3) = Vector3d{1.0, 0.0, 0.0};
+
+  FixedLengthViews<HostExecSpace> link(1);
+  link.rod_i(0) = 2;
+  link.rod_j(0) = 3;
+  link.body_offset_i(0) = Vector3d{0.0, 0.0, half_length};
+  link.body_offset_j(0) = Vector3d{0.0, 0.0, -half_length};
+  link.rest_length(0) = 0.3;
+  return SolveInput{rods,
+                    make_constraint_set(get<FixedPoseViews<HostExecSpace>>(groove.constraints), link,
+                                        get<ReLCPContactViews<HostExecSpace>>(groove.constraints)),
+                    groove.mobility_model, dt, groove.cfg};
+}
+
+// A rod pushed into a groove settles level on both rails at the center height sqrt((2 r)^2 - w^2), exact at rest,
+// never overlapping a rail by more than length_tol. Along the frictionless rails a level rod has no rest position, so
+// its steady state is a slide, reached by t = 10 at every dt; the height error, tilt, and slide speed there all fall
+// with dt at order 2 (observed 2.05-2.12). The same pairs linearized only at C^k keep the rod moving at O(0.1).
+TEST(Mbody, ReLCPSettlesInGroove) {
+  constexpr double length_tol = 1e-6;
+  constexpr double duration = 10.0;
   const double rest_height = std::sqrt(0.04 - 0.01);
-  const double outer_tol = std::getenv("PROBE_OUTER_TOL") ? std::atof(std::getenv("PROBE_OUTER_TOL")) : 1e-12;
-  const unsigned max_outer = std::getenv("PROBE_MAX_OUTER") ? std::atoi(std::getenv("PROBE_MAX_OUTER")) : 1000;
-  for (const double dt : {0.3, 0.1, 0.05, 0.02}) {
-    for (const bool relcp : {true}) {
-      auto p = make_groove_problem(dt, 1.0, 0.4);
-      p.cfg.outer_tol = outer_tol;
-      p.cfg.max_outer_iters = max_outer;
+  const std::vector<double> dts = {0.1, 0.05, 0.02};
+  std::vector<double> height_error, tilt, speed;
+  for (const double dt : dts) {
+    const auto p = make_groove_problem(dt, 1.0, 0.4);
+    const int num_steps = static_cast<int>(std::lround(duration / dt));
+
+    // ReLCP
+    {
+      const auto rods = copy_to<TestExecSpace>(p.rods);
+      const auto pairs = copy_to<TestExecSpace>(get<ReLCPContactViews<HostExecSpace>>(p.constraints));
+      const auto load = copy_load(rods);
+      const auto integrator =
+          make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt);
+      const MixedReLCPConfig cfg{p.cfg, 20, length_tol, length_tol, false};
+      for (int step = 0; step < num_steps; ++step) {
+        const MixedReLCPResult result = step_rods(integrator, cfg, load);
+        ASSERT_TRUE(result.converged && lcp_converged(result)) << result << " at dt=" << dt << ", step " << step;
+        ASSERT_LE(largest_overlap(rods, pairs), length_tol) << "at dt=" << dt << ", step " << step;
+      }
+      const auto end = copy_to<HostExecSpace>(rods);
+      height_error.push_back(std::abs(end.center(2)[2] - rest_height));
+      tilt.push_back(std::abs(std::asin((Quaterniond(end.orientation(2)) * Vector3d{0.0, 0.0, 1.0})[2])));
+      speed.push_back(max_step_displacement(rods, dt) / dt);
+    }
+
+    // The pairs linearized only at C^k
+    {
       const auto rods = copy_to<TestExecSpace>(p.rods);
       const auto load = copy_load(rods);
-      const auto pairs = copy_to<TestExecSpace>(get<ReLCPContactViews<HostExecSpace>>(p.constraints));
-      double overlap = 0.0;
-      unsigned most_iters = 0, unconverged = 0;
-      int steps = 0;
-      const int num_steps = static_cast<int>(std::lround(30.0 / dt));
-      try {
-        if (relcp) {
-          const auto integrator = make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt);
-          for (; steps < num_steps; ++steps) {
-            const auto r = step_rods(integrator, MixedReLCPConfig{p.cfg, 50, 1e-6, 1e-6, false}, load);
-            most_iters = std::max(most_iters, r.num_iters);
-            unconverged += !r.converged;
-            overlap = std::max(overlap, largest_overlap(rods, pairs));
-          }
-        } else {
-          const auto integrator = make_mixed_lcp_integrator(rods, with_contact_views(copy_to<TestExecSpace>(p.constraints)), p.mobility_model, dt);
-          for (; steps < num_steps; ++steps) {
-            step_rods(integrator, p.cfg, load);
-            overlap = std::max(overlap, largest_overlap(rods, pairs));
-          }
-        }
-      } catch (const std::exception& e) {
-        std::printf("dt %.3g %s threw at step %d: %s\n", dt, relcp ? "ReLCP" : "LCP", steps, e.what());
-        continue;
+      const auto integrator = make_mixed_lcp_integrator(
+          rods, with_contact_views(copy_to<TestExecSpace>(p.constraints)), p.mobility_model, dt);
+      for (int step = 0; step < num_steps; ++step) {
+        ASSERT_TRUE(lcp_converged(step_rods(integrator, p.cfg, load))) << "at dt=" << dt << ", step " << step;
       }
-      const auto h = copy_to<HostExecSpace>(rods);
-      const Vector3d t = Quaterniond(h.orientation(2)) * Vector3d{0.0, 0.0, 1.0};
-      std::printf("dt %.3g %-5s speed %.2e overlap %.3e height_err %+.3e tilt %+.3e most_iters %u unconverged %u\n", dt,
-                  relcp ? "ReLCP" : "LCP", max_step_displacement(rods, dt) / dt, overlap,
-                  h.center(2)[2] - rest_height, std::asin(t[2]), most_iters, unconverged);
+      EXPECT_GT(max_step_displacement(rods, dt) / dt, 0.1) << "at dt=" << dt;
     }
   }
+
+  // Order of the steady state's error
+  for (size_t k = 0; k + 1 < dts.size(); ++k) {
+    const double refinement = std::log(dts[k] / dts[k + 1]);
+    EXPECT_GE(std::log(height_error[k] / height_error[k + 1]) / refinement, 1.8) << "dt=" << dts[k + 1];
+    EXPECT_GE(std::log(tilt[k] / tilt[k + 1]) / refinement, 1.8) << "dt=" << dts[k + 1];
+    EXPECT_GE(std::log(speed[k] / speed[k + 1]) / refinement, 1.8) << "dt=" << dts[k + 1];
+  }
+}
+
+// One large step of the groove rod, turned far enough that its +x end swings down onto the rails: its pairs linearized
+// only at C^k, at its -x end, let it sink into them, and ReLCP, which constrains them again where its iterates leave
+// them overlapping, ends the step overlapping by at most length_tol.
+TEST(Mbody, ReLCPResolvesOverlap) {
+  constexpr double dt = 0.5;
+  const auto p = make_groove_problem(dt, 1.0, 4.0);
+  const auto pairs = copy_to<TestExecSpace>(get<ReLCPContactViews<HostExecSpace>>(p.constraints));
+
+  // The pairs linearized only at C^k
+  {
+    const auto rods = copy_to<TestExecSpace>(p.rods);
+    const auto load = copy_load(rods);
+    ASSERT_TRUE(lcp_converged(step_rods(make_mixed_lcp_integrator(rods, with_contact_views(copy_to<TestExecSpace>(
+                                                                              p.constraints)),
+                                                                    p.mobility_model, dt),
+                                        p.cfg, load)));
+    EXPECT_GT(largest_overlap(rods, pairs), 1e-3);
+  }
+
+  // ReLCP
+  for (const double length_tol : {1e-3, 1e-6, 1e-9}) {
+    const auto rods = copy_to<TestExecSpace>(p.rods);
+    const auto load = copy_load(rods);
+    const MixedReLCPResult result = step_rods(
+        make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt),
+        MixedReLCPConfig{p.cfg, 20, length_tol, length_tol, false}, load);
+    ASSERT_TRUE(result.converged && lcp_converged(result)) << result << " at length_tol=" << length_tol;
+    EXPECT_GT(result.num_iters, 1u) << "at length_tol=" << length_tol;
+    EXPECT_LE(largest_overlap(rods, pairs), length_tol) << "at length_tol=" << length_tol;
+  }
+}
+
+// ReLCP's first iterate solves every pair's row at C^k, the mixed LCP's step, which a step that stops there returns
+// bit for bit: with the rod starting on the rails, a step turning its +x end down onto them at max_iters = 1,
+// unconverged; and a step small enough that no pair ends it overlapping by length_tol, converged after one solve
+// while the rod presses on the rails.
+// Serial execution fixes the order of every atomic sum.
+TEST(Mbody, ReLCPFirstLinearizationIsTheLCP) {
+  struct Case {
+    double dt;
+    double torque;
+    unsigned max_iters;
+  };
+  for (const Case& c : {Case{0.5, 4.0, 1u}, Case{1e-4, 0.4, 20u}}) {
+    const double dt = c.dt;
+    const unsigned max_iters = c.max_iters;
+    const auto p = make_groove_problem(dt, 1.0, c.torque, /*gap=*/0.0);
+    const auto rods_lcp = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_lcp = copy_to<Kokkos::Serial>(p.constraints);
+    const auto rods_relcp = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_relcp = copy_to<Kokkos::Serial>(p.constraints);
+
+    // Solve
+    const MixedLCPResult lcp =
+        solve_step(make_mixed_lcp_integrator(rods_lcp, constraints_lcp, p.mobility_model, dt), p.cfg);
+    const MixedReLCPResult relcp =
+        solve_step(make_mixed_relcp_integrator(rods_relcp, constraints_relcp, p.mobility_model, dt),
+                   MixedReLCPConfig{p.cfg, max_iters, 1e-6, 1e-6, false});
+    const auto& pairs_lcp = get<ReLCPContactViews<Kokkos::Serial>>(constraints_lcp);
+    EXPECT_EQ(relcp.num_iters, 1u) << "dt=" << dt;
+    if (max_iters == 1) {
+      EXPECT_FALSE(relcp.converged) << relcp << " at dt=" << dt;
+    } else {
+      EXPECT_TRUE(relcp.converged) << relcp << " at dt=" << dt;
+      ASSERT_GT(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, pairs_lcp.lambda_view())(0), 0.0)
+          << "the rod should press on the rails at dt=" << dt;
+    }
+
+    // The returned step
+    EXPECT_EQ(relcp.accepted_lcp_result.num_iters, lcp.num_iters) << "dt=" << dt;
+    EXPECT_EQ(std::bit_cast<uint64_t>(relcp.accepted_lcp_result.residual), std::bit_cast<uint64_t>(lcp.residual))
+        << "dt=" << dt;
+    EXPECT_EQ(count_bit_differences(rods_relcp.force_torque_view(), rods_lcp.force_torque_view()), 0u) << "dt=" << dt;
+    EXPECT_EQ(count_bit_differences(rods_relcp.velocity_omega_view(), rods_lcp.velocity_omega_view()), 0u)
+        << "dt=" << dt;
+    EXPECT_EQ(count_bit_differences(get<ReLCPContactViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                    pairs_lcp.lambda_view()),
+              0u)
+        << "dt=" << dt;
+    EXPECT_EQ(count_bit_differences(get<FixedPoseViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                    get<FixedPoseViews<Kokkos::Serial>>(constraints_lcp).lambda_view()),
+              0u)
+        << "dt=" << dt;
+  }
+}
+
+// With re-linearized bilateral rows and no ReLCP pairs, a ReLCP step has nothing to augment and is the SLCP step, bit
+// for bit, on the fallback problem, whose contact is a ContactViews family. Serial execution fixes the order of every
+// atomic sum.
+TEST(Mbody, RelinearizedReLCPWithoutReLCPPairsIsTheSLCP) {
+  const auto p = make_fallback_problem();
+  const auto rods_slcp = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_slcp = copy_to<Kokkos::Serial>(p.constraints);
+  const auto rods_relcp = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_relcp = copy_to<Kokkos::Serial>(p.constraints);
+
+  // Solve
+  const MixedSLCPResult slcp =
+      solve_step(make_mixed_slcp_integrator(rods_slcp, constraints_slcp, p.mobility_model, p.dt),
+                 MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9});
+  const MixedReLCPResult relcp =
+      solve_step(make_mixed_relcp_integrator(rods_relcp, constraints_relcp, p.mobility_model, p.dt),
+                 MixedReLCPConfig{p.cfg, 1000, 1e-9, 1e-9, true});
+  ASSERT_TRUE(slcp.converged) << slcp;
+  ASSERT_GT(slcp.num_iters, 1u);
+
+  // The step
+  EXPECT_EQ(relcp.num_iters, slcp.num_iters);
+  EXPECT_EQ(std::bit_cast<uint64_t>(relcp.residual), std::bit_cast<uint64_t>(slcp.residual));
+  EXPECT_EQ(relcp.converged, slcp.converged);
+  EXPECT_EQ(count_bit_differences(rods_relcp.force_torque_view(), rods_slcp.force_torque_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_relcp.velocity_omega_view(), rods_slcp.velocity_omega_view()), 0u);
+  EXPECT_EQ(count_bit_differences(get<ContactViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                  get<ContactViews<Kokkos::Serial>>(constraints_slcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<LinearSpringViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                  get<LinearSpringViews<Kokkos::Serial>>(constraints_slcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<PinViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                  get<PinViews<Kokkos::Serial>>(constraints_slcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedLengthViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                  get<FixedLengthViews<Kokkos::Serial>>(constraints_slcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedPositionViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                  get<FixedPositionViews<Kokkos::Serial>>(constraints_slcp).lambda_view()),
+            0u);
+  EXPECT_EQ(count_bit_differences(get<FixedPoseViews<Kokkos::Serial>>(constraints_relcp).lambda_view(),
+                                  get<FixedPoseViews<Kokkos::Serial>>(constraints_slcp).lambda_view()),
+            0u);
+}
+
+// A rigid link swinging through a step that turns its rod's +x end down onto the rails: ReLCP ends the step
+// overlapping by at most length_tol either way, and the link, held at C^k alone without re-linearization, is off its
+// length by more than length_tol, while re-linearized it holds to length_tol too.
+TEST(Mbody, ReLCPHoldsBilateralRowsWhenRelinearized) {
+  constexpr double dt = 0.5;
+  constexpr double length_tol = 1e-6;
+  const auto p = make_linked_groove_problem(dt, 4.0);
+  const auto pairs = copy_to<TestExecSpace>(get<ReLCPContactViews<HostExecSpace>>(p.constraints));
+  for (const bool relinearize_bilateral : {false, true}) {
+    const auto rods = copy_to<TestExecSpace>(p.rods);
+    const auto load = copy_load(rods);
+    const MixedReLCPResult result = step_rods(
+        make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt),
+        MixedReLCPConfig{p.cfg, 20, length_tol, length_tol, relinearize_bilateral}, load);
+    ASSERT_TRUE(result.converged && lcp_converged(result)) << result << " relinearized=" << relinearize_bilateral;
+    EXPECT_GT(result.num_iters, 1u) << "relinearized=" << relinearize_bilateral;
+    EXPECT_LE(largest_overlap(rods, pairs), length_tol) << "relinearized=" << relinearize_bilateral;
+
+    // The link's length at the step's end
+    const auto end = copy_to<HostExecSpace>(rods);
+    const double half_length = 0.5 * end.length(2);
+    const Vector3d tip_2 = Vector3d(end.center(2)) + Quaterniond(end.orientation(2)) * Vector3d{0.0, 0.0, half_length};
+    const Vector3d tip_3 = Vector3d(end.center(3)) + Quaterniond(end.orientation(3)) * Vector3d{0.0, 0.0, -half_length};
+    const double link_error = std::abs(norm(tip_3 - tip_2) - 0.3);
+    if (relinearize_bilateral) {
+      EXPECT_LE(link_error, length_tol);
+    } else {
+      EXPECT_GT(link_error, length_tol);
+    }
+  }
+}
+
+// A rule reserving no generated rows grows the reserve when a step generates its first, and steps exactly as the
+// default reserve does, bit for bit. Serial execution fixes the order of every atomic sum.
+TEST(Mbody, ReLCPGrowsItsReserve) {
+  constexpr double dt = 0.5;
+  const auto reserved = make_groove_problem(dt, 1.0, 4.0);
+  const auto unreserved = make_groove_problem<UnreservedSpherocylinderSeparation>(dt, 1.0, 4.0);
+  const auto rods_reserved = copy_to<Kokkos::Serial>(reserved.rods);
+  const auto constraints_reserved = copy_to<Kokkos::Serial>(reserved.constraints);
+  const auto rods_unreserved = copy_to<Kokkos::Serial>(unreserved.rods);
+  const auto constraints_unreserved = copy_to<Kokkos::Serial>(unreserved.constraints);
+  const MixedReLCPConfig cfg{reserved.cfg, 20, 1e-6, 1e-6, false};
+
+  // Solve
+  const MixedReLCPResult from_reserve = solve_step(
+      make_mixed_relcp_integrator(rods_reserved, constraints_reserved, reserved.mobility_model, dt), cfg);
+  const MixedReLCPResult grown = solve_step(
+      make_mixed_relcp_integrator(rods_unreserved, constraints_unreserved, unreserved.mobility_model, dt), cfg);
+  ASSERT_TRUE(from_reserve.converged) << from_reserve;
+  ASSERT_GT(from_reserve.num_iters, 1u) << "the step should generate rows";
+
+  // The step
+  EXPECT_EQ(grown.num_iters, from_reserve.num_iters);
+  EXPECT_EQ(std::bit_cast<uint64_t>(grown.residual), std::bit_cast<uint64_t>(from_reserve.residual));
+  EXPECT_EQ(count_bit_differences(rods_unreserved.force_torque_view(), rods_reserved.force_torque_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_unreserved.velocity_omega_view(), rods_reserved.velocity_omega_view()), 0u);
+  EXPECT_EQ(count_bit_differences(
+                get<ReLCPContactViews<Kokkos::Serial, UnreservedSpherocylinderSeparation>>(constraints_unreserved)
+                    .lambda_view(),
+                get<ReLCPContactViews<Kokkos::Serial>>(constraints_reserved).lambda_view()),
+            0u);
 }
 
 //@}
@@ -3580,6 +3825,27 @@ std::map<std::pair<std::string, uint64_t>, size_t> held_lcp_allocations(const Ro
   });
 }
 
+/// \brief The allocations of two steps through a mixed ReLCP integrator of size-dt steps that has stepped once,
+/// unrecorded, on TestExecSpace copies of rods and constraints.
+template <typename Model, typename... Families>
+std::map<std::pair<std::string, uint64_t>, size_t> held_relcp_allocations(const RodViews<HostExecSpace>& rods,
+                                                                          const ConstraintSet<Families...>& constraints,
+                                                                          const Model& mobility_model, double dt,
+                                                                          const MixedReLCPConfig& cfg) {
+  const auto rods_d = copy_to<TestExecSpace>(rods);
+  const auto constraints_d = copy_to<TestExecSpace>(constraints);
+  const auto load_d = copy_load(rods_d);
+  const auto integrator = make_mixed_relcp_integrator(rods_d, constraints_d, mobility_model, dt);
+  reset_rod_state(rods_d, load_d);
+  solve_step(integrator, cfg);
+  return record_allocations([&] {
+    for (int step = 0; step < 2; ++step) {
+      reset_rod_state(rods_d, load_d);
+      solve_step(integrator, cfg);
+    }
+  });
+}
+
 /// \brief The label and size of each allocation, for failure messages.
 std::string allocation_labels(const std::map<std::pair<std::string, uint64_t>, size_t>& allocations) {
   std::string labels;
@@ -3591,7 +3857,7 @@ std::string allocation_labels(const std::map<std::pair<std::string, uint64_t>, s
 
 // A step through an integrator allocates nothing once a first step has sized its storage: both blocks,
 // unpreconditioned and preconditioned; the bilateral block alone under a caller's mobility, which has only a plain
-// apply; and the unilateral block alone.
+// apply; the unilateral block alone; and ReLCP pairs whose steps generate rows, with and without bilateral rows.
 TEST(Mbody, IntegratorStepsDoNotAllocate) {
   const auto p = make_fallback_problem();
   const auto& c = p.constraints;
@@ -3608,12 +3874,20 @@ TEST(Mbody, IntegratorStepsDoNotAllocate) {
   const auto bilateral_isotropic = held_slcp_allocations(
       p.rods, bilateral_only, IsotropicMobility{.m = 0.25, .m_rot = 1.0}, p.dt, cfg, NoPreconditioner{});
   const auto unilateral = held_lcp_allocations(row.rods, row.constraints, row.mobility_model, row.dt, row.cfg);
+  const auto groove = make_groove_problem(0.5, 1.0, 4.0);
+  const auto relcp = held_relcp_allocations(groove.rods, groove.constraints, groove.mobility_model, groove.dt,
+                                            MixedReLCPConfig{groove.cfg, 20, 1e-6, 1e-6, false});
+  const auto linked = make_linked_groove_problem(0.5, 4.0);
+  const auto relcp_linked = held_relcp_allocations(linked.rods, linked.constraints, linked.mobility_model, linked.dt,
+                                                   MixedReLCPConfig{linked.cfg, 20, 1e-6, 1e-6, true});
 
   // No allocation
   EXPECT_TRUE(both.empty()) << allocation_labels(both);
   EXPECT_TRUE(both_jacobi.empty()) << allocation_labels(both_jacobi);
   EXPECT_TRUE(bilateral_isotropic.empty()) << allocation_labels(bilateral_isotropic);
   EXPECT_TRUE(unilateral.empty()) << allocation_labels(unilateral);
+  EXPECT_TRUE(relcp.empty()) << allocation_labels(relcp);
+  EXPECT_TRUE(relcp_linked.empty()) << allocation_labels(relcp_linked);
 }
 
 // An integrator given storage sized for another layout of rods and constraints makes storage of its own. Integrators

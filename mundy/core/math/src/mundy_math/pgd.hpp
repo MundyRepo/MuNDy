@@ -657,6 +657,7 @@ class PGDStrategy {
 
     // x, grad = the next iterate and its gradient
     step_.step(prob, state);
+    ++state.iter();
 
     // residual & test, on A x + q itself before an iterate whose gradient was accumulated is accepted
     state.residual() = measure(backend, state.x(), state.grad(), prob.space());
@@ -677,7 +678,6 @@ class PGDStrategy {
     // roll x_tmp/grad_tmp forward
     backend_t::deep_copy(state.x_tmp(), state.x());
     backend_t::deep_copy(state.grad_tmp(), state.grad());
-    ++state.iter();
     return false;
   }
 

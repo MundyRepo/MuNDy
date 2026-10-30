@@ -51,7 +51,7 @@
 #include <mundy_math/lcp.hpp>              // for mundy::{make_lcp, solve_lcp}
 #include <mundy_math/linear_ops.hpp>       // for mundy::{make_concat_domain_op, make_scaled_op, make_sum_op, ...}
 #include <mundy_math/linear_system.hpp>    // for mundy::{CGConfig, make_cg_inv_op}
-#include <mundy_math/pgd.hpp>              // for mundy::{NonmonotoneBBStepStrategy, PGDConfig, PGDResult, ...}
+#include <mundy_math/pgd.hpp>              // for mundy::{make_mprgp_step_strategy, PGDConfig, PGDResult, ...}
 #include <mundy_math/residuals.hpp>        // for mundy::LinfNormProjectedGradientResidual
 #include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
 #include <mundy_mbody/KokkosMbodyMobility.hpp>         // for mundy::mbody::Mobility
@@ -2194,7 +2194,7 @@ class LinearizationWorkspace {
   size_t num_generated = 0;
   unilateral_geometry_t unilateral_geo;
   view_t q;
-  view_t q_rate;
+  view_t q_rate;  // rates while q is formed, and the unilateral solve's step direction: no use spans a solve
   view_t kinv;
   view_t u_free;
   view_t m_force_torque_ext;
@@ -2456,7 +2456,8 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
     view_t grad = subrange(workspace.grad, unilateral_rows);
     view_t x_tmp = subrange(workspace.x_tmp, unilateral_rows);
     view_t grad_tmp = subrange(workspace.grad_tmp, unilateral_rows);
-    auto pgd = make_pgd_solution_strategy(NonmonotoneBBStepStrategy<>{}, LinfNormProjectedGradientResidual{},
+    view_t direction = subrange(workspace.q_rate, unilateral_rows);
+    auto pgd = make_pgd_solution_strategy(make_mprgp_step_strategy(direction), LinfNormProjectedGradientResidual{},
                                           step.pgd_config);
     auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
     if (has_bilateral) {
