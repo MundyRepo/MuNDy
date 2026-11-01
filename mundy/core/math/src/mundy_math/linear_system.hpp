@@ -177,6 +177,10 @@ class CGState {
 /// residual is measured (ResidualPolicy, a VectorResidualPolicy) and the preconditioner P (a Preconditioner) are
 /// pluggable. The residual measured is that of A x = b, with or without P. CG starts from alpha x for the caller's
 /// guess x, alpha = x^T b / x^T A x, the multiple of x nearest the solution in the A-norm, wherever x^T A x > 0.
+///
+/// On return, the problem's workspace holds the intermediates of an apply at the returned x, and result.residual is
+/// measured on b - A x formed by that apply. A solve stopped by p^T A p <= 0 reports converged when b - A x meets the
+/// tolerance.
 template <class ResidualPolicy, class Config, class Precond = NoPreconditioner>
 class CGStrategy {
  public:
@@ -221,20 +225,17 @@ class CGStrategy {
     }
     backend_t::deep_copy(state.r(), prob.b());
     axpby(backend_t{}, -one, state.Ap(), one, state.r());  // r = b - A x0
-    if constexpr (is_preconditioned) {
-      backend_t::apply(precond(), state.r(), state.Ap());  // z = P r, held in Ap until the next A p
-      backend_t::deep_copy(state.p(), state.Ap());
-      state.r_dot_z() = dot(backend_t{}, state.r(), state.Ap());
-    } else {
-      backend_t::deep_copy(state.p(), state.r());
-      state.r_dot_z() = dot(backend_t{}, state.r(), state.r());
-    }
+    start_directions(prob, state);
 
+    // residual & test; a solve that ends here ends on b - A x0 itself
     state.residual() = measure(backend, state, prob.b());
     state.iter() = 0;
-    state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
-    if (state.converged()) {
-      impl::workspace_commit(workspace);
+    state.converged() = false;
+    if (state.residual() <= static_cast<value_type>(cfg_.tol) || cfg_.max_iters == 0) {
+      if (confirm(prob, state) || cfg_.max_iters == 0) {
+        return;
+      }
+      start_directions(prob, state);  // r is now b - A x0
     }
   }
 
@@ -243,17 +244,17 @@ class CGStrategy {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
     constexpr value_type one = static_cast<value_type>(1);
-    auto& workspace = prob.workspace();
 
     if (state.converged() || state.iter() >= cfg_.max_iters) {
       return state.converged();
     }
 
-    backend_t::apply(prob.A(), state.p(), state.Ap(), workspace);
+    backend_t::apply(prob.A(), state.p(), state.Ap(), prob.workspace());
     const value_type r_dot_z_old = state.r_dot_z();
     const value_type p_Ap = dot(backend_t{}, state.p(), state.Ap());
-    // p^T A p not positive: A is not positive definite on the Krylov space, so CG stops unconverged.
+    // p^T A p not positive: A is not positive definite on the Krylov space, so CG stops.
     if (!(p_Ap > static_cast<value_type>(0))) {
+      confirm(prob, state);
       return true;
     }
 
@@ -267,10 +268,12 @@ class CGStrategy {
     state.residual() = measure(backend, state, prob.b());
     ++state.iter();
 
-    if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
-      state.converged() = true;
-      impl::workspace_commit(workspace);
-      return true;
+    // residual & test; the solve ends on b - A x itself
+    const bool at_cap = state.iter() >= cfg_.max_iters;
+    if (state.residual() <= static_cast<value_type>(cfg_.tol) || at_cap) {
+      if (confirm(prob, state) || at_cap) {
+        return state.converged();
+      }
     }
 
     if constexpr (is_preconditioned) {
@@ -295,6 +298,39 @@ class CGStrategy {
 
  private:
   static constexpr bool is_preconditioned = !std::same_as<std::remove_cvref_t<Precond>, NoPreconditioner>;
+
+  /// \brief p, z = P r, and r^T z from r.
+  template <class Problem, class State>
+  KOKKOS_FUNCTION void start_directions(const Problem& prob, State& state) const {
+    using backend_t = decltype(prob.backend());
+    if constexpr (is_preconditioned) {
+      backend_t::apply(precond(), state.r(), state.Ap());  // z = P r, held in Ap until the next A p
+      backend_t::deep_copy(state.p(), state.Ap());
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.Ap());
+    } else {
+      backend_t::deep_copy(state.p(), state.r());
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.r());
+    }
+  }
+
+  /// \brief r := b - A x at x, its residual, and whether x converged.
+  template <class Problem, class State>
+  KOKKOS_FUNCTION bool confirm(const Problem& prob, State& state) const {
+    using backend_t = decltype(prob.backend());
+    constexpr value_type one = static_cast<value_type>(1);
+    backend_t::apply(prob.A(), state.x(), state.Ap(), prob.workspace());  // Ap is free at every exit
+    backend_t::deep_copy(state.r(), prob.b());
+    axpby(backend_t{}, -one, state.Ap(), one, state.r());
+    if constexpr (!is_preconditioned) {
+      state.r_dot_z() = dot(backend_t{}, state.r(), state.r());
+    }
+    state.residual() = measure(prob.backend(), state, prob.b());
+    state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
+    if (state.converged()) {
+      impl::workspace_commit(prob.workspace());
+    }
+    return state.converged();
+  }
 
   template <class Backend, class State, class BVector>
   KOKKOS_FUNCTION value_type measure(const Backend& backend, const State& state, const BVector& b) const {
@@ -371,8 +407,8 @@ KOKKOS_INLINE_FUNCTION auto make_cg_state(XVector&& x, RVector&& r, PVector&& p,
 
 /// \brief Solve A x = b for SPD A via CG.
 ///
-/// state.x() is the initial guess on entry (caller decides cold vs warm start) and the solution on exit. A
-/// converged result implies the operator's workspace is committed.
+/// state.x() is the initial guess on entry (caller decides cold vs warm start) and the solution on exit. What the
+/// problem's workspace holds on return, and what result.residual measures, are stated by the strategy.
 template <class Problem, class Strategy, class State>
 MUNDY_REQUIRES(requires(const Strategy& s, const Problem& prob, State& state) {
   { s.initialize(prob, state) } -> std::same_as<void>;

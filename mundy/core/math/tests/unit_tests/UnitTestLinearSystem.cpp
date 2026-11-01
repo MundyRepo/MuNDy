@@ -24,7 +24,7 @@
 #include <Kokkos_Core.hpp>
 
 // C++ core
-#include <cmath>      // for std::ldexp
+#include <cmath>      // for std::ldexp, std::sqrt
 #include <cstdint>    // for uint64_t
 #include <limits>     // for std::numeric_limits
 #include <stdexcept>  // for std::runtime_error
@@ -87,6 +87,23 @@ Vector7d diagonal7(const Matrix7d& A) {
     d[i] = A(i, i);
   }
   return d;
+}
+
+/// \brief Expects f, u and residual to be those of an apply of the quadratic form A at x: f = D x, u = M f, and the L2
+/// norm of b - A x.
+template <class QuadraticForm>
+void expect_ends_on_an_apply_at(const QuadraticForm& A, const Vector3d& b, const Vector3d& x, const Vector3d& f,
+                                const Vector3d& u, double residual) {
+  Vector3d f_at_x, u_at_x, A_x;
+  auto at_x = A.make_workspace(f_at_x, u_at_x);
+  mm_backend_t::apply(A, x, A_x, at_x);
+  Vector3d r = b;
+  axpby(mm_backend_t{}, -1.0, A_x, 1.0, r);
+  EXPECT_EQ(residual, L2Residual{}(mm_backend_t{}, r, b));
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(f[i], f_at_x[i]) << "entry " << i;
+    EXPECT_EQ(u[i], u_at_x[i]) << "entry " << i;
+  }
 }
 
 // Solves spd_matrix() x = spd_rhs() inside a kernel, constructing the LinearSystem there.
@@ -362,6 +379,7 @@ TEST(LinearSystem, NotPositiveDefiniteStopsEarly) {
   const auto result = solve_linear_system(prob, CGStrategy(L2Residual{}, cfg), state);
   EXPECT_FALSE(result.converged);
   EXPECT_EQ(result.num_iters, 1u);
+  EXPECT_EQ(result.residual, std::sqrt(1.5));  // b - A x = (-1/2, -1/2, 1)
   for (int i = 0; i < 3; ++i) {
     EXPECT_EQ(state.x()[i], 1.5);
   }
@@ -370,6 +388,78 @@ TEST(LinearSystem, NotPositiveDefiniteStopsEarly) {
   auto cg_inv = CGInvOp(mm_backend_t{}, Matrix3d(A), cfg);
   Vector3d out{0.0, 0.0, 0.0};
   EXPECT_THROW(cg_inv.apply(b, out), std::runtime_error);
+}
+
+// On A = D^T M D, whose workspace holds f = D x and u = M f, every solve ends on an apply at the x it returns: converged
+// from a cold start, converged in its start from the guess 2 x* (alpha = 1/2 exactly, as b is A's own apply at x*, so
+// x0 = x*), capped, and with no iteration from a rescaled guess.
+TEST(LinearSystem, SolvesEndOnAnApplyAtTheirSolution) {
+  const Matrix3d D{2.0, 0.5, 0.0,  //
+                   0.0, 1.0, 0.5,  //
+                   0.0, 0.0, 1.5};
+  const Matrix3d M = spd_matrix();
+  const auto A = make_quadratic_form<mm_backend_t>(transpose(D), M, D);
+  const Vector3d x_exact{1.0, -0.5, 0.25};
+  Vector3d b, f_b, u_b;
+  auto at_x_exact = A.make_workspace(f_b, u_b);
+  mm_backend_t::apply(A, x_exact, b, at_x_exact);
+
+  const auto solve = [&](const Vector3d& guess, unsigned max_iters, Vector3d& x, Vector3d& f, Vector3d& u) {
+    auto state = CGState(Vector3d(guess), Vector3d{}, Vector3d{}, Vector3d{});
+    const auto result = solve_linear_system(LinearSystem(mm_backend_t{}, A, Vector3d(b), A.make_workspace(f, u)),
+                                            CGStrategy(L2Residual{}, CGConfig<double>{.max_iters = max_iters}), state);
+    x = state.x();
+    return result;
+  };
+  Vector3d x, f, u;
+
+  // Cold start
+  const auto cold = solve(Vector3d{0.0, 0.0, 0.0}, 200, x, f, u);
+  EXPECT_TRUE(cold.converged);
+  EXPECT_GT(cold.num_iters, 0u);
+  expect_ends_on_an_apply_at(A, b, x, f, u, cold.residual);
+
+  // Converged in its start, at x0 = x*, where f = D x*
+  const auto along = solve(Vector3d(2.0 * x_exact), 200, x, f, u);
+  EXPECT_TRUE(along.converged);
+  EXPECT_EQ(along.num_iters, 0u);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(x[i], x_exact[i]);
+    EXPECT_EQ(f[i], f_b[i]);
+  }
+  expect_ends_on_an_apply_at(A, b, x, f, u, along.residual);
+
+  // Capped
+  const auto capped = solve(Vector3d{0.0, 0.0, 0.0}, 2, x, f, u);
+  EXPECT_FALSE(capped.converged);
+  EXPECT_EQ(capped.num_iters, 2u);
+  expect_ends_on_an_apply_at(A, b, x, f, u, capped.residual);
+
+  // No iteration, from a guess the start rescales
+  const auto unstepped = solve(Vector3d{0.3, -0.7, 1.1}, 0, x, f, u);
+  EXPECT_FALSE(unstepped.converged);
+  EXPECT_EQ(unstepped.num_iters, 0u);
+  expect_ends_on_an_apply_at(A, b, x, f, u, unstepped.residual);
+}
+
+// On A = D^T M D with D = I and M = diag(1, 1, 0), b = (1, 1, 1): the first step reaches x = 3/2 b and the second
+// direction (0, 0, 3/2) has p^T A p = 0. The solve stops on an apply at x, not at the direction.
+TEST(LinearSystem, BreakdownEndsOnAnApplyAtItsIterate) {
+  const Matrix3d I{1.0, 0.0, 0.0,  //
+                   0.0, 1.0, 0.0,  //
+                   0.0, 0.0, 1.0};
+  const Matrix3d M{1.0, 0.0, 0.0,  //
+                   0.0, 1.0, 0.0,  //
+                   0.0, 0.0, 0.0};
+  const auto A = make_quadratic_form<mm_backend_t>(I, M, I);
+  const Vector3d b{1.0, 1.0, 1.0};
+  Vector3d f, u;
+  auto state = CGState(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
+  const auto result = solve_linear_system(LinearSystem(mm_backend_t{}, A, Vector3d(b), A.make_workspace(f, u)),
+                                          CGStrategy(L2Residual{}, CGConfig<double>{}), state);
+  EXPECT_FALSE(result.converged);
+  EXPECT_EQ(result.num_iters, 1u);
+  expect_ends_on_an_apply_at(A, b, state.x(), f, u, result.residual);
 }
 
 // CGInvOps constructed and applied inside a kernel. A solve from the solution takes no iteration.
@@ -521,6 +611,39 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
   check(dense, "dense");
   check(make_sparse_matrix<sparse_matrix_t>(dense), "sparse");
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+}
+
+// A dense and a sparse apply give the same result each time they run, so results compared bit for bit across applies
+// are reproducible.
+TEST(LinearSystem, AppliesAreReproducible) {
+  constexpr size_t n = 500;
+  using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+  using sparse_matrix_t = KokkosSparse::CrsMatrix<
+      double, int, Kokkos::Device<Kokkos::DefaultExecutionSpace, Kokkos::DefaultExecutionSpace::memory_space>, void,
+      size_t>;
+  const dense_matrix_t dense("dense", n, n);
+  const view_t x("x", n);
+  Kokkos::parallel_for(
+      "fill", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, n), KOKKOS_LAMBDA(const size_t i) {
+        x(i) = Kokkos::sin(0.1 * static_cast<double>(i) + 0.3);
+        for (size_t j = 0; j < n; ++j) {
+          dense(i, j) = 1.0 / (1.0 + static_cast<double>(i > j ? i - j : j - i));
+        }
+      });
+  const auto sparse = make_sparse_matrix<sparse_matrix_t>(dense);
+
+  const auto expect_reproducible = [&](const auto& A, const char* kind) {
+    view_t y_first("y_first", n), y_second("y_second", n);
+    kokkos_backend_t::apply(A, x, y_first);
+    kokkos_backend_t::apply(A, x, y_second);
+    const auto first_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, y_first);
+    const auto second_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, y_second);
+    for (size_t i = 0; i < n; ++i) {
+      EXPECT_EQ(first_host(i), second_host(i)) << kind << " entry " << i;
+    }
+  };
+  expect_reproducible(dense, "dense");
+  expect_reproducible(sparse, "sparse");
 }
 
 // An inverse holds no solve history: each solve iterates in its out from the guess it holds. Into a zeroed out it is a
