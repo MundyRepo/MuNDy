@@ -595,11 +595,41 @@ struct KokkosBackend {
                         "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y).");
   }
 
-  /// \brief Dispatch to the matching apply_impl overload below, invalidating the workspace exactly once first.
+  // Apply with workspace: y = op(x), threading the operator's workspace to an op that takes one.
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  // Path 1: a matrix view carries no workspace.
   template <class LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
+  static void apply(const LinearOp& A, const XVector& x, YVector& y, Workspace&) {
+    apply(A, x, y);
+  }
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+
+  // Path 2: op has member `apply(x, y, workspace)`.
+  template <class LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
+                 impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y, Workspace& workspace) {
-    impl::workspace_invalidate(workspace);
-    apply_impl(op, x, y, workspace);
+    op.apply(x, y, workspace);
+  }
+
+  // Path 3: op has member `apply(x, y)` only.
+  template <class LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
+                 !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
+                 impl::HasApplyMember<LinearOp, XVector, YVector>)
+  static void apply(const LinearOp& op, const XVector& x, YVector& y, Workspace&) {
+    op.apply(x, y);
+  }
+
+  // Path 4: Otherwise, runtime error.
+  template <typename LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
+                 !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
+                 !impl::HasApplyMember<LinearOp, XVector, YVector>)
+  static void apply(const LinearOp&, const XVector&, YVector&, Workspace&) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y[,workspace]).");
   }
 
   // Scaled apply for ops that are not matrix views: y := alpha * op(x) + beta * y.
@@ -633,8 +663,7 @@ struct KokkosBackend {
   // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
   template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
   MUNDY_REQUIRES(!is_native_matrix<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
-  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace& workspace) {
-    impl::workspace_invalidate(workspace);
+  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace&) {
     op.apply(alpha, x, beta, y);
   }
 
@@ -700,36 +729,7 @@ struct KokkosBackend {
     }
   }
 
-  template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(is_native_matrix<LinearOp>)
-  static void apply_impl(const LinearOp& A, const XVector& x, YVector& y, Workspace&) {
-    apply(A, x, y);
-  }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
-
-  template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
-                 impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
-  static void apply_impl(const LinearOp& op, const XVector& x, YVector& y, Workspace& workspace) {
-    op.apply(x, y, workspace);
-  }
-
-  template <class LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
-                 !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
-                 impl::HasApplyMember<LinearOp, XVector, YVector>)
-  static void apply_impl(const LinearOp& op, const XVector& x, YVector& y, Workspace&) {
-    op.apply(x, y);
-  }
-
-  template <typename LinearOp, class XVector, class YVector, class Workspace>
-  MUNDY_REQUIRES(!is_native_matrix<LinearOp> &&
-                 !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
-                 !impl::HasApplyMember<LinearOp, XVector, YVector>)
-  static void apply_impl(const LinearOp&, const XVector&, YVector&, Workspace&) {
-    MUNDY_THROW_REQUIRE(false, std::logic_error,
-                        "KokkosBackend::apply: op must be a matrix view or provide void apply(x,y[,workspace]).");
-  }
 };  // KokkosBackend
 
 /// \brief Backend for Mundy math within a kernel
@@ -956,11 +956,19 @@ struct MundyMathBackend {
     }
   }
 
-  /// \brief Dispatch to apply_impl below, invalidating the workspace exactly once first.
+  // Apply with workspace: y = op(x), threading the operator's workspace to an op that takes one.
   template <typename LinearOp, class XVector, class YVector, typename Workspace>
   KOKKOS_INLINE_FUNCTION static void apply(const LinearOp& op, const XVector& x, YVector& y, Workspace& workspace) {
-    impl::workspace_invalidate(workspace);
-    apply_impl(op, x, y, workspace);
+    if constexpr (impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>) {
+      op.apply(x, y, workspace);
+    } else if constexpr (impl::HasApplyMember<LinearOp, XVector, YVector>) {
+      op.apply(x, y);
+    } else if constexpr (is_native_matrix<LinearOp>) {
+      y = op * x;
+    } else {
+      static_assert(dependent_false_v<LinearOp>,
+                    "MundyMathBackend::apply: op must be a native matrix or provide void apply(x,y[,workspace]).");
+    }
   }
 
   // Scaled apply: y := alpha * op(x) + beta * y.
@@ -987,8 +995,7 @@ struct MundyMathBackend {
   template <class Scalar, typename LinearOp, class XVector, class YVector, typename Workspace>
   MUNDY_REQUIRES(HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
   KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
-                                           Workspace& workspace) {
-    impl::workspace_invalidate(workspace);
+                                           Workspace&) {
     op.apply(alpha, x, beta, y);
   }
 
@@ -1007,21 +1014,6 @@ struct MundyMathBackend {
   KOKKOS_INLINE_FUNCTION static void static_assign(std::index_sequence<Is...>,
                                                    TargetsAndSources&... targets_and_sources) {
     (impl::assign_entry<MundyMathBackend>(Is, targets_and_sources...), ...);
-  }
-
-  template <typename LinearOp, class XVector, class YVector, typename Workspace>
-  KOKKOS_INLINE_FUNCTION static void apply_impl(const LinearOp& op, const XVector& x, YVector& y,
-                                                Workspace& workspace) {
-    if constexpr (impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>) {
-      op.apply(x, y, workspace);
-    } else if constexpr (impl::HasApplyMember<LinearOp, XVector, YVector>) {
-      op.apply(x, y);
-    } else if constexpr (is_native_matrix<LinearOp>) {
-      y = op * x;
-    } else {
-      static_assert(dependent_false_v<LinearOp>,
-                    "MundyMathBackend::apply: op must be a native matrix or provide void apply(x,y[,workspace]).");
-    }
   }
 };  // MundyMathBackend
 //@}

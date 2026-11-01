@@ -29,38 +29,22 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/impl/solver_backends_impl.hpp>  // for workspace_commit/invalidate/is_committed
-#include <mundy_utils/storage.hpp>                   // for mundy::storage, mundy::store
-#include <mundy_utils/tuple.hpp>                     // for mundy::tuple, mundy::for_each, mundy::all_of
+#include <mundy_utils/storage.hpp>  // for mundy::storage, mundy::store
+#include <mundy_utils/tuple.hpp>    // for mundy::tuple
 
 namespace mundy {
 
 namespace impl {
 
-/// \brief Aggregates commit()/invalidate()/is_committed() over a pack of child workspace storages.
+/// \brief The workspaces of a composite operator's sub-operators.
 ///
-/// A composite operator's Workspace derives from this for its nested per-sub-operator workspaces, so it only
-/// needs to declare its own scratch-vector storage; the commit/invalidate/is_committed contract is inherited.
+/// A composite operator's Workspace derives from this for its nested per-sub-operator workspaces, so it only needs to
+/// declare its own scratch-vector storage.
 template <class... ChildWorkspace>
-class CommitGroup {
+class ChildWorkspaces {
  public:
-  // For an empty ChildWorkspace... pack this is a zero-argument constructor (committed defaults to false).
-  KOKKOS_INLINE_FUNCTION explicit CommitGroup(ChildWorkspace&&... children, bool committed = false)
-      : children_(::mundy::store(std::forward<ChildWorkspace>(children))...), committed_(committed) {
-  }
-
-  KOKKOS_FUNCTION void commit() {
-    committed_ = true;
-    ::mundy::for_each(children_, [](auto& c) { workspace_commit(c.get()); });
-  }
-
-  KOKKOS_FUNCTION void invalidate() {
-    committed_ = false;
-    ::mundy::for_each(children_, [](auto& c) { workspace_invalidate(c.get()); });
-  }
-
-  KOKKOS_FUNCTION bool is_committed() const {
-    return committed_ && ::mundy::all_of(children_, [](const auto& c) { return workspace_is_committed(c.get()); });
+  KOKKOS_INLINE_FUNCTION explicit ChildWorkspaces(ChildWorkspace&&... children)
+      : children_(::mundy::store(std::forward<ChildWorkspace>(children))...) {
   }
 
  protected:
@@ -75,7 +59,6 @@ class CommitGroup {
 
  private:
   ::mundy::tuple<::mundy::storage<ChildWorkspace>...> children_;
-  bool committed_{false};
 };
 
 }  // namespace impl

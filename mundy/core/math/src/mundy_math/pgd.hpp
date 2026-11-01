@@ -46,7 +46,7 @@
 #include <mundy_math/convex_spaces.hpp>    // for mundy::ConvexSpace and the space geometry
 #include <mundy_math/eigenvalues.hpp>      // for mundy::{EigenProblem, PowerConfig, solve_eigen_problem}
 #include <mundy_math/residuals.hpp>        // for the default projected-gradient residual policy
-#include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, workspace_commit}
+#include <mundy_math/solver_backends.hpp>  // for mundy::impl::vector_value_type
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/storage.hpp>       // for mundy::storage
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
@@ -554,7 +554,6 @@ class PGDStrategy {
     if (state.converged()) {
       // If already converged, copy grad_tmp to grad
       backend_t::deep_copy(state.grad(), state.grad_tmp());
-      impl::workspace_commit(workspace);
     } else if (cfg_.max_iters > 0) {
       step_.initialize(prob, state);
     }
@@ -609,9 +608,6 @@ class PGDStrategy {
     axpby(backend_t{}, one, prob.q(), one, state.grad());
     state.residual() = measure(prob.backend(), state.x(), state.grad(), prob.space());
     state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
-    if (state.converged()) {
-      impl::workspace_commit(prob.workspace());
-    }
     return state.converged();
   }
 

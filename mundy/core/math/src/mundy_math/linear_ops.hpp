@@ -29,7 +29,7 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/impl/linear_ops_impl.hpp>  // for mundy::impl::CommitGroup
+#include <mundy_math/impl/linear_ops_impl.hpp>  // for mundy::impl::ChildWorkspaces
 #include <mundy_math/solver_backends.hpp>       // for mundy::{Backend concepts, KokkosBackend, MundyMathBackend, ...}
 #include <mundy_utils/storage.hpp>
 #include <mundy_utils/throw_assert.hpp>
@@ -54,7 +54,7 @@ namespace mundy {
  private:                                           \
   ::mundy::storage<VectorType> name##_storage_;
 
-/// \brief Declare mutable/const getters over the I'th CommitGroup child workspace.
+/// \brief Declare mutable/const getters over the I'th child workspace of a ChildWorkspaces base.
 #define MUNDY_OP_WORKSPACE_CHILD(name, index)       \
  public:                                            \
   KOKKOS_INLINE_FUNCTION auto& name() {             \
@@ -74,15 +74,15 @@ class QuadraticFormOp {
   using linear_op_d_storage_t = ::mundy::storage<LinearOpD>;
 
   template <class FVector, class UVector, class DTWorkspace, class MWorkspace, class DWorkspace>
-  struct Workspace : impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<DTWorkspace, MWorkspace, DWorkspace> {
    private:
-    using base_t = impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace>;
+    using base_t = impl::ChildWorkspaces<DTWorkspace, MWorkspace, DWorkspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION Workspace(FVector&& f, UVector&& u, DTWorkspace&& dt_workspace, MWorkspace&& m_workspace,
-                                     DWorkspace&& d_workspace, bool committed = false)
+                                     DWorkspace&& d_workspace)
         : base_t(std::forward<DTWorkspace>(dt_workspace), std::forward<MWorkspace>(m_workspace),
-                 std::forward<DWorkspace>(d_workspace), committed),
+                 std::forward<DWorkspace>(d_workspace)),
           f_storage_(std::forward<FVector>(f)),
           u_storage_(std::forward<UVector>(u)) {
     }
@@ -136,24 +136,22 @@ class QuadraticFormOp {
     return Backend::make_range_vector(DT());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
-    return make_workspace(Backend::make_domain_vector(M_storage_.get()), Backend::make_range_vector(M_storage_.get()),
-                          committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
+    return make_workspace(Backend::make_domain_vector(M_storage_.get()), Backend::make_range_vector(M_storage_.get()));
   }
 
   template <class FVector, class UVector>
-  KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u, bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u) const {
     return make_workspace(std::forward<FVector>(f), std::forward<UVector>(u), impl::make_workspace(DT()),
-                          impl::make_workspace(M()), impl::make_workspace(D()), committed);
+                          impl::make_workspace(M()), impl::make_workspace(D()));
   }
 
   template <class FVector, class UVector, class DTWorkspace, class MWorkspace, class DWorkspace>
   KOKKOS_INLINE_FUNCTION auto make_workspace(FVector&& f, UVector&& u, DTWorkspace&& dt_workspace,
-                                             MWorkspace&& m_workspace, DWorkspace&& d_workspace,
-                                             bool committed = false) const {
+                                             MWorkspace&& m_workspace, DWorkspace&& d_workspace) const {
     return Workspace<FVector, UVector, DTWorkspace, MWorkspace, DWorkspace>(
         std::forward<FVector>(f), std::forward<UVector>(u), std::forward<DTWorkspace>(dt_workspace),
-        std::forward<MWorkspace>(m_workspace), std::forward<DWorkspace>(d_workspace), committed);
+        std::forward<MWorkspace>(m_workspace), std::forward<DWorkspace>(d_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -163,8 +161,6 @@ class QuadraticFormOp {
     Backend::apply(DT_storage_.get(), workspace.u(), y, workspace.dt_workspace());
   }
 
-  // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
-  // direct member call bypasses the Backend::apply dispatch layer, so no separate invalidate is needed here.
   template <class XVector, class YVector>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     auto tmp_workspace = make_workspace();
@@ -186,15 +182,14 @@ class MixedReducedOp {
   using linear_op_l_storage_t = ::mundy::storage<LinearOpL>;
 
   template <class AxVector, class LAxVector, class AWorkspace, class LWorkspace>
-  struct Workspace : impl::CommitGroup<AWorkspace, LWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<AWorkspace, LWorkspace> {
    private:
-    using base_t = impl::CommitGroup<AWorkspace, LWorkspace>;
+    using base_t = impl::ChildWorkspaces<AWorkspace, LWorkspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
-    Workspace(AxVector&& ax, LAxVector&& lax, AWorkspace&& a_workspace, LWorkspace&& l_workspace,
-              bool committed = false)
-        : base_t(std::forward<AWorkspace>(a_workspace), std::forward<LWorkspace>(l_workspace), committed),
+    Workspace(AxVector&& ax, LAxVector&& lax, AWorkspace&& a_workspace, LWorkspace&& l_workspace)
+        : base_t(std::forward<AWorkspace>(a_workspace), std::forward<LWorkspace>(l_workspace)),
           ax_storage_(std::forward<AxVector>(ax)),
           lax_storage_(std::forward<LAxVector>(lax)) {
     }
@@ -243,17 +238,17 @@ class MixedReducedOp {
     return Backend::make_range_vector(A());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
     return make_workspace(Backend::make_range_vector(A()), Backend::make_range_vector(L()), impl::make_workspace(A()),
-                          impl::make_workspace(L()), committed);
+                          impl::make_workspace(L()));
   }
 
   template <class AxVector, class LAxVector, class AWorkspace, class LWorkspace>
   KOKKOS_INLINE_FUNCTION auto make_workspace(AxVector&& ax, LAxVector&& lax, AWorkspace&& a_workspace,
-                                             LWorkspace&& l_workspace, bool committed = false) const {
+                                             LWorkspace&& l_workspace) const {
     return Workspace<AxVector, LAxVector, AWorkspace, LWorkspace>(
         std::forward<AxVector>(ax), std::forward<LAxVector>(lax), std::forward<AWorkspace>(a_workspace),
-        std::forward<LWorkspace>(l_workspace), committed);
+        std::forward<LWorkspace>(l_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -272,8 +267,6 @@ class MixedReducedOp {
     Backend::apply(A_storage_.get(), workspace.lax(), y, workspace.a_workspace());
   }
 
-  // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
-  // direct member call bypasses the Backend::apply dispatch layer, so no separate invalidate is needed here.
   template <class XVector, class YVector>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     auto tmp_workspace = make_workspace();
@@ -297,16 +290,16 @@ class CongruentMixedReducedOp {
 
   template <class DxVector, class MDxVector, class LMDxVector, class DTWorkspace, class MWorkspace, class DWorkspace,
             class LWorkspace>
-  struct Workspace : impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace, LWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<DTWorkspace, MWorkspace, DWorkspace, LWorkspace> {
    private:
-    using base_t = impl::CommitGroup<DTWorkspace, MWorkspace, DWorkspace, LWorkspace>;
+    using base_t = impl::ChildWorkspaces<DTWorkspace, MWorkspace, DWorkspace, LWorkspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
     Workspace(DxVector&& dx, MDxVector&& mdx, LMDxVector&& lmdx, DTWorkspace&& dt_workspace, MWorkspace&& m_workspace,
-              DWorkspace&& d_workspace, LWorkspace&& l_workspace, bool committed = false)
+              DWorkspace&& d_workspace, LWorkspace&& l_workspace)
         : base_t(std::forward<DTWorkspace>(dt_workspace), std::forward<MWorkspace>(m_workspace),
-                 std::forward<DWorkspace>(d_workspace), std::forward<LWorkspace>(l_workspace), committed),
+                 std::forward<DWorkspace>(d_workspace), std::forward<LWorkspace>(l_workspace)),
           dx_storage_(std::forward<DxVector>(dx)),
           mdx_storage_(std::forward<MDxVector>(mdx)),
           lmdx_storage_(std::forward<LMDxVector>(lmdx)) {
@@ -365,22 +358,21 @@ class CongruentMixedReducedOp {
     return Backend::make_range_vector(DT());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
     return make_workspace(Backend::make_range_vector(D()), Backend::make_range_vector(M()),
                           Backend::make_range_vector(L()), impl::make_workspace(DT()), impl::make_workspace(M()),
-                          impl::make_workspace(D()), impl::make_workspace(L()), committed);
+                          impl::make_workspace(D()), impl::make_workspace(L()));
   }
 
   template <class DxVector, class MDxVector, class LMDxVector, class DTWorkspace, class MWorkspace, class DWorkspace,
             class LWorkspace>
   KOKKOS_INLINE_FUNCTION auto make_workspace(DxVector&& dx, MDxVector&& mdx, LMDxVector&& lmdx,
                                              DTWorkspace&& dt_workspace, MWorkspace&& m_workspace,
-                                             DWorkspace&& d_workspace, LWorkspace&& l_workspace,
-                                             bool committed = false) const {
+                                             DWorkspace&& d_workspace, LWorkspace&& l_workspace) const {
     return Workspace<DxVector, MDxVector, LMDxVector, DTWorkspace, MWorkspace, DWorkspace, LWorkspace>(
         std::forward<DxVector>(dx), std::forward<MDxVector>(mdx), std::forward<LMDxVector>(lmdx),
         std::forward<DTWorkspace>(dt_workspace), std::forward<MWorkspace>(m_workspace),
-        std::forward<DWorkspace>(d_workspace), std::forward<LWorkspace>(l_workspace), committed);
+        std::forward<DWorkspace>(d_workspace), std::forward<LWorkspace>(l_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -394,8 +386,6 @@ class CongruentMixedReducedOp {
     Backend::apply(DT(), workspace.mdx(), y, workspace.dt_workspace());
   }
 
-  // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
-  // direct member call bypasses the Backend::apply dispatch layer, so no separate invalidate is needed here.
   template <class XVector, class YVector>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     auto tmp_workspace = make_workspace();
@@ -418,14 +408,14 @@ class SumOp {
   using op2_storage_t = ::mundy::storage<Op2>;
 
   template <class TmpVector, class Op1Workspace, class Op2Workspace>
-  struct Workspace : impl::CommitGroup<Op1Workspace, Op2Workspace> {
+  struct Workspace : impl::ChildWorkspaces<Op1Workspace, Op2Workspace> {
    private:
-    using base_t = impl::CommitGroup<Op1Workspace, Op2Workspace>;
+    using base_t = impl::ChildWorkspaces<Op1Workspace, Op2Workspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
-    Workspace(TmpVector&& tmp, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace, bool committed = false)
-        : base_t(std::forward<Op1Workspace>(op1_workspace), std::forward<Op2Workspace>(op2_workspace), committed),
+    Workspace(TmpVector&& tmp, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace)
+        : base_t(std::forward<Op1Workspace>(op1_workspace), std::forward<Op2Workspace>(op2_workspace)),
           tmp_storage_(std::forward<TmpVector>(tmp)) {
     }
 
@@ -475,17 +465,16 @@ class SumOp {
     return Backend::make_range_vector(op1());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
-    return make_workspace(Backend::make_range_vector(op1()), impl::make_workspace(op1()), impl::make_workspace(op2()),
-                          committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
+    return make_workspace(Backend::make_range_vector(op1()), impl::make_workspace(op1()), impl::make_workspace(op2()));
   }
 
   template <class TmpVector, class Op1Workspace, class Op2Workspace>
   KOKKOS_INLINE_FUNCTION auto make_workspace(TmpVector&& tmp, Op1Workspace&& op1_workspace,
-                                             Op2Workspace&& op2_workspace, bool committed = false) const {
+                                             Op2Workspace&& op2_workspace) const {
     return Workspace<TmpVector, Op1Workspace, Op2Workspace>(std::forward<TmpVector>(tmp),
                                                             std::forward<Op1Workspace>(op1_workspace),
-                                                            std::forward<Op2Workspace>(op2_workspace), committed);
+                                                            std::forward<Op2Workspace>(op2_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -518,14 +507,14 @@ class ScaledOp {
   using op_storage_t = ::mundy::storage<Op>;
 
   template <class OpWorkspace>
-  struct Workspace : impl::CommitGroup<OpWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<OpWorkspace> {
    private:
-    using base_t = impl::CommitGroup<OpWorkspace>;
+    using base_t = impl::ChildWorkspaces<OpWorkspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
-    explicit Workspace(OpWorkspace&& op_workspace, bool committed = false)
-        : base_t(std::forward<OpWorkspace>(op_workspace), committed) {
+    explicit Workspace(OpWorkspace&& op_workspace)
+        : base_t(std::forward<OpWorkspace>(op_workspace)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {
@@ -568,13 +557,13 @@ class ScaledOp {
     return Backend::make_range_vector(op());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
-    return make_workspace(impl::make_workspace(op()), committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
+    return make_workspace(impl::make_workspace(op()));
   }
 
   template <class OpWorkspace>
-  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace, bool committed = false) const {
-    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace), committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace) const {
+    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -611,14 +600,14 @@ class ShiftedOp {
   using op_storage_t = ::mundy::storage<Op>;
 
   template <class OpWorkspace>
-  struct Workspace : impl::CommitGroup<OpWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<OpWorkspace> {
    private:
-    using base_t = impl::CommitGroup<OpWorkspace>;
+    using base_t = impl::ChildWorkspaces<OpWorkspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
-    explicit Workspace(OpWorkspace&& op_workspace, bool committed = false)
-        : base_t(std::forward<OpWorkspace>(op_workspace), committed) {
+    explicit Workspace(OpWorkspace&& op_workspace)
+        : base_t(std::forward<OpWorkspace>(op_workspace)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {
@@ -661,13 +650,13 @@ class ShiftedOp {
     return Backend::make_range_vector(op());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
-    return make_workspace(impl::make_workspace(op()), committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
+    return make_workspace(impl::make_workspace(op()));
   }
 
   template <class OpWorkspace>
-  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace, bool committed = false) const {
-    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace), committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace(OpWorkspace&& op_workspace) const {
+    return Workspace<OpWorkspace>(std::forward<OpWorkspace>(op_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -699,14 +688,14 @@ class ConcatDomainOp {
   using op2_storage_t = ::mundy::storage<Op2>;
 
   template <class Y2Vector, class Op1Workspace, class Op2Workspace>
-  struct Workspace : impl::CommitGroup<Op1Workspace, Op2Workspace> {
+  struct Workspace : impl::ChildWorkspaces<Op1Workspace, Op2Workspace> {
    private:
-    using base_t = impl::CommitGroup<Op1Workspace, Op2Workspace>;
+    using base_t = impl::ChildWorkspaces<Op1Workspace, Op2Workspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
-    Workspace(Y2Vector&& y2, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace, bool committed = false)
-        : base_t(std::forward<Op1Workspace>(op1_workspace), std::forward<Op2Workspace>(op2_workspace), committed),
+    Workspace(Y2Vector&& y2, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace)
+        : base_t(std::forward<Op1Workspace>(op1_workspace), std::forward<Op2Workspace>(op2_workspace)),
           y2_storage_(std::forward<Y2Vector>(y2)) {
     }
 
@@ -760,17 +749,16 @@ class ConcatDomainOp {
     return Backend::make_range_vector(op1());
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
-    return make_workspace(Backend::make_range_vector(op2()), impl::make_workspace(op1()), impl::make_workspace(op2()),
-                          committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
+    return make_workspace(Backend::make_range_vector(op2()), impl::make_workspace(op1()), impl::make_workspace(op2()));
   }
 
   template <class Y2Vector, class Op1Workspace, class Op2Workspace>
-  KOKKOS_INLINE_FUNCTION auto make_workspace(Y2Vector&& y2, Op1Workspace&& op1_workspace, Op2Workspace&& op2_workspace,
-                                             bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(Y2Vector&& y2, Op1Workspace&& op1_workspace,
+                                             Op2Workspace&& op2_workspace) const {
     return Workspace<Y2Vector, Op1Workspace, Op2Workspace>(std::forward<Y2Vector>(y2),
                                                            std::forward<Op1Workspace>(op1_workspace),
-                                                           std::forward<Op2Workspace>(op2_workspace), committed);
+                                                           std::forward<Op2Workspace>(op2_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>
@@ -819,14 +807,14 @@ class ConcatRangeOp {
   using op2t_storage_t = ::mundy::storage<Op2T>;
 
   template <class Op1TWorkspace, class Op2TWorkspace>
-  struct Workspace : impl::CommitGroup<Op1TWorkspace, Op2TWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<Op1TWorkspace, Op2TWorkspace> {
    private:
-    using base_t = impl::CommitGroup<Op1TWorkspace, Op2TWorkspace>;
+    using base_t = impl::ChildWorkspaces<Op1TWorkspace, Op2TWorkspace>;
 
    public:
     KOKKOS_INLINE_FUNCTION
-    Workspace(Op1TWorkspace&& op1t_workspace, Op2TWorkspace&& op2t_workspace, bool committed = false)
-        : base_t(std::forward<Op1TWorkspace>(op1t_workspace), std::forward<Op2TWorkspace>(op2t_workspace), committed) {
+    Workspace(Op1TWorkspace&& op1t_workspace, Op2TWorkspace&& op2t_workspace)
+        : base_t(std::forward<Op1TWorkspace>(op1t_workspace), std::forward<Op2TWorkspace>(op2t_workspace)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {
@@ -878,15 +866,14 @@ class ConcatRangeOp {
     }
   }
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
-    return make_workspace(impl::make_workspace(op1t()), impl::make_workspace(op2t()), committed);
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
+    return make_workspace(impl::make_workspace(op1t()), impl::make_workspace(op2t()));
   }
 
   template <class Op1TWorkspace, class Op2TWorkspace>
-  KOKKOS_INLINE_FUNCTION auto make_workspace(Op1TWorkspace&& op1t_workspace, Op2TWorkspace&& op2t_workspace,
-                                             bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(Op1TWorkspace&& op1t_workspace, Op2TWorkspace&& op2t_workspace) const {
     return Workspace<Op1TWorkspace, Op2TWorkspace>(std::forward<Op1TWorkspace>(op1t_workspace),
-                                                   std::forward<Op2TWorkspace>(op2t_workspace), committed);
+                                                   std::forward<Op2TWorkspace>(op2t_workspace));
   }
 
   template <class XVector, class YVector, class WorkspaceType>

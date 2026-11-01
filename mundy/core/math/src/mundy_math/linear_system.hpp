@@ -32,7 +32,7 @@
 
 // Mundy
 #include <mundy_math/cmath.hpp>            // for mundy::sqrt
-#include <mundy_math/linear_ops.hpp>       // for MUNDY_OP_WORKSPACE, MUNDY_OP_WORKSPACE_CHILD, mundy::impl::CommitGroup
+#include <mundy_math/linear_ops.hpp>       // for MUNDY_OP_WORKSPACE, MUNDY_OP_WORKSPACE_CHILD, impl::ChildWorkspaces
 #include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, Preconditioner}
 #include <mundy_math/residuals.hpp>        // for the residual policies (L2Residual, RelativeL2Residual, ...)
 #include <mundy_math/solver_backends.hpp>  // for mundy::{Backend, Workspace, concepts, ...}
@@ -326,9 +326,6 @@ class CGStrategy {
     }
     state.residual() = measure(prob.backend(), state, prob.b());
     state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
-    if (state.converged()) {
-      impl::workspace_commit(prob.workspace());
-    }
     return state.converged();
   }
 
@@ -421,10 +418,7 @@ KOKKOS_FUNCTION auto solve_linear_system(const Problem& prob, const Strategy& st
   while (!strat.done(state)) {
     if (strat.iterate(prob, state)) break;
   }
-  auto result = strat.result(state);
-  MUNDY_THROW_ASSERT(!result.converged || impl::workspace_is_committed(prob.workspace()), std::logic_error,
-                     "solve_linear_system: converged solution requires committed operator workspace.");
-  return result;
+  return strat.result(state);
 }
 
 //! \name Inverse operator
@@ -447,14 +441,13 @@ class CGInvOp {
   using config_t = CGConfig<value_type>;
 
   template <class RVector, class PVector, class ApVector, class OpWorkspace>
-  struct Workspace : impl::CommitGroup<OpWorkspace> {
+  struct Workspace : impl::ChildWorkspaces<OpWorkspace> {
    private:
-    using base_t = impl::CommitGroup<OpWorkspace>;
+    using base_t = impl::ChildWorkspaces<OpWorkspace>;
 
    public:
-    KOKKOS_INLINE_FUNCTION Workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace,
-                                     bool committed = false)
-        : base_t(std::forward<OpWorkspace>(op_workspace), committed),
+    KOKKOS_INLINE_FUNCTION Workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace)
+        : base_t(std::forward<OpWorkspace>(op_workspace)),
           r_storage_(std::forward<RVector>(r)),
           p_storage_(std::forward<PVector>(p)),
           ap_storage_(std::forward<ApVector>(ap)) {
@@ -495,17 +488,17 @@ class CGInvOp {
   KOKKOS_INLINE_FUNCTION auto make_range_vector() const { return Backend::make_range_vector(op_storage_.get()); }
   // clang-format on
 
-  KOKKOS_INLINE_FUNCTION auto make_workspace(bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace() const {
     return make_workspace(Backend::make_range_vector(op()), Backend::make_range_vector(op()),
-                          Backend::make_range_vector(op()), impl::make_workspace(op()), committed);
+                          Backend::make_range_vector(op()), impl::make_workspace(op()));
   }
 
   template <class RVector, class PVector, class ApVector, class OpWorkspace>
-  KOKKOS_INLINE_FUNCTION auto make_workspace(RVector&& r, PVector&& p, ApVector&& ap, OpWorkspace&& op_workspace,
-                                             bool committed = false) const {
+  KOKKOS_INLINE_FUNCTION auto make_workspace(RVector&& r, PVector&& p, ApVector&& ap,
+                                             OpWorkspace&& op_workspace) const {
     return Workspace<RVector, PVector, ApVector, OpWorkspace>(std::forward<RVector>(r), std::forward<PVector>(p),
                                                               std::forward<ApVector>(ap),
-                                                              std::forward<OpWorkspace>(op_workspace), committed);
+                                                              std::forward<OpWorkspace>(op_workspace));
   }
 
   /// out := op^{-1} rhs, via CG from the guess held in out.
@@ -522,8 +515,6 @@ class CGInvOp {
     MUNDY_THROW_REQUIRE(last_result_.converged, std::runtime_error, "CGInvOp: inner CG solve failed to converge.");
   }
 
-  // A freshly made workspace already starts invalidated (make_workspace() defaults committed=false), and this
-  // direct member call bypasses the Backend::apply dispatch layer, so no separate invalidate is needed here.
   template <class RhsVector, class OutVector>
   KOKKOS_FUNCTION void apply(const RhsVector& rhs, OutVector& out) const {
     auto tmp_workspace = make_workspace();

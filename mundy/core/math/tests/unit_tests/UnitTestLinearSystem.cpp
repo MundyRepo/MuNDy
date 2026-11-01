@@ -613,23 +613,31 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 
+using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+
+// Keep KOKKOS_LAMBDA outside GTest bodies for CUDA. A(i, j) = 1 / (1 + |i - j|) and x(i) = sin(i / 10 + 3 / 10).
+void fill_reproducibility_problem(const dense_matrix_t& A, const view_t& x) {
+  const size_t n = x.extent(0);
+  Kokkos::parallel_for(
+      "fill_reproducibility_problem", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, n),
+      KOKKOS_LAMBDA(const size_t i) {
+        x(i) = Kokkos::sin(0.1 * static_cast<double>(i) + 0.3);
+        for (size_t j = 0; j < n; ++j) {
+          A(i, j) = 1.0 / (1.0 + static_cast<double>(i > j ? i - j : j - i));
+        }
+      });
+}
+
 // A dense and a sparse apply give the same result each time they run, so results compared bit for bit across applies
 // are reproducible.
 TEST(LinearSystem, AppliesAreReproducible) {
   constexpr size_t n = 500;
-  using dense_matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
   using sparse_matrix_t = KokkosSparse::CrsMatrix<
       double, int, Kokkos::Device<Kokkos::DefaultExecutionSpace, Kokkos::DefaultExecutionSpace::memory_space>, void,
       size_t>;
   const dense_matrix_t dense("dense", n, n);
   const view_t x("x", n);
-  Kokkos::parallel_for(
-      "fill", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, n), KOKKOS_LAMBDA(const size_t i) {
-        x(i) = Kokkos::sin(0.1 * static_cast<double>(i) + 0.3);
-        for (size_t j = 0; j < n; ++j) {
-          dense(i, j) = 1.0 / (1.0 + static_cast<double>(i > j ? i - j : j - i));
-        }
-      });
+  fill_reproducibility_problem(dense, x);
   const auto sparse = make_sparse_matrix<sparse_matrix_t>(dense);
 
   const auto expect_reproducible = [&](const auto& A, const char* kind) {

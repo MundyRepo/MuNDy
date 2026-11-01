@@ -169,19 +169,9 @@ struct JacobiPrecond {
   }
 };
 
-// A workspace for WorkspacedScaledDiagOp: a scratch vector plus the standard commit/invalidate flag.
+// A workspace for WorkspacedScaledDiagOp: a scratch vector.
 struct ScaledDiagWorkspace {
   view_t scratch;
-  bool committed{false};
-  void commit() {
-    committed = true;
-  }
-  void invalidate() {
-    committed = false;
-  }
-  bool is_committed() const {
-    return committed;
-  }
 };
 
 // A workspace-only operator (apply(x, y, workspace) with no plain apply(x, y)): A = scale * diag(d), staged through
@@ -204,7 +194,7 @@ struct WorkspacedScaledDiagOp {
     return view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "wsd_rng"), n);
   }
   ScaledDiagWorkspace make_workspace() const {
-    return ScaledDiagWorkspace{view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "wsd_scratch"), n), false};
+    return ScaledDiagWorkspace{view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "wsd_scratch"), n)};
   }
   template <class XVector, class YVector>
   void apply(const XVector& x, YVector& y, ScaledDiagWorkspace& ws) const {

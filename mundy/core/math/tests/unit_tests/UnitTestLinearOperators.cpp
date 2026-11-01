@@ -509,16 +509,6 @@ TEST(LinearOperators, DiagonalOpMultipliesElementwise) {
   EXPECT_DOUBLE_EQ(result[2], 0.5 * 4.0);
 }
 
-TEST(LinearOperators, CommitGroupPropagatesToChildren) {
-  impl::CommitGroup<impl::NoWorkspace, impl::NoWorkspace> group{impl::NoWorkspace{}, impl::NoWorkspace{}};
-
-  EXPECT_FALSE(group.is_committed());
-  group.commit();
-  EXPECT_TRUE(group.is_committed());
-  group.invalidate();
-  EXPECT_FALSE(group.is_committed());
-}
-
 }  // namespace
 
 }  // namespace mundy

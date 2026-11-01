@@ -723,10 +723,7 @@ KOKKOS_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, Stat
   while (!strat.done(state)) {
     if (strat.iterate(prob, state)) break;
   }
-  auto result = strat.result(state);
-  MUNDY_THROW_ASSERT(!result.converged || impl::workspace_is_committed(prob.workspace()), std::logic_error,
-                     "solve_cqpp: converged solution requires committed operator workspace.");
-  return result;
+  return strat.result(state);
 }
 
 /// \brief Solve a mixed constrained convex quadratic programming problem (MCQPP)

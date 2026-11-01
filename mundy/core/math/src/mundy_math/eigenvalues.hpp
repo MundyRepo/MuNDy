@@ -49,7 +49,7 @@
 #include <mundy_math/linear_ops.hpp>       // for mundy::make_shifted_op
 #include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, Preconditioner}
 #include <mundy_math/residuals.hpp>        // for the vector and change residual policies
-#include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, workspace_commit, ...}
+#include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, ...}
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/storage.hpp>
 #include <mundy_utils/throw_assert.hpp>
@@ -331,7 +331,6 @@ class PowerStrategy {
 
     if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
       state.converged() = true;
-      impl::workspace_commit(workspace);
       return true;
     }
     if (state.iter() >= cfg_.max_iters) {
@@ -479,7 +478,6 @@ class LanczosStrategy {
 
     if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
       state.converged() = true;
-      impl::workspace_commit(workspace);
       return true;
     }
     // beta = 0: the Krylov space is invariant, so T's eigenvalues are exact and there is no next v.
@@ -617,10 +615,7 @@ KOKKOS_FUNCTION auto solve_eigen_problem(const Problem& prob, const Strategy& st
   while (!strat.done(state)) {
     if (strat.iterate(prob, state)) break;
   }
-  auto result = strat.result(state);
-  MUNDY_THROW_ASSERT(!result.converged || impl::workspace_is_committed(prob.workspace()), std::logic_error,
-                     "solve_eigen_problem: converged solution requires committed operator workspace.");
-  return result;
+  return strat.result(state);
 }
 
 /// \brief Both ends of the spectrum of a symmetric A via the shifted power method.

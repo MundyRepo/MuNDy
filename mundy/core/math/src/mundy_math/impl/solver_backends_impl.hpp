@@ -117,57 +117,9 @@ concept HasMakeRangeVectorMember = requires(const Op& op) {
   { op.make_range_vector() };
 };
 
-template <class Workspace>
-concept HasCommitMember = requires(Workspace& workspace) {
-  { workspace.commit() } -> std::same_as<void>;
-};
-
-template <class Workspace>
-concept HasInvalidateMember = requires(Workspace& workspace) {
-  { workspace.invalidate() } -> std::same_as<void>;
-};
-
-template <class Workspace>
-concept HasIsCommittedMember = requires(const Workspace& workspace) {
-  { workspace.is_committed() } -> std::convertible_to<bool>;
-};
-
-template <class Workspace>
-KOKKOS_INLINE_FUNCTION void workspace_commit(Workspace& workspace) {
-  if constexpr (HasCommitMember<Workspace>) {
-    workspace.commit();
-  }
-}
-
-template <class Workspace>
-KOKKOS_INLINE_FUNCTION void workspace_invalidate(Workspace& workspace) {
-  if constexpr (HasInvalidateMember<Workspace>) {
-    workspace.invalidate();
-  }
-}
-
-template <class Workspace>
-KOKKOS_INLINE_FUNCTION bool workspace_is_committed(const Workspace& workspace) {
-  if constexpr (HasIsCommittedMember<Workspace>) {
-    return workspace.is_committed();
-  } else {
-    return true;
-  }
-}
-
-/// \brief The workspace for an operator with no scratch state of its own: commit()/invalidate() just track a
-/// single committed flag, with no children to propagate to.
+/// \brief The workspace of an operator with no scratch of its own.
 struct NoWorkspace {
   KOKKOS_INLINE_FUNCTION NoWorkspace() = default;
-
-  // clang-format off
-  KOKKOS_INLINE_FUNCTION void commit() { committed_ = true; }
-  KOKKOS_INLINE_FUNCTION void invalidate() { committed_ = false; }
-  KOKKOS_INLINE_FUNCTION bool is_committed() const { return committed_; }
-  // clang-format on
-
- private:
-  bool committed_{false};
 };
 
 template <class Op>
