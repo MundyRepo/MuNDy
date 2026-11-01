@@ -166,11 +166,9 @@ class PGDState {
 ///
 /// initialize(prob, state) is called once x_tmp holds the starting point x_0, grad_tmp holds A x_0 + q, and x_0 is not
 /// converged; it sets state.step_state(). step(prob, state) takes x_tmp and grad_tmp as the current iterate x_k and its
-/// gradient, writes the next iterate, a point of prob's space, into x and its gradient A x + q into grad, and updates
-/// state.step_state() for the next step. A strategy names its memory as step_state_t<Scalar>.
-///
-/// A strategy that updates grad by recurrence, so that it equals A x + q only up to rounding, declares
-/// static constexpr bool accumulates_gradient = true; PGD then recomputes A x + q before it accepts an iterate.
+/// gradient, writes the next iterate, a point of prob's space, into x and into grad a gradient equal to A x + q up to
+/// rounding, formed directly or carried by recurrence, and updates state.step_state() for the next step. PGD re-forms
+/// A x + q at x before it ends the solve. A strategy names its memory as step_state_t<Scalar>.
 template <class S, class Problem, class State>
 concept PGDStepStrategy = ProjectedProblem<Problem> && requires(const S& s, const Problem& prob, State& state) {
   typename S::template step_state_t<typename State::value_type>;
@@ -179,10 +177,6 @@ concept PGDStepStrategy = ProjectedProblem<Problem> && requires(const S& s, cons
 };
 
 namespace impl {
-/// \brief Whether StepStrategy declares that it updates grad by recurrence.
-template <class StepStrategy>
-inline constexpr bool accumulates_gradient_v = requires { requires StepStrategy::accumulates_gradient; };
-
 /// \brief The first step length from x_tmp, whose gradient is grad_tmp and projected residual state.residual().
 ///
 /// From a warm start, the exact minimizer along the projected gradient g_p, g_p^T g_p / g_p^T A g_p. From x = 0,
@@ -394,8 +388,6 @@ struct MPRGPStepState {
 template <class PVector>
 class MPRGPStepStrategy {
  public:
-  static constexpr bool accumulates_gradient = true;
-
   double proportioning = 1.0;
   double expansion_step_fraction = 1.8;
   PowerConfig<double> norm_estimate{.max_iters = 50, .tol = 1e-2};
@@ -518,6 +510,9 @@ class MPRGPStepStrategy {
 
 /// \brief The PGD strategy: initialize/iterate/done/result over (Problem, State). StepStrategy is a PGDStepStrategy and
 /// ResidualPolicy a ProjectedResidualPolicy.
+///
+/// On return, the problem's workspace holds the intermediates of an apply at the returned x, and result.residual is
+/// measured on A x + q formed by that apply.
 template <class StepStrategy, class ResidualPolicy, class Config>
 class PGDStrategy {
  public:
@@ -560,7 +555,7 @@ class PGDStrategy {
       // If already converged, copy grad_tmp to grad
       backend_t::deep_copy(state.grad(), state.grad_tmp());
       impl::workspace_commit(workspace);
-    } else {
+    } else if (cfg_.max_iters > 0) {
       step_.initialize(prob, state);
     }
   }
@@ -570,7 +565,6 @@ class PGDStrategy {
   KOKKOS_FUNCTION bool iterate(const Problem& prob, State& state) const {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
-    auto& workspace = prob.workspace();
 
     if (state.converged() || state.iter() >= cfg_.max_iters) {
       return state.converged();
@@ -580,20 +574,13 @@ class PGDStrategy {
     step_.step(prob, state);
     ++state.iter();
 
-    // residual & test, on A x + q itself before an iterate whose gradient was accumulated is accepted
+    // residual & test; the solve ends on A x + q itself
     state.residual() = measure(backend, state.x(), state.grad(), prob.space());
-    if constexpr (impl::accumulates_gradient_v<step_strategy_t>) {
-      if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
-        constexpr value_type one = static_cast<value_type>(1);
-        backend_t::apply(prob.A(), state.x(), state.grad(), workspace);
-        axpby(backend_t{}, one, prob.q(), one, state.grad());
-        state.residual() = measure(backend, state.x(), state.grad(), prob.space());
+    const bool at_cap = state.iter() >= cfg_.max_iters;
+    if (state.residual() <= static_cast<value_type>(cfg_.tol) || at_cap) {
+      if (confirm(prob, state) || at_cap) {
+        return state.converged();
       }
-    }
-    if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
-      state.converged() = true;
-      impl::workspace_commit(workspace);
-      return true;
     }
 
     // roll x_tmp/grad_tmp forward
@@ -613,6 +600,21 @@ class PGDStrategy {
   }
 
  private:
+  /// \brief grad := A x + q at x, its residual, and whether x converged.
+  template <class Problem, class State>
+  KOKKOS_FUNCTION bool confirm(const Problem& prob, State& state) const {
+    using backend_t = decltype(prob.backend());
+    constexpr value_type one = static_cast<value_type>(1);
+    backend_t::apply(prob.A(), state.x(), state.grad(), prob.workspace());
+    axpby(backend_t{}, one, prob.q(), one, state.grad());
+    state.residual() = measure(prob.backend(), state.x(), state.grad(), prob.space());
+    state.converged() = state.residual() <= static_cast<value_type>(cfg_.tol);
+    if (state.converged()) {
+      impl::workspace_commit(prob.workspace());
+    }
+    return state.converged();
+  }
+
   template <class Backend, class XVector, class GradVector, class ConvexSpace>
   KOKKOS_FUNCTION value_type measure(const Backend& backend, const XVector& x, const GradVector& grad,
                                      const ConvexSpace& space) const {

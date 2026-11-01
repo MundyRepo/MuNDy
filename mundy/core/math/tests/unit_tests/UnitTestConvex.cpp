@@ -25,7 +25,10 @@
 /// Reference problems, each on MundyMathBackend and KokkosBackend:
 ///   - A 3 x 3 SPD problem without constraints, and inside a box [0, 2] that its minimizer does not touch and a box
 ///     [9, 10] that it does.
+///   - The same SPD problem under the upper bound x <= 2, which its minimizer touches.
 ///   - A random LCP, 0 <= A x + q _|_ x >= 0, built from a chosen x* and A x* + q with disjoint supports.
+///   - A periodic Laplacian LCP, A = periodic [-1, 2.01, -1], with x* = 1 on even entries and A x* + q = 1 on odd
+///     ones; plain Barzilai-Borwein steps fall into a five-step limit cycle on it.
 ///   - Each of the above with A congruent to D^T M D (D = I), and a random mixed problem whose unilateral block is
 ///     reduced through the Schur complement of its bilateral one.
 ///   - Two nearly parallel rows, A = [[1, cos delta], [cos delta, 1]] and q = -(1, 1 + eps), whose minimizer
@@ -45,7 +48,8 @@
 #endif
 
 // C++ core
-#include <cmath>        // for std::cos, std::ldexp
+#include <cmath>        // for std::cos, std::ldexp, std::sqrt
+#include <cstdlib>      // for std::srand
 #include <limits>       // for std::numeric_limits
 #include <ostream>      // for std::cout
 #include <string_view>  // for std::string_view
@@ -77,11 +81,6 @@ static_assert(ProjectedResidualPolicy<LinfNormProjectedDiffResidual, MundyMathBa
               "The projected-difference residual measures an iterate against a convex space.");
 static_assert(!ProjectedResidualPolicy<L2Residual, MundyMathBackend, Vector3d, Vector3d, LowerBoundSpace<double>>,
               "A vector residual is not a projected residual.");
-static_assert(impl::accumulates_gradient_v<MPRGPStepStrategy<Vector3d&>>,
-              "MPRGP updates the gradient by recurrence, so PGD recomputes it before accepting an iterate.");
-static_assert(!impl::accumulates_gradient_v<BBStepStrategy> &&
-                  !impl::accumulates_gradient_v<NonmonotoneBBStepStrategy<>>,
-              "Barzilai-Borwein steps form the gradient as A x + q.");
 //@}
 
 //! \name MundyMath backend test problems
@@ -188,6 +187,40 @@ struct ActiveBoxConstrainedSPDProblem {
   }
 };
 
+/// \brief x <= 2 with two entries pressed against it: x* = (2, 1, 2) and A x* + q = (-1, 0, -1).
+struct ActiveUpperBoundSPDProblem {
+  using value_type = double;
+  using vector_t = Vector3d;
+  using linear_op_t = Matrix3d;
+  using backend_t = MundyMathBackend;
+
+  std::string name() const {
+    return "ActiveUpperBoundSPDProblem";
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  auto get_space() const {
+    return UpperBoundSpace<value_type>(2.0);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_exact_solution() const {
+    return Vector3d{2.0, 1.0, 2.0};
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_A() const {
+    return Matrix3d{2.0,  -1.0, 0.0,   //
+                    -1.0, 2.0,  -1.0,  //
+                    0.0,  -1.0, 2.0};
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_q() const {
+    return Vector3d{-1.0, 0.0, -1.0} - get_A() * get_exact_solution();
+  }
+};
+
 template <size_t N>
 struct RandomLCP {
   using value_type = double;
@@ -273,6 +306,54 @@ struct RandomLCP {
   vector_t q_;
   vector_t x_star_;
   vector_t grad_star_;
+};
+
+/// \brief 0 <= A x + q _|_ x >= 0 with A = L + I / 100 for the periodic Laplacian L = [-1, 2, -1], whose bottom
+/// eigenvector is the all-ones vector: x* is 1 on the even entries, and A x* + q is 1 on the odd ones.
+template <size_t N>
+struct PeriodicLaplacianLCP {
+  using value_type = double;
+  using vector_t = Vector<value_type, N>;
+  using linear_op_t = Matrix<value_type, N, N>;
+  using backend_t = MundyMathBackend;
+
+  std::string name() const {
+    return "PeriodicLaplacianLCP" + std::to_string(N);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  auto get_space() const {
+    return LowerBoundSpace<value_type>(0.0);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_exact_solution() const {
+    vector_t x;
+    for (size_t i = 0; i < N; ++i) {
+      x[i] = i % 2 == 0 ? 1.0 : 0.0;
+    }
+    return x;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_A() const {
+    auto A = linear_op_t::zeros();
+    for (size_t i = 0; i < N; ++i) {
+      A(i, i) = 2.0 + 0.01;
+      A(i, (i + 1) % N) = -1.0;
+      A(i, (i + N - 1) % N) = -1.0;
+    }
+    return A;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_q() const {
+    vector_t grad_star;
+    for (size_t i = 0; i < N; ++i) {
+      grad_star[i] = i % 2 == 0 ? 0.0 : 1.0;
+    }
+    return grad_star - get_A() * get_exact_solution();
+  }
 };
 
 namespace congruent {
@@ -686,6 +767,71 @@ struct ActiveBoxConstrainedSPDProblem {
   }
 };
 
+/// \brief x <= 2 with two entries pressed against it: x* = (2, 1, 2) and A x* + q = (-1, 0, -1).
+struct ActiveUpperBoundSPDProblem {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using value_type = double;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using backend_t = KokkosBackend<exec_space>;
+
+  std::string name() const {
+    return "ActiveUpperBoundSPDProblem";
+  }
+
+  unsigned size() const {
+    return 3;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space() const {
+    return UpperBoundSpace<value_type>(2.0);
+  }
+
+  vector_t get_exact_solution() const {
+    vector_t x_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_exact"), 3);
+
+    auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+    x_exact_host(0) = 2.0;
+    x_exact_host(1) = 1.0;
+    x_exact_host(2) = 2.0;
+    Kokkos::deep_copy(x_exact, x_exact_host);
+
+    return x_exact;
+  }
+
+  linear_op_t get_A() const {
+    linear_op_t A(Kokkos::view_alloc(Kokkos::WithoutInitializing, "A"), 3, 3);
+
+    // clang-format off
+    auto A_host = Kokkos::create_mirror_view(A);
+    A_host(0, 0) = 2.0;  A_host(0, 1) = -1.0; A_host(0, 2) = 0.0;
+    A_host(1, 0) = -1.0; A_host(1, 1) = 2.0;  A_host(1, 2) = -1.0;
+    A_host(2, 0) = 0.0;  A_host(2, 1) = -1.0; A_host(2, 2) = 2.0;
+    // clang-format on
+
+    Kokkos::deep_copy(A, A_host);
+    return A;
+  }
+
+  vector_t get_q() const {
+    vector_t q(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), 3);
+    auto q_host = Kokkos::create_mirror_view(q);
+    q_host(0) = -1.0;
+    q_host(1) = 0.0;
+    q_host(2) = -1.0;
+    Kokkos::deep_copy(q, q_host);
+    backend_t::apply(-1.0, get_A(), get_exact_solution(), 1.0, q);
+    return q;
+  }
+};
+
 struct RandomLCP {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
@@ -794,6 +940,74 @@ struct RandomLCP {
   vector_t q_;
   vector_t x_star_;
   vector_t grad_star_;
+};
+
+/// \brief 0 <= A x + q _|_ x >= 0 with A = L + I / 100 for the periodic Laplacian L = [-1, 2, -1], whose bottom
+/// eigenvector is the all-ones vector: x* is 1 on the even entries, and A x* + q is 1 on the odd ones.
+struct PeriodicLaplacianLCP {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using value_type = double;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using backend_t = KokkosBackend<exec_space>;
+
+  std::string name() const {
+    return "PeriodicLaplacianLCP" + std::to_string(size_);
+  }
+
+  explicit PeriodicLaplacianLCP(unsigned size) : size_(size) {
+  }
+
+  unsigned size() const {
+    return size_;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space() const {
+    return LowerBoundSpace<value_type>(0.0);
+  }
+
+  vector_t get_exact_solution() const {
+    vector_t x_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_exact"), size_);
+    auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+    for (size_t i = 0; i < size_; ++i) {
+      x_exact_host(i) = i % 2 == 0 ? 1.0 : 0.0;
+    }
+    Kokkos::deep_copy(x_exact, x_exact_host);
+    return x_exact;
+  }
+
+  linear_op_t get_A() const {
+    linear_op_t A("A", size_, size_);
+    auto A_host = Kokkos::create_mirror_view(A);
+    for (size_t i = 0; i < size_; ++i) {
+      A_host(i, i) = 2.0 + 0.01;
+      A_host(i, (i + 1) % size_) = -1.0;
+      A_host(i, (i + size_ - 1) % size_) = -1.0;
+    }
+    Kokkos::deep_copy(A, A_host);
+    return A;
+  }
+
+  vector_t get_q() const {
+    vector_t q(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), size_);
+    auto q_host = Kokkos::create_mirror_view(q);
+    for (size_t i = 0; i < size_; ++i) {
+      q_host(i) = i % 2 == 0 ? 0.0 : 1.0;
+    }
+    Kokkos::deep_copy(q, q_host);
+    backend_t::apply(-1.0, get_A(), get_exact_solution(), 1.0, q);
+    return q;
+  }
+
+ private:
+  unsigned size_;
 };
 
 namespace congruent {
@@ -1173,8 +1387,11 @@ struct MPRGPPGD {
 };
 
 
-template <class Test, class MakePGD = DefaultPGD>
-void run_mundy_math_test(const Test& test, const MakePGD& make_pgd = {}) {
+/// \brief Whether a run is expected to converge to x* or to fail to converge.
+enum class Expect { converges, fails };
+
+template <class Test, class MakePGD>
+void run_mundy_math_test(const Test& test, const MakePGD& make_pgd, Expect expect = Expect::converges) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1186,7 +1403,9 @@ void run_mundy_math_test(const Test& test, const MakePGD& make_pgd = {}) {
   using vector_t = decltype(x_exact);
   vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
 
-  x.fill(99.99);  // use a bad initial guess to force more iterations
+  // A bad initial guess, to force more iterations, in the space
+  x.fill(99.99);
+  MundyMathBackend::assign("start", x, projection(MundyMathBackend{}, space, x));
 
   // Build the problem
   const auto cqpp = make_cqpp<MundyMathBackend>(A, q, space);
@@ -1200,15 +1419,16 @@ void run_mundy_math_test(const Test& test, const MakePGD& make_pgd = {}) {
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
 
   // Check results
-  EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, cfg.max_iters);
-  for (size_t i = 0; i < vector_t::size; ++i) {
-    EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+  EXPECT_EQ(result.converged, expect == Expect::converges);
+  if (expect == Expect::converges) {
+    for (size_t i = 0; i < vector_t::size; ++i) {
+      EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+    }
   }
 }
 
-template <class Test, class MakePGD = DefaultPGD>
-void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd, Expect expect = Expect::converges) {
   std::cout << "Running congruent test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1227,7 +1447,9 @@ void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd = {
     vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
     vector_t f{}, u{};
 
-    x.fill(99.99);  // use a bad initial guess to force more iterations
+    // A bad initial guess, to force more iterations, in the space
+    x.fill(99.99);
+    MundyMathBackend::assign("start", x, projection(MundyMathBackend{}, space, x));
 
     // Build quadratic form operator + user-owned workspace, then the problem
     const auto A = make_quadratic_form<MundyMathBackend>(DT, M, D);
@@ -1242,14 +1464,21 @@ void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd = {
     // Solve (can reuse "cqpp" and "pgd" across many states)
     auto result = solve_cqpp(cqpp, pgd, pgd_state);
 
-    // Check results
-    EXPECT_TRUE(result.converged);
-    EXPECT_LE(result.num_iters, cfg.max_iters);
-    EXPECT_TRUE(cqpp.workspace().is_committed());
+    // Check results; f and u are those of an apply at the returned x
+    EXPECT_EQ(result.converged, expect == Expect::converges);
+    vector_t f_at_x{}, u_at_x{}, A_x{};
+    auto at_x = A.make_workspace(f_at_x, u_at_x);
+    MundyMathBackend::apply(A, x, A_x, at_x);
     for (size_t i = 0; i < vector_t::size; ++i) {
-      EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
-      EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
-      EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+      EXPECT_EQ(f[i], f_at_x[i]);
+      EXPECT_EQ(u[i], u_at_x[i]);
+    }
+    if (expect == Expect::converges) {
+      for (size_t i = 0; i < vector_t::size; ++i) {
+        EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+        EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
+        EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+      }
     }
   }
 
@@ -1259,11 +1488,13 @@ void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd = {
     vector_t x{}, grad{}, x_tmp{}, grad_tmp{}, p{};
     vector_t f{}, u{};
 
-    x.fill(99.99);  // use a bad initial guess to force more iterations
+    // A bad initial guess, to force more iterations, in the space
+    x.fill(99.99);
+    MundyMathBackend::assign("start", x, projection(MundyMathBackend{}, space, x));
 
     // Build the cqpp directly
     // Use f = D x and u = M f as intermediate variables to avoid redundant computations in the PGD iterations
-    // The final values of f and u post-solve are guaranteed to be f(x^*) and u(x^*).
+    // On return, f and u are those of an apply at the returned x.
     const auto cqpp = make_cqpp<MundyMathBackend>(DT, M, D, q, f, u, space);
 
     // Strategy + state
@@ -1274,20 +1505,28 @@ void run_mundy_math_congruent_test(const Test& test, const MakePGD& make_pgd = {
     // Solve (can reuse "cqpp" and "pgd" across many states)
     auto result = solve_cqpp(cqpp, pgd, pgd_state);
 
-    // Check results
-    EXPECT_TRUE(result.converged);
-    EXPECT_LE(result.num_iters, cfg.max_iters);
-    EXPECT_TRUE(cqpp.workspace().is_committed());
+    // Check results; f and u are those of an apply at the returned x
+    EXPECT_EQ(result.converged, expect == Expect::converges);
+    const auto A = make_quadratic_form<MundyMathBackend>(DT, M, D);
+    vector_t f_at_x{}, u_at_x{}, A_x{};
+    auto at_x = A.make_workspace(f_at_x, u_at_x);
+    MundyMathBackend::apply(A, x, A_x, at_x);
     for (size_t i = 0; i < vector_t::size; ++i) {
-      EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
-      EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
-      EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+      EXPECT_EQ(f[i], f_at_x[i]);
+      EXPECT_EQ(u[i], u_at_x[i]);
+    }
+    if (expect == Expect::converges) {
+      for (size_t i = 0; i < vector_t::size; ++i) {
+        EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+        EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
+        EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+      }
     }
   }
 }
 
-template <class Test, class MakePGD = DefaultPGD>
-void run_mundy_math_mixed_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_mundy_math_mixed_congruent_test(const Test& test, const MakePGD& make_pgd) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1346,15 +1585,14 @@ void run_mundy_math_mixed_congruent_test(const Test& test, const MakePGD& make_p
 
   // Check results
   EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, cfg.max_iters);
   for (size_t i = 0; i < vector_t::size; ++i) {
     EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
   }
 }
 
 // The full mixed-CQPP chain (make_mixed_cqpp through solve_mixed_cqpp) constructed and solved inside a kernel.
-template <class Test, class MakePGD = DefaultPGD>
-void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test, const MakePGD& make_pgd) {
   constexpr double tol = 1e-6;
   Kokkos::View<double, Kokkos::DefaultExecutionSpace::memory_space> max_error("max_error");
   Kokkos::View<bool, Kokkos::DefaultExecutionSpace::memory_space> converged("converged");
@@ -1388,8 +1626,8 @@ void run_mundy_math_mixed_congruent_test_in_kernel(const Test& test, const MakeP
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
-template <class Test, class MakePGD = DefaultPGD>
-void run_kokkos_test(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_kokkos_test(const Test& test, const MakePGD& make_pgd, Expect expect = Expect::converges) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1407,7 +1645,10 @@ void run_kokkos_test(const Test& test, const MakePGD& make_pgd = {}) {
   vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
   vector_t p(Kokkos::view_alloc(Kokkos::WithoutInitializing, "p"), size);
 
-  Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
+  // A bad initial guess, to force more iterations, in the space
+  Kokkos::deep_copy(x, 99.99);
+  KokkosBackend<decltype(exec_space)>::assign("start", x,
+                                              projection(KokkosBackend<decltype(exec_space)>{}, space, x));
 
   // Build the problem
   const auto cqpp = make_cqpp<KokkosBackend<decltype(exec_space)>>(A, q, space);
@@ -1421,21 +1662,18 @@ void run_kokkos_test(const Test& test, const MakePGD& make_pgd = {}) {
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
 
   // Check results
-  EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, cfg.max_iters);
-
-  // Copy x to host for comparison
-  auto x_host = Kokkos::create_mirror_view(x);
-  auto x_exact_host = Kokkos::create_mirror_view(x_exact);
-  Kokkos::deep_copy(x_host, x);
-  Kokkos::deep_copy(x_exact_host, x_exact);
-  for (size_t i = 0; i < size; ++i) {
-    EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
+  EXPECT_EQ(result.converged, expect == Expect::converges);
+  if (expect == Expect::converges) {
+    const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+    const auto x_exact_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_exact);
+    for (size_t i = 0; i < size; ++i) {
+      EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
+    }
   }
 }
 
-template <class Test, class MakePGD = DefaultPGD>
-void run_kokkos_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_kokkos_congruent_test(const Test& test, const MakePGD& make_pgd, Expect expect = Expect::converges) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   // Problem setup
@@ -1459,7 +1697,10 @@ void run_kokkos_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
   vector_t u(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u"), size);
   vector_t p(Kokkos::view_alloc(Kokkos::WithoutInitializing, "p"), size);
 
-  Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
+  // A bad initial guess, to force more iterations, in the space
+  Kokkos::deep_copy(x, 99.99);
+  KokkosBackend<decltype(exec_space)>::assign("start", x,
+                                              projection(KokkosBackend<decltype(exec_space)>{}, space, x));
 
   // Build quadratic form operator + user-owned workspace, then the problem
   const auto A = make_quadratic_form<KokkosBackend<decltype(exec_space)>>(DT, M, D);
@@ -1474,33 +1715,38 @@ void run_kokkos_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
 
-  // Check results
-  EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, cfg.max_iters);
-  EXPECT_TRUE(cqpp.workspace().is_committed());
-
-  // Copy x to host for comparison
-  auto x_host = Kokkos::create_mirror_view(x);
-  auto f_host = Kokkos::create_mirror_view(f);
-  auto u_host = Kokkos::create_mirror_view(u);
-  auto x_exact_host = Kokkos::create_mirror_view(x_exact);
-  auto f_exact_host = Kokkos::create_mirror_view(f_exact);
-  auto u_exact_host = Kokkos::create_mirror_view(u_exact);
-  Kokkos::deep_copy(x_host, x);
-  Kokkos::deep_copy(f_host, f);
-  Kokkos::deep_copy(u_host, u);
-  Kokkos::deep_copy(x_exact_host, x_exact);
-  Kokkos::deep_copy(f_exact_host, f_exact);
-  Kokkos::deep_copy(u_exact_host, u_exact);
-  for (size_t i = 0; i < size; ++i) {
-    EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
-    EXPECT_NEAR(f_host[i], f_exact_host[i], 10 * cfg.tol);
-    EXPECT_NEAR(u_host[i], u_exact_host[i], 10 * cfg.tol);
+  // Check results; f and u are those of an apply at the returned x
+  EXPECT_EQ(result.converged, expect == Expect::converges);
+  vector_t f_at_x("f_at_x", size), u_at_x("u_at_x", size), A_x("A_x", size);
+  auto at_x = A.make_workspace(f_at_x, u_at_x);
+  KokkosBackend<decltype(exec_space)>::apply(A, x, A_x, at_x);
+  {
+    const auto f_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, f);
+    const auto u_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, u);
+    const auto f_at_x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, f_at_x);
+    const auto u_at_x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, u_at_x);
+    for (size_t i = 0; i < size; ++i) {
+      EXPECT_EQ(f_host[i], f_at_x_host[i]);
+      EXPECT_EQ(u_host[i], u_at_x_host[i]);
+    }
+  }
+  if (expect == Expect::converges) {
+    const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+    const auto f_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, f);
+    const auto u_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, u);
+    const auto x_exact_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_exact);
+    const auto f_exact_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, f_exact);
+    const auto u_exact_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, u_exact);
+    for (size_t i = 0; i < size; ++i) {
+      EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
+      EXPECT_NEAR(f_host[i], f_exact_host[i], 10 * cfg.tol);
+      EXPECT_NEAR(u_host[i], u_exact_host[i], 10 * cfg.tol);
+    }
   }
 }
 
-template <class Test, class MakePGD = DefaultPGD>
-void run_kokkos_mixed_congruent_test(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_kokkos_mixed_congruent_test(const Test& test, const MakePGD& make_pgd) {
   std::cout << "Running test: " << test.name() << std::endl;
 
   auto exec_space = test.get_exec_space();
@@ -1564,7 +1810,6 @@ void run_kokkos_mixed_congruent_test(const Test& test, const MakePGD& make_pgd =
 
   // Check results
   EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, cfg.max_iters);
   const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
   const auto x_exact_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x_exact);
   for (size_t i = 0; i < size; ++i) {
@@ -1613,8 +1858,8 @@ AllocationCount count_allocations(F&& f) {
 
 // A mixed CQPP formed in a reused workspace solves exactly as one formed in fresh storage, and forming and solving it
 // through that workspace allocates nothing but the allocations its sparse applies make.
-template <class Test, class MakePGD = DefaultPGD>
-void run_kokkos_mixed_congruent_workspace_test(const Test& test, const MakePGD& make_pgd = {}) {
+template <class Test, class MakePGD>
+void run_kokkos_mixed_congruent_workspace_test(const Test& test, const MakePGD& make_pgd) {
   using exec_space = decltype(test.get_exec_space());
   using backend_t = KokkosBackend<exec_space>;
   const auto DT = test.get_DT();
@@ -1658,6 +1903,17 @@ void run_kokkos_mixed_congruent_workspace_test(const Test& test, const MakePGD& 
     EXPECT_EQ(counted.allocations, allocations_per_sparse_apply<exec_space>() * counted.sparse_applies)
         << test.name() << " pass " << pass;
   }
+
+  // l_workspace.u is that of an apply at the returned x
+  auto at_x = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT);
+  const auto reduced = to_cqpp(make_mixed_cqpp<backend_t>(DT, M, D, q, B, S, BT, b, space, at_x));
+  vector_t H_x("H_x", size);
+  backend_t::apply(reduced.A(), x_reused, H_x, reduced.workspace());
+  const auto u_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, workspace.l_workspace.u());
+  const auto u_at_x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, at_x.l_workspace.u());
+  for (size_t i = 0; i < u_host.extent(0); ++i) {
+    EXPECT_EQ(u_host(i), u_at_x_host(i)) << test.name() << " entry " << i;
+  }
 }
 
 /// \brief op, whose new vectors start NaN-filled, as uninitialized storage may.
@@ -1697,7 +1953,8 @@ struct NaNVectorsOp {
 // A mixed CQPP whose applies of S, for S b and within L = B S B^T, share one given workspace of S solves exactly as one
 // whose workspace holds its own, and both run in the given storage. S is CG on B^T M B + K^-1, so it has scratch of its
 // own: CG's vectors and the quadratic form's. Its vectors start NaN-filled, so either workspace must zero S's guesses.
-void run_kokkos_mixed_congruent_shared_s_workspace_test(const auto& test) {
+template <class Test, class MakePGD>
+void run_kokkos_mixed_congruent_shared_s_workspace_test(const Test& test, const MakePGD& make_pgd) {
   using backend_t = KokkosBackend<decltype(test.get_exec_space())>;
   const auto DT = test.get_DT();
   const auto M = test.get_M();
@@ -1713,8 +1970,8 @@ void run_kokkos_mixed_congruent_shared_s_workspace_test(const auto& test) {
   const auto space = test.get_space_x();
   using vector_t = decltype(test.get_exact_x());
   const size_t size = test.get_exact_x().extent(0);
-  const auto pgd = make_pgd_solution_strategy(PGDConfig<double>{.max_iters = 1000, .tol = 1e-6});
-  vector_t grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size);
+  vector_t grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size), p("p", size);
+  const auto pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = 1e-6}, p);
 
   // Solve
   auto own = make_mixed_cqpp_workspace<backend_t>(DT, M, D, q, B, S, BT);
@@ -1742,8 +1999,103 @@ void run_kokkos_mixed_congruent_shared_s_workspace_test(const auto& test) {
   EXPECT_EQ(shared.s_workspace.r().data(), s_workspace.r().data()) << test.name();
   EXPECT_EQ(shared.l_workspace.m_workspace().r().data(), s_workspace.r().data()) << test.name();
   EXPECT_NE(own.s_workspace.r().data(), own.l_workspace.m_workspace().r().data()) << test.name();
+
+  // l_workspace.u is S w, w = B^T M D x, to within the inner solve: u - S w = S r with ||r||_2 <= cg_tol, so
+  // ||u - S w||_2 <= ||S||_F cg_tol
+  const auto S_exact = test.get_S();
+  const size_t num_y = backend_t::range_size(BT);
+  vector_t dx("dx", backend_t::range_size(D)), mdx("mdx", backend_t::range_size(M)), w("w", num_y);
+  vector_t S_w("S_w", num_y), e("e", num_y), S_e("S_e", num_y);
+  backend_t::apply(D, x_shared, dx);
+  backend_t::apply(M, dx, mdx);
+  backend_t::apply(BT, mdx, w);
+  backend_t::apply(S_exact, w, S_w);
+  double S_frobenius_squared = 0.0;
+  for (size_t j = 0; j < num_y; ++j) {
+    Kokkos::deep_copy(e, 0.0);
+    Kokkos::deep_copy(Kokkos::subview(e, j), 1.0);
+    backend_t::apply(S_exact, e, S_e);
+    S_frobenius_squared += dot(backend_t{}, S_e, S_e);
+  }
+  const auto u_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, shared.l_workspace.u());
+  const auto S_w_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, S_w);
+  double error_squared = 0.0;
+  for (size_t i = 0; i < num_y; ++i) {
+    error_squared += (u_host(i) - S_w_host(i)) * (u_host(i) - S_w_host(i));
+  }
+  EXPECT_LE(std::sqrt(error_squared), std::sqrt(S_frobenius_squared) * CGConfig<double>{}.tol) << test.name();
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+
+/// \brief num_iters counts every step make_pgd's strategy takes, on a random LCP: a solve capped at the steps an
+/// uncapped one took still converges, one capped a step earlier does not, and one started at x* takes none.
+///
+/// rand() is seeded here, so the LCP does not depend on the tests run before.
+template <class MakePGD>
+void expect_iterations_count_every_step(const MakePGD& make_pgd) {
+  std::srand(7);
+  const math_backend::RandomLCP<7> test;
+  using vector_t = decltype(test.get_exact_solution());
+  const auto cqpp = make_cqpp<MundyMathBackend>(test.get_A(), test.get_q(), test.get_space());
+  const auto solve = [&](unsigned max_iters, const vector_t& start) {
+    vector_t x = start, grad{}, x_tmp{}, grad_tmp{}, p{};
+    const auto pgd = make_pgd(PGDConfig<double>{.max_iters = max_iters, .tol = 1e-12}, p);
+    auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
+    return solve_cqpp(cqpp, pgd, state);
+  };
+  vector_t start;
+  start.fill(99.99);
+
+  const PGDResult<double> uncapped = solve(1000, start);
+  ASSERT_TRUE(uncapped.converged) << uncapped;
+  ASSERT_GT(uncapped.num_iters, 1u);
+
+  const PGDResult<double> capped = solve(uncapped.num_iters, start);
+  EXPECT_TRUE(capped.converged) << capped;
+  EXPECT_EQ(capped.num_iters, uncapped.num_iters);
+
+  const PGDResult<double> a_step_short = solve(uncapped.num_iters - 1, start);
+  EXPECT_FALSE(a_step_short.converged) << a_step_short;
+  EXPECT_EQ(a_step_short.num_iters, uncapped.num_iters - 1);
+
+  const PGDResult<double> at_solution = solve(1000, test.get_exact_solution());
+  EXPECT_TRUE(at_solution.converged) << at_solution;
+  EXPECT_EQ(at_solution.num_iters, 0u);
+}
+
+/// \brief Every solve make_pgd's strategy ends, capped at any k from 0 to the steps an uncapped one takes, leaves f and u
+/// those of an apply at the returned x and reports the projected-difference residual of A x + q formed by that apply.
+template <class MakePGD>
+void expect_solves_end_on_an_apply_at_their_iterate(const MakePGD& make_pgd) {
+  const math_backend::congruent::CongruentLCPWrapper test{math_backend::PeriodicLaplacianLCP<8>{}};
+  using vector_t = decltype(test.get_x_exact());
+  const auto q = test.get_q();
+  const auto space = test.get_space();
+  const auto A = make_quadratic_form<MundyMathBackend>(test.get_DT(), test.get_M(), test.get_D());
+  const auto solve = [&](unsigned max_iters, vector_t& x, vector_t& f, vector_t& u) {
+    x.fill(99.99);
+    vector_t grad{}, x_tmp{}, grad_tmp{}, p{};
+    const auto cqpp = make_cqpp<MundyMathBackend>(A, q, space, A.make_workspace(f, u));
+    const auto pgd = make_pgd(PGDConfig<double>{.max_iters = max_iters, .tol = 1e-6}, p);
+    auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
+    return solve_cqpp(cqpp, pgd, state);
+  };
+
+  vector_t x{}, f{}, u{};
+  const PGDResult<double> uncapped = solve(1000, x, f, u);
+  for (unsigned k = 0; k <= uncapped.num_iters; ++k) {
+    const PGDResult<double> result = solve(k, x, f, u);
+    vector_t f_at_x{}, u_at_x{}, grad_at_x{};
+    auto at_x = A.make_workspace(f_at_x, u_at_x);
+    MundyMathBackend::apply(A, x, grad_at_x, at_x);
+    axpby(MundyMathBackend{}, 1.0, q, 1.0, grad_at_x);
+    ASSERT_EQ(result.residual, LinfNormProjectedDiffResidual{}(MundyMathBackend{}, x, grad_at_x, space)) << "k = " << k;
+    for (size_t i = 0; i < vector_t::size; ++i) {
+      ASSERT_EQ(f[i], f_at_x[i]) << "k = " << k << ", i = " << i;
+      ASSERT_EQ(u[i], u_at_x[i]) << "k = " << k << ", i = " << i;
+    }
+  }
+}
 
 //! \name Analytical solutions
 //@{
@@ -1752,14 +2104,26 @@ TEST(Convex, MundyMathAnalyticalSolutions) {
   auto test_cases = std::make_tuple(math_backend::UnconstrainedSPD1Problem{},          //
                                     math_backend::InactiveBoxConstrainedSPDProblem{},  //
                                     math_backend::ActiveBoxConstrainedSPDProblem{},    //
+                                    math_backend::ActiveUpperBoundSPDProblem{},        //
                                     math_backend::RandomLCP<3>{},                      //
                                     math_backend::RandomLCP<7>{});
   std::apply(
       [](auto&&... test_case) {
-        (run_mundy_math_test(test_case), ...);
+        (run_mundy_math_test(test_case, DefaultPGD{}), ...);
         (run_mundy_math_test(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_test(test_case, NonmonotoneBBPGD{}), ...);
       },
       test_cases);
+
+  // Plain Barzilai-Borwein steps fall into a limit cycle on these
+  auto cycling_cases = std::make_tuple(math_backend::PeriodicLaplacianLCP<8>{});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_mundy_math_test(test_case, DefaultPGD{}, Expect::fails), ...);
+        (run_mundy_math_test(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_test(test_case, NonmonotoneBBPGD{}), ...);
+      },
+      cycling_cases);
 }
 
 TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
@@ -1767,14 +2131,26 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
   auto test_cases = std::make_tuple(CongruentLCPWrapper{math_backend::UnconstrainedSPD1Problem{}},          //
                                     CongruentLCPWrapper{math_backend::InactiveBoxConstrainedSPDProblem{}},  //
                                     CongruentLCPWrapper{math_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPWrapper{math_backend::ActiveUpperBoundSPDProblem{}},        //
                                     CongruentLCPWrapper{math_backend::RandomLCP<3>{}},                      //
                                     CongruentLCPWrapper{math_backend::RandomLCP<7>{}});
   std::apply(
       [](auto&&... test_case) {
-        (run_mundy_math_congruent_test(test_case), ...);
+        (run_mundy_math_congruent_test(test_case, DefaultPGD{}), ...);
         (run_mundy_math_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_congruent_test(test_case, NonmonotoneBBPGD{}), ...);
       },
       test_cases);
+
+  // Plain Barzilai-Borwein steps fall into a limit cycle on these
+  auto cycling_cases = std::make_tuple(CongruentLCPWrapper{math_backend::PeriodicLaplacianLCP<8>{}});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_mundy_math_congruent_test(test_case, DefaultPGD{}, Expect::fails), ...);
+        (run_mundy_math_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_congruent_test(test_case, NonmonotoneBBPGD{}), ...);
+      },
+      cycling_cases);
 }
 
 TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
@@ -1783,10 +2159,12 @@ TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply(
       [](auto&&... test_case) {
-        (run_mundy_math_mixed_congruent_test(test_case), ...);
-        (run_mundy_math_mixed_congruent_test_in_kernel(test_case), ...);
+        (run_mundy_math_mixed_congruent_test(test_case, DefaultPGD{}), ...);
+        (run_mundy_math_mixed_congruent_test_in_kernel(test_case, DefaultPGD{}), ...);
         (run_mundy_math_mixed_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_mixed_congruent_test(test_case, NonmonotoneBBPGD{}), ...);
         (run_mundy_math_mixed_congruent_test_in_kernel(test_case, MPRGPPGD{}), ...);
+        (run_mundy_math_mixed_congruent_test_in_kernel(test_case, NonmonotoneBBPGD{}), ...);
       },
       test_cases);
 }
@@ -1800,17 +2178,34 @@ TEST(Convex, KokkosAnalyticalSolutions) {
   auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
                                     kokkos_backend::InactiveBoxConstrainedSPDProblem{},  //
                                     kokkos_backend::ActiveBoxConstrainedSPDProblem{},    //
+                                    kokkos_backend::ActiveUpperBoundSPDProblem{},        //
                                     kokkos_backend::RandomLCP{3},                        //
                                     kokkos_backend::RandomLCP{7},                        //
                                     kokkos_backend::RandomLCP{200});
   std::apply(
       [](auto&&... test_case) {
-        (run_kokkos_test(test_case), ...);
-        (run_kokkos_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_test(test_case, DefaultPGD{}), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}), ...);
         (run_kokkos_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_test(test_case, NonmonotoneBBPGD{}), ...);
         (run_kokkos_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case), NonmonotoneBBPGD{}), ...);
       },
       test_cases);
+
+  // Plain Barzilai-Borwein steps fall into a limit cycle on these
+  auto cycling_cases = std::make_tuple(kokkos_backend::PeriodicLaplacianLCP{8},  //
+                                       kokkos_backend::PeriodicLaplacianLCP{64});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_test(test_case, DefaultPGD{}, Expect::fails), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}, Expect::fails), ...);
+        (run_kokkos_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_test(test_case, NonmonotoneBBPGD{}), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+        (run_kokkos_test(kokkos_backend::as_sparse(test_case), NonmonotoneBBPGD{}), ...);
+      },
+      cycling_cases);
 }
 
 TEST(Convex, KokkosCongruentAnalyticalSolutions) {
@@ -1822,17 +2217,34 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
   auto test_cases = std::make_tuple(CongruentLCPWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
                                     CongruentLCPWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
                                     CongruentLCPWrapper{kokkos_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPWrapper{kokkos_backend::ActiveUpperBoundSPDProblem{}},        //
                                     CongruentLCPWrapper{kokkos_backend::RandomLCP{3}},                        //
                                     CongruentLCPWrapper{kokkos_backend::RandomLCP{7}},                        //
                                     CongruentLCPWrapper{kokkos_backend::RandomLCP{200}});
   std::apply(
       [](auto&&... test_case) {
-        (run_kokkos_congruent_test(test_case), ...);
-        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_congruent_test(test_case, DefaultPGD{}), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}), ...);
         (run_kokkos_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_congruent_test(test_case, NonmonotoneBBPGD{}), ...);
         (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), NonmonotoneBBPGD{}), ...);
       },
       test_cases);
+
+  // Plain Barzilai-Borwein steps fall into a limit cycle on these
+  auto cycling_cases = std::make_tuple(CongruentLCPWrapper{kokkos_backend::PeriodicLaplacianLCP{8}},  //
+                                       CongruentLCPWrapper{kokkos_backend::PeriodicLaplacianLCP{64}});
+  std::apply(
+      [](auto&&... test_case) {
+        (run_kokkos_congruent_test(test_case, DefaultPGD{}, Expect::fails), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}, Expect::fails), ...);
+        (run_kokkos_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_congruent_test(test_case, NonmonotoneBBPGD{}), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+        (run_kokkos_congruent_test(kokkos_backend::as_sparse(test_case), NonmonotoneBBPGD{}), ...);
+      },
+      cycling_cases);
 }
 
 TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
@@ -1845,10 +2257,12 @@ TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply(
       [](auto&&... test_case) {
-        (run_kokkos_mixed_congruent_test(test_case), ...);
-        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_mixed_congruent_test(test_case, DefaultPGD{}), ...);
+        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}), ...);
         (run_kokkos_mixed_congruent_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_test(test_case, NonmonotoneBBPGD{}), ...);
         (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_test(kokkos_backend::as_sparse(test_case), NonmonotoneBBPGD{}), ...);
       },
       test_cases);
 }
@@ -1862,12 +2276,16 @@ TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply(
       [](auto&&... test_case) {
-        (run_kokkos_mixed_congruent_workspace_test(test_case), ...);
-        (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case), ...);
-        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
-        (run_kokkos_mixed_congruent_shared_s_workspace_test(kokkos_backend::as_sparse(test_case)), ...);
+        (run_kokkos_mixed_congruent_workspace_test(test_case, DefaultPGD{}), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case, DefaultPGD{}), ...);
+        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(kokkos_backend::as_sparse(test_case), DefaultPGD{}), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_shared_s_workspace_test(test_case, NonmonotoneBBPGD{}), ...);
         (run_kokkos_mixed_congruent_workspace_test(test_case, MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_workspace_test(test_case, NonmonotoneBBPGD{}), ...);
         (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case), MPRGPPGD{}), ...);
+        (run_kokkos_mixed_congruent_workspace_test(kokkos_backend::as_sparse(test_case), NonmonotoneBBPGD{}), ...);
       },
       test_cases);
 }
@@ -1879,8 +2297,8 @@ TEST(Convex, KokkosMixedCongruentWorkspaceReuse) {
 
 // PGD commutes with scaling the problem: (c A, c q) to tolerance c tol has the same minimizer, its steps scale as 1/c
 // and its gradients as c. A power-of-two c scales exactly, so the scaled solves match the unscaled one bit for bit,
-// under Barzilai-Borwein and under MPRGP steps. Both measure the projected gradient, which scales with c; the projected
-// difference's fixed step does not.
+// under Barzilai-Borwein, nonmonotone Barzilai-Borwein, and MPRGP steps. Each measures the projected gradient, which
+// scales with c; the projected difference's fixed step does not.
 TEST(Convex, PGDIsScaleInvariant) {
   const math_backend::RandomLCP<7> test;
   using vector_t = decltype(test.get_exact_solution());
@@ -1911,7 +2329,69 @@ TEST(Convex, PGDIsScaleInvariant) {
     }
   };
   expect_scale_invariant(BBPGD<LinfNormProjectedGradientResidual>{}, "Barzilai-Borwein");
+  expect_scale_invariant(NonmonotoneBBPGD<LinfNormProjectedGradientResidual>{}, "nonmonotone Barzilai-Borwein");
   expect_scale_invariant(MPRGPPGD<LinfNormProjectedGradientResidual>{}, "MPRGP");
+}
+//@}
+
+//! \name Iteration counts
+//@{
+
+TEST(Convex, IterationsCountEveryStepTaken) {
+  {
+    SCOPED_TRACE("Barzilai-Borwein");
+    expect_iterations_count_every_step(DefaultPGD{});
+  }
+  {
+    SCOPED_TRACE("nonmonotone Barzilai-Borwein");
+    expect_iterations_count_every_step(NonmonotoneBBPGD{});
+  }
+  {
+    SCOPED_TRACE("MPRGP");
+    expect_iterations_count_every_step(MPRGPPGD{});
+  }
+}
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+// A problem with no unknowns starts converged, so every step strategy takes no step.
+TEST(Convex, EmptyProblemsTakeNoStep) {
+  using backend_t = KokkosBackend<Kokkos::DefaultExecutionSpace>;
+  using vector_t = Kokkos::View<double*, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+  using matrix_t = Kokkos::View<double**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace::memory_space>;
+  const matrix_t A("A", 0, 0);
+  const vector_t q("q", 0);
+  const auto cqpp = make_cqpp<backend_t>(A, q, LowerBoundSpace<double>(0.0));
+  const auto expect_no_step = [&](const auto& make_pgd, std::string_view steps) {
+    vector_t x("x", 0), grad("grad", 0), x_tmp("x_tmp", 0), grad_tmp("grad_tmp", 0), p("p", 0);
+    const auto pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = 1e-12}, p);
+    auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
+    const PGDResult<double> result = solve_cqpp(cqpp, pgd, state);
+    EXPECT_TRUE(result.converged) << steps << ": " << result;
+    EXPECT_EQ(result.num_iters, 0u) << steps;
+  };
+  expect_no_step(DefaultPGD{}, "Barzilai-Borwein");
+  expect_no_step(NonmonotoneBBPGD{}, "nonmonotone Barzilai-Borwein");
+  expect_no_step(MPRGPPGD{}, "MPRGP");
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+//@}
+
+//! \name Returned iterates
+//@{
+
+TEST(Convex, SolvesEndOnAnApplyAtTheirIterate) {
+  {
+    SCOPED_TRACE("Barzilai-Borwein");
+    expect_solves_end_on_an_apply_at_their_iterate(BBPGD<LinfNormProjectedDiffResidual>{});
+  }
+  {
+    SCOPED_TRACE("nonmonotone Barzilai-Borwein");
+    expect_solves_end_on_an_apply_at_their_iterate(NonmonotoneBBPGD<LinfNormProjectedDiffResidual>{});
+  }
+  {
+    SCOPED_TRACE("MPRGP");
+    expect_solves_end_on_an_apply_at_their_iterate(MPRGPPGD<LinfNormProjectedDiffResidual>{});
+  }
 }
 //@}
 

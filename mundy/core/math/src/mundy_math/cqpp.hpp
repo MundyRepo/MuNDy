@@ -132,8 +132,7 @@ class CQPP {
 ///   g := q - D^T M f_b
 /// y^*, f^*, and u^* are all intermediates that may or may not be explicitly formed during the solution
 /// process depending on the structure of L. We refer to these variables as your "workspace" variables. They are updated
-/// by the linear operators during the solution process, and their final values are "committed" at the end of the solve
-/// to indicate that they are the correct values corresponding to the optimal x^*.
+/// by the linear operators during the solution process; what they hold on return is stated by the solution strategy.
 ///
 /// We may also have the simpler problem where D = I, in which case the reduced CQPP is:
 ///   x^* = argmin_{x in Omega_x} 0.5 x^T H x + g^T x
@@ -711,6 +710,8 @@ KOKKOS_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&&
 ///
 /// MCQPP / CongruentMCQPP reduce to a CQPP via `to_cqpp` and are solved through \ref solve_mixed_cqpp.
 ///
+/// What the problem's workspace holds on return, and what result.residual measures, are stated by the strategy.
+///
 /// \param prob The constrained quadratic programming problem to solve.
 /// \param strat The solution strategy to use.
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
@@ -754,8 +755,7 @@ KOKKOS_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, Stat
 ///   g := q - D^T M f_b
 /// y^*, f^*, and u^* are all intermediates that may or may not be explicitly formed during the solution
 /// process depending on the structure of L. We refer to these variables as your "workspace" variables. They are updated
-/// by the linear operators during the solution process, and their final values are "committed" at the end of the solve
-/// to indicate that they are the correct values corresponding to the optimal x^*.
+/// by the linear operators during the solution process; what they hold on return is stated by the solution strategy.
 ///
 /// We may also have the simpler problem where D = I, in which case the reduced CQPP is:
 ///   x^* = argmin_{x in Omega_x} 0.5 x^T H x + g^T x
@@ -764,6 +764,10 @@ KOKKOS_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, Stat
 ///
 /// Just like the CQPP, we will either accept the simple case of (A, q, L, f_b) or the more general case of (DT, M, D,
 /// q, BT, S, B, b).
+///
+/// What the problem's workspace holds on return, and what result.residual measures, are stated by the strategy.
+/// The intermediates land in the storage the given workspaces refer to. The reduction to a CQPP copies each
+/// workspace, so one that owns its vectors is left unchanged.
 ///
 /// \param prob The mixed constrained convex quadratic programming problem to solve.
 /// \param strat The solution strategy to use (for the reduced CQPP in x and the linear solve in y).

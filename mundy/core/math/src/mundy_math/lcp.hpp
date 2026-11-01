@@ -147,6 +147,10 @@ KOKKOS_INLINE_FUNCTION auto make_lcp(LinearOp&& A, QVector&& q, Workspace&& work
 ///   -# Lemke pivoting (planned) -- native, operates on the LCP directly, no `cqpp.hpp` dependency.
 ///   -# Interior-point (planned) -- native, no `cqpp.hpp` dependency.
 ///
+/// What the problem's workspace holds on return, and what result.residual measures, are stated by the strategy.
+/// The intermediates land in the storage the given workspaces refer to. The reduction to a CQPP copies each
+/// workspace, so one that owns its vectors is left unchanged.
+///
 /// \param prob The linear complementarity problem to solve.
 /// \param strat The CQPP solution strategy to apply to the reduced problem.
 /// \param state The state to use for the solution strategy, which will be modified during the solve.

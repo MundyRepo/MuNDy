@@ -277,6 +277,9 @@ class LanczosState {
 /// The iteration itself is fixed; only how convergence is measured is pluggable. ResidualPolicy is either a
 /// VectorResidualPolicy, measuring r = A q - lambda q against A q, or a ChangeResidualPolicy, measuring lambda against
 /// its previous estimate.
+///
+/// On return, the problem's workspace holds the intermediates of the apply at the returned q, and the eigenvalue and
+/// result.residual are those of that q.
 template <class ResidualPolicy, class Config>
 class PowerStrategy {
  public:
@@ -331,6 +334,9 @@ class PowerStrategy {
       impl::workspace_commit(workspace);
       return true;
     }
+    if (state.iter() >= cfg_.max_iters) {
+      return false;  // the solve ends at q, the vector its eigenvalue and residual were measured at
+    }
 
     const value_type z_norm = sqrt(dot(backend_t{}, state.z(), state.z()));
     MUNDY_THROW_REQUIRE(z_norm > zero, std::runtime_error,
@@ -375,6 +381,8 @@ class PowerStrategy {
 /// (of P A) monotonically from inside. Each theta has the Ritz residual rho = ||A y - theta y|| of its Ritz vector y,
 /// within which an eigenvalue lies; by monotonicity, the least rho at an end so far still bounds it. The solve converges
 /// once that bound is at most tol |theta| at both ends.
+///
+/// Lanczos returns eigenvalue bounds and no vector, so its workspace intermediates are unspecified.
 template <class Config, class Precond = NoPreconditioner>
 class LanczosStrategy {
  public:
@@ -596,7 +604,7 @@ KOKKOS_INLINE_FUNCTION auto make_lanczos_state(VVector&& v, VPrevVector&& v_prev
 
 /// \brief Solve the eigenvalue problem prob from state with strat.
 ///
-/// A converged result implies the operator's workspace is committed.
+/// What the problem's workspace holds on return, and what result.residual measures, are stated by the strategy.
 template <class Problem, class Strategy, class State>
 MUNDY_REQUIRES(requires(const Strategy& s, const Problem& prob, State& state) {
   { s.initialize(prob, state) } -> std::same_as<void>;
@@ -619,7 +627,8 @@ KOKKOS_FUNCTION auto solve_eigen_problem(const Problem& prob, const Strategy& st
 ///
 /// With lambda_d the dominant eigenvalue, the dominant eigenvalue of A - lambda_d I is lambda_opp - lambda_d, where
 /// lambda_opp is the opposite end of the spectrum, so a second power iteration on the shifted operator recovers it.
-/// Each state's q() is its start vector on entry and its unit eigenvector on exit.
+/// Each state's q() is its start vector on entry and its unit eigenvector on exit. The problem's workspace holds the
+/// dominant solve's intermediates, at its returned q; the shifted solve runs on a workspace of its own.
 template <class Problem, class Strategy, class DominantState, class OppositeState>
 KOKKOS_FUNCTION auto solve_eigen_bounds(const Problem& prob, const Strategy& strat, DominantState& dominant_state,
                                         OppositeState& opposite_state) {

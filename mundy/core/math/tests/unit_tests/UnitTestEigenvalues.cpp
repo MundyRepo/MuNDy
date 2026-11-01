@@ -48,6 +48,7 @@
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/Vector3.hpp>
 #include <mundy_math/eigenvalues.hpp>
+#include <mundy_math/linear_ops.hpp>       // for mundy::make_quadratic_form
 #include <mundy_math/preconditioners.hpp>  // for mundy::JacobiPreconditioner
 #include <mundy_math/solver_backends.hpp>
 #include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
@@ -437,7 +438,7 @@ TEST(Eigenvalues, PowerIteratesMatchTheDiagonalClosedForm) {
                    0.0,  0.0,  d[2]};
   auto problem = make_eigen_problem<mm_backend_t>(Matrix3d(A));
   auto state = make_power_state(Vector3d{1.0, 1.0, 1.0}, Vector3d{}, Vector3d{});
-  const auto strategy = make_power_strategy(PowerConfig<double>{.max_iters = 20, .tol = 0.0});
+  const auto strategy = make_power_strategy(PowerConfig<double>{.max_iters = 21, .tol = 0.0});
 
   strategy.initialize(problem, state);
   for (unsigned k = 1; k <= 20; ++k) {
@@ -568,6 +569,41 @@ TEST(Eigenvalues, PowerIterationLimitReturnsTheLastIterate) {
   EXPECT_DOUBLE_EQ(result.residual, manual.residual());
   EXPECT_GT(result.residual, 1e-12);
   EXPECT_LT(result.eigenvalue, tridiagonal_eigenvalue(N, N));
+
+  // The eigenvalue and residual are those of the returned q
+  const auto A_q = tridiagonal<N>(1.0) * solved.q();
+  const double lambda = dot(solved.q(), A_q);
+  EXPECT_DOUBLE_EQ(result.eigenvalue, lambda);
+  EXPECT_DOUBLE_EQ(result.residual, norm(A_q - lambda * solved.q()));
+}
+
+// On D^T M D, whose workspace holds f = D q and u = M f, a converged or capped power solve ends on an apply at the q it
+// returns.
+TEST(Eigenvalues, PowerEndsOnAnApplyAtItsEigenvector) {
+  const Matrix3d D{2.0, 0.5, 0.0,  //
+                   0.0, 1.0, 0.5,  //
+                   0.0, 0.0, 1.5};
+  const Matrix3d M{2.0, -1.0, 0.0,   //
+                   -1.0, 2.0, -1.0,  //
+                   0.0, -1.0, 2.0};
+  const auto A = make_quadratic_form<mm_backend_t>(transpose(D), M, D);
+  for (const unsigned max_iters : {3u, 2000u}) {
+    SCOPED_TRACE(::testing::Message() << "max_iters " << max_iters);
+    Vector3d f, u;
+    const auto problem = EigenProblem(mm_backend_t{}, A, A.make_workspace(f, u));
+    auto state = make_power_state(Vector3d{1.0, 1.0, 1.0}, Vector3d{}, Vector3d{});
+    const auto strategy = make_power_strategy(PowerConfig<double>{.max_iters = max_iters, .tol = 1e-10});
+    const auto result = solve_eigen_problem(problem, strategy, state);
+    EXPECT_EQ(result.converged, max_iters == 2000u);
+
+    Vector3d f_at_q, u_at_q, A_q;
+    auto at_q = A.make_workspace(f_at_q, u_at_q);
+    mm_backend_t::apply(A, state.q(), A_q, at_q);
+    for (size_t i = 0; i < 3; ++i) {
+      EXPECT_EQ(f[i], f_at_q[i]) << "component " << i;
+      EXPECT_EQ(u[i], u_at_q[i]) << "component " << i;
+    }
+  }
 }
 
 TEST(Eigenvalues, LanczosIterationLimitReturnsTheLastIterate) {
