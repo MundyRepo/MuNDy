@@ -48,16 +48,6 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     EXEDEPS ProppedCantileverConditioning
     CATEGORIES PERFORMANCE
   )
-  tribits_copy_files_to_binary_dir(
-    PeripheryStudiesCopyFiles
-    SOURCE_FILES
-      analyze_cavity.py
-      analyze_periphery_spd.py
-      analyze_sphere_spd.py
-      analyze_sphere_wilson.py
-    EXEDEPS PeripheryStudies
-    CATEGORIES PERFORMANCE
-  )
 
 else()
   message(STATUS

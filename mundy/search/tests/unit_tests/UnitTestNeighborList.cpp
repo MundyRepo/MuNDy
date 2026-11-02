@@ -1041,6 +1041,7 @@ MAKE_ALL_DET_TESTS(DeterministicFixture, 2d, List2d)
 template <typename ListType>
 void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double>& aabb_field,
                               const stk::mesh::Selector& selector, int num_nodes) {
+  Kokkos::printf("run_random_n2_validation start\n");
   constexpr size_t kSeed = 42;
   constexpr float kDomainSize = 10.0f;
   constexpr double kRadius = 0.9;
@@ -1057,6 +1058,7 @@ void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double
     boxes[i] = make_aabb(cx, cy, cz, kRadius);
     store_aabb(aabb_field, nodes[i], boxes[i]);
   }
+  Kokkos::printf("Stored AABBs\n");
 
   TestComponent component(aabb_field);
   component.modify_on_host();
@@ -1067,10 +1069,12 @@ void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double
                   .source_input(input)
                   .broad_phase(ExcludeSelfInteraction{})
                   .build(bulk);
+  Kokkos::printf("Post-build\n");
 
   const Kokkos::View<TestAABB*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>> boxes_host(boxes.data(),
-                                                                                                      boxes.size());
+                                                                                                       boxes.size());
   const auto boxes_dev = Kokkos::create_mirror_view_and_copy(TestMemSpace{}, boxes_host);
+  Kokkos::printf("Boxes on device\n");
   bool bad = false;
   Kokkos::LOr<bool> reducer(bad);
   mundy::search::for_each_neighbor_pair_reduce(
@@ -1083,8 +1087,12 @@ void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double
       reducer);
   EXPECT_FALSE(bad) << "A pair is a self-pair despite ExcludeSelfInteraction, or its boxes do not overlap.";
 
+  Kokkos::printf("Before collect_pairs\n");
+
   EXPECT_EQ(collect_pairs(list), oracle_pairs_no_self(boxes))
       << "Neighbor list is missing oracle pairs or contains extra pairs.";
+
+  Kokkos::printf("After collect_pairs\n");
 }
 
 TEST(STKSearchNeighborList, RandomN2Validation) {

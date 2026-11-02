@@ -1287,7 +1287,8 @@ struct ConstraintIndexMap {
   /// \brief The range of family F's rows in its block's vector.
   template <typename F>
   KOKKOS_INLINE_FUNCTION IndexRange range() const {
-    return ranges[::mundy::index_finder_v<F, Families...>];
+    constexpr size_t index = ::mundy::index_finder_v<F, Families...>;
+    return ranges[index];
   }
 };
 
