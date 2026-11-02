@@ -28,8 +28,8 @@
 ///          [--coarse-max-size C] [--max-levels L] [--smoother jacobi|sgs|chebyshev] [--prefix P] [--timings]
 ///
 /// The cantilever is that of ProppedCantileverMatchesHenckyBarChain, and its Schur operator is A = dt B^T M B + K^-1.
-/// - --conditioning bounds the spectrum of P A at the initial configuration by Lanczos, which must converge, and appends
-///   a row to <prefix>_conditioning.csv.
+/// - --conditioning estimates the ends of the spectrum of P A at the initial configuration by Lanczos, each end to the
+///   relative tolerance, and appends a row to <prefix>_conditioning.csv.
 /// - --iterations solves A x = b by preconditioned CG at the start of each of S + 1 steps, b = psi + dt B^T u_free being
 ///   a step's first right-hand side, from x = 0 or, with --warm-start, from the last step's solution; the steps between
 ///   are taken by the integrator. It appends a row per step to <prefix>_iterations.csv.
@@ -59,7 +59,6 @@
 #include <mundy_math/residuals.hpp>                    // for mundy::RelativeL2Residual
 #include <mundy_mbody/KokkosMbody.hpp>                 // for mundy::mbody::{RodViews, make_constraint_set, ...}
 #include <mundy_mbody/KokkosMbodyPreconditioners.hpp>  // for mundy::mbody::{SelfMobilityJacobi, SelfMobilityAMG}
-#include <mundy_utils/rng.hpp>                         // for mundy::make_philox
 
 namespace mundy {
 
@@ -380,54 +379,60 @@ auto set_up_preconditioner(const Policy& policy, const Linearization& linearizat
   return preconditioner;
 }
 
-/// \brief Bound the spectrum of P A at linearization, P policy's preconditioner (A's spectrum for NoPreconditioner),
-/// and write the conditioning row.
+/// \brief Estimate the ends of the spectrum of P A at linearization, P policy's preconditioner (A's spectrum for
+/// NoPreconditioner), and write the conditioning row.
 template <typename Policy, typename Linearization>
 void measure_conditioning(const Options& options, const Policy& policy, const Linearization& linearization) {
   const size_t n = linearization.num_rows();
-  const view_t start("start", n);
-  Kokkos::parallel_for(
-      "ProppedCantileverConditioning::start", Kokkos::RangePolicy<ExecSpace>(0, n), KOKKOS_LAMBDA(const size_t i) {
-        openrand::Philox rng = make_philox(7, i);
-        start(i) = rng.uniform<double>(-1.0, 1.0);
-      });
   using host_array_t = Kokkos::View<double*, Kokkos::HostSpace>;
-  auto state = make_lanczos_state(view_t(start), view_t("v_prev", n), view_t("z", n), view_t("Az", n),
-                                  host_array_t("alpha", options.lanczos_max_iters),
-                                  host_array_t("beta", options.lanczos_max_iters));
+  const host_array_t scalars("lanczos_scalars", 4 * static_cast<size_t>(options.lanczos_max_iters));
   const LanczosConfig<double> config{.max_iters = options.lanczos_max_iters, .tol = options.lanczos_tol};
   const auto problem = make_eigen_problem<backend_t>(SchurOp<Linearization>{&linearization});
 
   SetupSeconds setup;
-  LanczosResult<double> result;
+  EigenBounds<double> result;
   double lanczos_seconds = 0.0;
   if constexpr (std::is_same_v<Policy, NoPreconditioner>) {
+    auto state = make_lanczos_state(view_t("v", n), view_t("Bv_prev", n), view_t("Av", n), NoVector{}, scalars);
     const auto start_time = std::chrono::steady_clock::now();
     result = solve_eigen_problem(problem, make_lanczos_strategy(config), state);
     Kokkos::fence();
     lanczos_seconds = seconds_since(start_time);
   } else {
     const auto preconditioner = set_up_preconditioner(policy, linearization, setup);
+    auto state = make_lanczos_state(view_t("v", n), view_t("Bv_prev", n), view_t("Av", n), view_t("Bv", n), scalars);
     const auto start_time = std::chrono::steady_clock::now();
     result = solve_eigen_problem(problem, make_lanczos_strategy(config, preconditioner), state);
     Kokkos::fence();
     lanczos_seconds = seconds_since(start_time);
   }
-  if (!result.converged) {
-    throw std::runtime_error("ProppedCantileverConditioning: Lanczos did not converge within " +
-                             std::to_string(options.lanczos_max_iters) + " iterations (relative Ritz residual " +
-                             sci(result.residual) + ")");
+  // An end converged only at the rounding floor has a theta rounding may dominate, so it gives no condition number.
+  const auto relative_residual = [](const EigenResult<double>& end) { return end.residual / std::abs(end.eigenvalue); };
+  const unsigned num_iters = std::max(result.smallest.num_iters, result.largest.num_iters);
+  if (!(relative_residual(result.smallest) <= options.lanczos_tol &&
+        relative_residual(result.largest) <= options.lanczos_tol)) {
+    const bool converged = result.smallest.converged && result.largest.converged;
+    const std::string outcome =
+        converged ? "reached the rounding floor before the relative tolerance"
+        : num_iters < options.lanczos_max_iters
+            ? "stopped on a breakdown after " + std::to_string(num_iters) + " iterations"
+            : "did not converge within " + std::to_string(options.lanczos_max_iters) + " iterations";
+    throw std::runtime_error("ProppedCantileverConditioning: Lanczos " + outcome + " (relative Ritz residuals " +
+                             sci(relative_residual(result.smallest)) + " and " +
+                             sci(relative_residual(result.largest)) + ")");
   }
-  const double condition_number = result.largest_eigenvalue / result.smallest_eigenvalue;
+  const double smallest = result.smallest.eigenvalue;
+  const double largest = result.largest.eigenvalue;
+  const double condition_number = largest / smallest;
 
   std::ofstream csv = open_csv(options.prefix + "_conditioning.csv",
                                std::string(kIdentityHeader) + ",SmallestEigenvalue,LargestEigenvalue,ConditionNumber" +
                                    (options.timings ? ",AssemblySeconds,SetupSeconds,LanczosSeconds" : ""));
-  csv << identity(options, n) << "," << result.smallest_eigenvalue << "," << result.largest_eigenvalue << ","
-      << condition_number;
+  csv << identity(options, n) << "," << smallest << "," << largest << "," << condition_number;
   std::cout << options.preconditioner << " conditioning: N " << sci(static_cast<double>(options.num_segments))
             << ", rows " << sci(static_cast<double>(n)) << ", dt " << sci(options.dt) << ", smallest eigenvalue "
-            << sci(result.smallest_eigenvalue) << ", largest eigenvalue " << sci(result.largest_eigenvalue)
+            << sci(smallest) << ", largest eigenvalue " << sci(largest) << " in " << num_iters
+            << " Lanczos iterations"
             << ", condition number " << sci(condition_number);
   if (options.timings) {
     csv << "," << setup.assembly << "," << setup.setup << "," << lanczos_seconds;

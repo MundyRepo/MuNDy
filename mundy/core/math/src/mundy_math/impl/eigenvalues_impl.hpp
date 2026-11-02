@@ -24,77 +24,242 @@
 // External
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <cstddef>  // for size_t
+#include <cstdint>  // for uint64_t
+#include <limits>   // for std::numeric_limits
+#include <type_traits>
+
 // Mundy
-#include <mundy_math/NumTraits.hpp>  // for mundy::NumTraits
-#include <mundy_math/cmath.hpp>      // for mundy::{abs, sqrt}
+#include <mundy_math/NumTraits.hpp>                  // for mundy::NumTraits
+#include <mundy_math/cmath.hpp>                      // for mundy::{abs, sqrt}
+#include <mundy_math/impl/solver_backends_impl.hpp>  // for mundy::impl::vector_value_type
+#include <mundy_utils/requires.hpp>                  // for MUNDY_REQUIRES
 
 namespace mundy {
 
 namespace impl {
 
-/// \brief The last LDL^T pivot d(sigma) = det(sign T_k - sigma I) / det(sign T_{k-1} - sigma I) and d'(sigma), for
-/// T_k the leading k x k block of the tridiagonal (alpha, beta) and sigma above the spectrum of sign T_{k-1}.
-template <class Scalar, class AlphaArray, class BetaArray>
-KOKKOS_FUNCTION void tridiagonal_last_pivot(const AlphaArray& alpha, const BetaArray& beta, unsigned k, Scalar sign,
-                                            Scalar sigma, Scalar& pivot, Scalar& derivative) {
-  constexpr Scalar one = static_cast<Scalar>(1);
-  Scalar d = sign * alpha[0] - sigma;
-  Scalar d_prime = -one;
-  for (unsigned i = 1; i < k; ++i) {
-    // Above every leading block's spectrum each pivot is negative, so a zero pivot is that limit.
-    if (d == static_cast<Scalar>(0)) {
-      d = -NumTraits<Scalar>::epsilon() * (abs(sigma) + one);
-    }
-    const Scalar beta_squared = beta[i - 1] * beta[i - 1];
-    d_prime = -one + beta_squared * d_prime / (d * d);
-    d = sign * alpha[i] - sigma - beta_squared / d;
+/// \brief The cold start of an eigen solve over vectors like x: entry i is a hash of i mapped into (-1, 1).
+///
+/// Its entries follow no sign pattern or index structure, so it is not orthogonal to the structured directions an
+/// operator may single out, such as the all-ones vector of a circulant or a shifted Laplacian.
+template <class Backend, class Vector>
+class ColdStartExpr {
+ public:
+  static constexpr bool is_vector_expression = true;
+  using value_type = vector_value_type<std::remove_cvref_t<Vector>>;
+
+  KOKKOS_INLINE_FUNCTION explicit ColdStartExpr(const Vector& x) : size_(Backend::size(x)) {
   }
-  pivot = d;
-  derivative = d_prime;
+
+  KOKKOS_INLINE_FUNCTION value_type operator()(size_t i) const {
+    // splitmix64's finalizer; its top d - 1 bits h give (h + 1/2) 2^(2 - d) - 1 in [-1 + 2^(1 - d), 1 - 2^(1 - d)]
+    constexpr int d = std::numeric_limits<value_type>::digits;
+    uint64_t z = static_cast<uint64_t>(i) + 0x9E3779B97F4A7C15ull;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+    z ^= z >> 31;
+    const uint64_t h = z >> (64 - (d - 1));
+    constexpr value_type spacing = static_cast<value_type>(1) / static_cast<value_type>(uint64_t{1} << (d - 2));
+    return (static_cast<value_type>(h) + static_cast<value_type>(0.5)) * spacing - static_cast<value_type>(1);
+  }
+
+  KOKKOS_INLINE_FUNCTION size_t size() const {
+    return size_;
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_size() MUNDY_REQUIRES(Backend::has_static_sizes) {
+    return Backend::template static_size<Vector>();
+  }
+
+ private:
+  size_t size_;
+};
+
+/// \brief The cold start for vectors like x.
+template <class Backend, class Vector>
+KOKKOS_INLINE_FUNCTION auto cold_start(const Vector& x) {
+  return ColdStartExpr<Backend, std::remove_cvref_t<Vector>>(x);
 }
 
-/// \brief The largest eigenvalue theta of sign T_k and its Ritz residual beta_k |s_k|, for s its unit eigenvector and
-/// previous the largest eigenvalue of sign T_{k-1}.
+/// \brief The largest power of two at most x, for finite x > 0, and 1 otherwise.
 ///
-/// theta lies in [previous, max(previous, sign alpha_k) + beta_{k-1}] (interlacing, Weyl), where d falls from +infinity
-/// to zero at theta; bisection-safeguarded Newton finds it from the right. s_k^2 = -1 / d'(theta).
-template <class Scalar, class AlphaArray, class BetaArray>
-KOKKOS_FUNCTION void largest_ritz_value(const AlphaArray& alpha, const BetaArray& beta, unsigned k, Scalar sign,
-                                        Scalar previous, Scalar& theta, Scalar& ritz_residual) {
-  constexpr Scalar zero = static_cast<Scalar>(0);
-  constexpr Scalar two = static_cast<Scalar>(2);
-  constexpr Scalar eps = NumTraits<Scalar>::epsilon();
-  if (k == 1) {
-    theta = sign * alpha[0];
-    ritz_residual = beta[0];
-    return;
+/// Dividing by it is exact unless the quotient is subnormal.
+template <class Scalar>
+KOKKOS_INLINE_FUNCTION Scalar power_of_two_at_most(Scalar x) {
+  constexpr Scalar one = 1;
+  constexpr Scalar two = 2;
+  if (!(x > Scalar(0)) || !(x < NumTraits<Scalar>::infinity())) {
+    return one;
+  }
+  Scalar m = one;
+  while (m > x) {
+    m /= two;
+  }
+  while (two * m <= x) {
+    m *= two;
+  }
+  return m;
+}
+
+/// \brief How many scalars a scalar array holds: a view's extent or a Kokkos::Array's size.
+template <class Array>
+KOKKOS_INLINE_FUNCTION constexpr size_t scalar_array_size(const Array& a) {
+  if constexpr (requires { a.extent(0); }) {
+    return a.extent(0);
+  } else {
+    return a.size();
+  }
+}
+
+/// \brief Gershgorin's bounds on the spectrum of T_k, the leading k x k block of a symmetric tridiagonal T.
+template <class Scalar>
+struct GershgorinBounds {
+  Scalar lower = NumTraits<Scalar>::infinity();
+  Scalar upper = -NumTraits<Scalar>::infinity();
+  Scalar norm_bound = 0;  // max_i |alpha_i| + beta_{i-1} + beta_i >= ||T_k||_2, over T_k's rows, beta_0 = beta_k = 0
+
+  /// \brief The bounds of T_k from these of T_{k-1}, for T's diagonal alpha and off-diagonal beta.
+  ///
+  /// Row k joins with radius beta_{k-1}, and row k - 1's radius grows from beta_{k-2} to beta_{k-2} + beta_{k-1}.
+  KOKKOS_INLINE_FUNCTION GershgorinBounds grown(const Scalar* alpha, const Scalar* beta, unsigned k) const {
+    GershgorinBounds bounds = *this;
+    const Scalar coupling = k > 1 ? beta[k - 2] : Scalar(0);
+    bounds.add_disk(alpha[k - 1], coupling);
+    if (k > 1) {
+      bounds.add_disk(alpha[k - 2], (k > 2 ? beta[k - 3] : Scalar(0)) + coupling);
+    }
+    return bounds;
   }
 
-  Scalar lower = previous;
-  Scalar upper = (sign * alpha[k - 1] > previous ? sign * alpha[k - 1] : previous) + beta[k - 2];
-  Scalar sigma = upper;
-  Scalar pivot = zero;
-  Scalar derivative = -static_cast<Scalar>(1);
-  for (int step = 0; step < 200; ++step) {
-    tridiagonal_last_pivot(alpha, beta, k, sign, sigma, pivot, derivative);
-    if (pivot == zero) {
-      break;
-    }
-    (pivot > zero ? lower : upper) = sigma;
-    Scalar next = sigma - pivot / derivative;
-    if (!(next > lower && next < upper)) {
-      next = (lower + upper) / two;
-    }
-    const bool settled =
-        abs(next - sigma) <= two * eps * abs(sigma) || upper - lower <= two * eps * (abs(lower) + abs(upper));
-    sigma = next;
-    if (settled) {
-      tridiagonal_last_pivot(alpha, beta, k, sign, sigma, pivot, derivative);
-      break;
+ private:
+  /// \brief Cover the disk of a row with diagonal entry center and the given radius.
+  KOKKOS_INLINE_FUNCTION void add_disk(Scalar center, Scalar radius) {
+    lower = center - radius < lower ? center - radius : lower;
+    upper = center + radius > upper ? center + radius : upper;
+    norm_bound = abs(center) + radius > norm_bound ? abs(center) + radius : norm_bound;
+  }
+};
+
+/// \brief A pivot of T - sigma I's LDL^T, held away from zero by pivmin with its sign kept (-pivmin for an exact zero).
+///
+/// Each guard perturbs a diagonal entry of T by at most pivmin.
+template <class Scalar>
+KOKKOS_INLINE_FUNCTION Scalar guarded_pivot(Scalar d, Scalar pivmin) {
+  if (abs(d) < pivmin) {
+    return d > Scalar(0) ? pivmin : -pivmin;
+  }
+  return d;
+}
+
+/// \brief The pivot alpha - sigma - beta^2 / d after the pivot d of the row coupled to this one by beta, guarded.
+template <class Scalar>
+KOKKOS_INLINE_FUNCTION Scalar next_pivot(Scalar alpha, Scalar sigma, Scalar beta, Scalar d, Scalar pivmin) {
+  return guarded_pivot<Scalar>(alpha - sigma - beta * beta / d, pivmin);
+}
+
+/// \brief The number of eigenvalues below sigma of the leading k x k block of the tridiagonal (alpha, beta).
+///
+/// It is the number of negative pivots of the block's LDL^T (Sturm count): exact for a matrix within pivmin of the
+/// block in each diagonal entry.
+template <class Scalar>
+KOKKOS_FUNCTION unsigned eigenvalues_below(const Scalar* alpha, const Scalar* beta, unsigned k, Scalar sigma,
+                                           Scalar pivmin) {
+  unsigned count = 0;
+  Scalar d = guarded_pivot<Scalar>(alpha[0] - sigma, pivmin);
+  count += d < Scalar(0);
+  for (unsigned i = 1; i < k; ++i) {
+    d = next_pivot<Scalar>(alpha[i], sigma, beta[i - 1], d, pivmin);
+    count += d < Scalar(0);
+  }
+  return count;
+}
+
+/// \brief The largest (or smallest) eigenvalue of the leading k x k block of the tridiagonal (alpha, beta).
+///
+/// Bisection on Sturm counts to an absolute width of 2 eps norm, so the result is within that width of the block's
+/// extreme eigenvalue whatever its multiplicity. [lower, upper] must hold it to within the width; lower may be a lower
+/// bound on the largest eigenvalue (any earlier block's, by interlacing) and upper an upper bound on the smallest.
+template <class Scalar>
+KOKKOS_FUNCTION Scalar extreme_eigenvalue(const Scalar* alpha, const Scalar* beta, unsigned k, bool largest,
+                                          Scalar lower, Scalar upper, Scalar norm) {
+  constexpr Scalar two = 2;
+  const Scalar width = two * NumTraits<Scalar>::epsilon() * norm;
+  const Scalar pivmin = NumTraits<Scalar>::epsilon() * norm;
+  // the ends are accurate to within the width; the sweep cap stops a zero width
+  upper += width;
+  lower -= width;
+  for (unsigned sweep = 0; sweep < 128 && upper - lower > width; ++sweep) {
+    const Scalar mid = (lower + upper) / two;
+    const unsigned below = eigenvalues_below<Scalar>(alpha, beta, k, mid, pivmin);
+    if (largest ? below == k : below >= 1) {
+      upper = mid;
+    } else {
+      lower = mid;
     }
   }
-  theta = sigma;
-  ritz_residual = beta[k - 1] / sqrt(-derivative);
+  return (lower + upper) / two;
+}
+
+/// \brief The Ritz residual beta_k |s_k| / ||s|| at an eigenvalue theta of T_k, the leading k x k block of T.
+///
+/// s is T_k's eigenvector at theta, from the twisted factorization of T_k - theta I: the pivots D+ of L+ D+ L+^T
+/// (forward) and D- of U- D- U-^T (backward) meet at the twist r = argmin |gamma_r|, gamma_r = D+_r + D-_r -
+/// (alpha_r - theta), where s_r = 1, which keeps s stable even where T_k has eigenvalues within rounding of theta.
+/// s / ||s|| is written to s_out unless it is null. forward and backward are scratch of k entries.
+template <class Scalar>
+KOKKOS_FUNCTION Scalar ritz_residual(const Scalar* alpha, const Scalar* beta, unsigned k, Scalar theta, Scalar norm,
+                                     Scalar* forward, Scalar* backward, Scalar* s_out) {
+  const Scalar pivmin = NumTraits<Scalar>::epsilon() * norm;
+  forward[0] = guarded_pivot<Scalar>(alpha[0] - theta, pivmin);
+  for (unsigned i = 1; i < k; ++i) {
+    forward[i] = next_pivot<Scalar>(alpha[i], theta, beta[i - 1], forward[i - 1], pivmin);
+  }
+  backward[k - 1] = guarded_pivot<Scalar>(alpha[k - 1] - theta, pivmin);
+  for (unsigned i = k - 1; i-- > 0;) {
+    backward[i] = next_pivot<Scalar>(alpha[i], theta, beta[i], backward[i + 1], pivmin);
+  }
+  unsigned twist = 0;
+  Scalar least = NumTraits<Scalar>::infinity();
+  for (unsigned i = 0; i < k; ++i) {
+    const Scalar gamma = abs(forward[i] + backward[i] - (alpha[i] - theta));
+    if (gamma < least) {
+      least = gamma;
+      twist = i;
+    }
+  }
+
+  // s_r = 1; s_i = -(beta_i / D+_i) s_{i+1} above r and -(beta_{i-1} / D-_i) s_{i-1} below
+  Scalar s = 1;
+  Scalar norm_squared = 1;
+  if (s_out) {
+    s_out[twist] = s;
+  }
+  for (unsigned i = twist; i-- > 0;) {
+    s = -beta[i] / forward[i] * s;
+    norm_squared += s * s;
+    if (s_out) {
+      s_out[i] = s;
+    }
+  }
+  s = 1;
+  for (unsigned i = twist + 1; i < k; ++i) {
+    s = -beta[i - 1] / backward[i] * s;
+    norm_squared += s * s;
+    if (s_out) {
+      s_out[i] = s;
+    }
+  }
+  const Scalar s_norm = sqrt(norm_squared);
+  const Scalar s_last = twist == k - 1 ? Scalar(1) : s;  // the loop below the twist ends at s_k
+  if (s_out) {
+    for (unsigned i = 0; i < k; ++i) {
+      s_out[i] /= s_norm;
+    }
+  }
+  const Scalar last_share = abs(s_last) / s_norm;  // at most 1; rounding may not say so
+  return beta[k - 1] * (last_share < Scalar(1) ? last_share : Scalar(1));
 }
 
 }  // namespace impl

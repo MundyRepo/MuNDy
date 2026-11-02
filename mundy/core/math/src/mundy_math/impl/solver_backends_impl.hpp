@@ -343,6 +343,66 @@ KOKKOS_INLINE_FUNCTION void static_reduce(const Reducer& reducer, const Source& 
 }
 //@}
 
+//! \name Multivectors
+//@{
+
+/// \brief Whether A is a Kokkos::Array.
+template <class A>
+struct IsKokkosArray : std::false_type {};
+//
+template <class T, size_t N>
+struct IsKokkosArray<Kokkos::Array<T, N>> : std::true_type {};
+
+/// \brief sum_{j < count} c_j column_j of a multivector: a rank-2 view's columns, or an array of fixed-size vectors.
+///
+/// Columns is the view itself, held by value, or a pointer to the array, which must outlive the expression.
+template <class Columns, class Scalar, size_t Capacity>
+class ColumnCombinationExpr {
+ public:
+  static constexpr bool is_vector_expression = true;
+  using value_type = Scalar;
+
+  KOKKOS_INLINE_FUNCTION ColumnCombinationExpr(const Columns& columns, size_t count,
+                                               const Kokkos::Array<Scalar, Capacity>& c)
+      : columns_(columns), count_(count), c_(c) {
+  }
+
+  KOKKOS_INLINE_FUNCTION value_type operator()(size_t i) const {
+    value_type sum = 0;
+    for (size_t j = 0; j < count_; ++j) {
+      sum += c_[j] * entry(i, j);
+    }
+    return sum;
+  }
+
+  KOKKOS_INLINE_FUNCTION size_t size() const {
+    if constexpr (std::is_pointer_v<Columns>) {
+      return static_size();
+    } else {
+      return columns_.extent(0);
+    }
+  }
+
+  KOKKOS_INLINE_FUNCTION static constexpr size_t static_size() MUNDY_REQUIRES(std::is_pointer_v<Columns>) {
+    return std::remove_cvref_t<decltype((*std::declval<Columns>())[0])>::size;
+  }
+
+ private:
+  /// \brief Entry i of column j.
+  KOKKOS_INLINE_FUNCTION value_type entry(size_t i, size_t j) const {
+    if constexpr (std::is_pointer_v<Columns>) {
+      return (*columns_)[j](i);
+    } else {
+      return columns_(i, j);
+    }
+  }
+
+  Columns columns_;
+  size_t count_;
+  Kokkos::Array<Scalar, Capacity> c_;
+};
+//@}
+
 }  // namespace impl
 
 }  // namespace mundy

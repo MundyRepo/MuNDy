@@ -375,6 +375,33 @@ struct KokkosBackend {
       false;
 #endif
 
+  /// \brief Whether A holds contiguous scalars a solver's driver reads and writes on the host: a Kokkos::Array, or a
+  /// rank-1 LayoutLeft or LayoutRight view the host can access.
+  template <class A>
+  static constexpr bool is_scalar_array = impl::IsKokkosArray<std::remove_cvref_t<A>>::value || [] {
+    if constexpr (Kokkos::is_view_v<std::remove_cvref_t<A>>) {
+      using view_t = std::remove_cvref_t<A>;
+      using layout_t = typename view_t::array_layout;
+      return view_t::rank == 1 &&
+             (std::same_as<layout_t, Kokkos::LayoutLeft> || std::same_as<layout_t, Kokkos::LayoutRight>) &&
+             Kokkos::SpaceAccessibility<Kokkos::HostSpace, typename view_t::memory_space>::accessible;
+    } else {
+      return false;
+    }
+  }();
+
+  /// \brief The number of vectors in a multivector: a rank-2 LayoutLeft view with K > 0 columns fixed at compile time.
+  template <class MultiVector>
+  KOKKOS_INLINE_FUNCTION static constexpr size_t num_columns() {
+    using mv_t = std::remove_cvref_t<MultiVector>;
+    static_assert(Kokkos::is_view_v<mv_t>, "KokkosBackend: a multivector is a rank-2 Kokkos::View.");
+    static_assert(mv_t::rank == 2 && std::same_as<typename mv_t::array_layout, Kokkos::LayoutLeft>,
+                  "KokkosBackend: a multivector is a rank-2 LayoutLeft view, so each column is contiguous.");
+    static_assert(mv_t::static_extent(1) > 0,
+                  "KokkosBackend: a multivector's column count is a compile-time extent, as View<Scalar*[K]>.");
+    return mv_t::static_extent(1);
+  }
+
  public:
   // The vector factories are host only, but may be called from KOKKOS_FUNCTION code being called on the host
   // This will cause warnings, but is otherwise perfectly valid, so we suppress the warnings for these functions
@@ -501,6 +528,20 @@ struct KokkosBackend {
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static auto subvector(const Vector& x, size_t begin, size_t end) {
     return Kokkos::subview(x, Kokkos::pair<size_t, size_t>(begin, end));
+  }
+
+  /// \brief Column j of the multivector mv, aliasing its storage.
+  template <class MultiVector>
+  KOKKOS_INLINE_FUNCTION static auto column(const MultiVector& mv, size_t j) {
+    return Kokkos::subview(mv, Kokkos::ALL, j);
+  }
+
+  /// \brief sum_{j < count} c_j column_j of the multivector mv; columns past count are not read.
+  template <class MultiVector, class Scalar, size_t K>
+  KOKKOS_INLINE_FUNCTION static auto combination(const MultiVector& mv, size_t count,
+                                                 const Kokkos::Array<Scalar, K>& c) {
+    static_assert(K == num_columns<MultiVector>(), "KokkosBackend::combination: one coefficient per column.");
+    return impl::ColumnCombinationExpr<std::remove_cvref_t<MultiVector>, Scalar, K>(mv, count, c);
   }
 
   template <class DestVector, class SrcVector>
@@ -741,6 +782,20 @@ struct MundyMathBackend {
   template <class Op>
   static constexpr bool is_native_matrix = is_matrix_v<Op>;
 
+  /// \brief Whether A holds contiguous scalars a solver's driver reads and writes in its thread: a Kokkos::Array.
+  template <class A>
+  static constexpr bool is_scalar_array = impl::IsKokkosArray<std::remove_cvref_t<A>>::value;
+
+  /// \brief The number of vectors in a multivector: a Kokkos::Array of K > 0 mundy::Vectors.
+  template <class MultiVector>
+  KOKKOS_INLINE_FUNCTION static constexpr size_t num_columns() {
+    using mv_t = std::remove_cvref_t<MultiVector>;
+    static_assert(impl::IsKokkosArray<mv_t>::value && is_vector_v<typename mv_t::value_type>,
+                  "MundyMathBackend: a multivector is a Kokkos::Array of mundy::Vectors.");
+    static_assert(mv_t::size() > 0, "MundyMathBackend: a multivector has at least one vector.");
+    return mv_t::size();
+  }
+
   template <class Vector>
   KOKKOS_INLINE_FUNCTION static auto make_vector_like(const Vector& /*x*/) {
     return Vector();
@@ -885,6 +940,20 @@ struct MundyMathBackend {
   template <size_t Offset, size_t Size, class Vector>
   KOKKOS_INLINE_FUNCTION static auto subvector(Vector& x) {
     return x.template view_subset<Offset, Size>();
+  }
+
+  /// \brief Vector j of the multivector mv.
+  template <class MultiVector>
+  KOKKOS_INLINE_FUNCTION static decltype(auto) column(MultiVector&& mv, size_t j) {
+    return mv[j];
+  }
+
+  /// \brief sum_{j < count} c_j column_j of the multivector mv, which must outlive it; columns past count are not read.
+  template <class MultiVector, class Scalar, size_t K>
+  KOKKOS_INLINE_FUNCTION static auto combination(const MultiVector& mv, size_t count,
+                                                 const Kokkos::Array<Scalar, K>& c) {
+    static_assert(K == num_columns<MultiVector>(), "MundyMathBackend::combination: one coefficient per column.");
+    return impl::ColumnCombinationExpr<const MultiVector*, Scalar, K>(&mv, count, c);
   }
 
   template <class DestVector, class SrcVector>
