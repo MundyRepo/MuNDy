@@ -44,7 +44,7 @@
 #include <mundy_math/Tolerance.hpp>        // for mundy::get_relaxed_zero_tolerance<T>
 #include <mundy_math/cmath.hpp>            // for mundy::{min, max}
 #include <mundy_math/convex_spaces.hpp>    // for mundy::ConvexSpace and the space geometry
-#include <mundy_math/eigenvalues.hpp>      // for mundy::{EigenProblem, PowerConfig, solve_eigen_problem}
+#include <mundy_math/eigenvalues.hpp>      // for mundy::{EigenProblem, LanczosConfig, NoVector, solve_eigen_problem}
 #include <mundy_math/residuals.hpp>        // for the default projected-gradient residual policy
 #include <mundy_math/solver_backends.hpp>  // for mundy::impl::vector_value_type
 #include <mundy_utils/requires.hpp>
@@ -362,7 +362,7 @@ struct NonmonotoneBBStepStrategy {
   }
 };
 
-/// \brief The expansion step an MPRGP strategy fixes at its start.
+/// \brief The expansion step length of an MPRGP strategy.
 template <class Scalar>
 struct MPRGPStepState {
   Scalar expansion_step{0};
@@ -376,27 +376,56 @@ struct MPRGPStepState {
 /// While beta is small against phi, ||beta||^2 <= proportioning^2 phi~^T phi with phi~ = (x - P(x - step phi)) / step,
 /// each step is a conjugate gradient step over the free entries along a direction p, unless that step would cross a
 /// bound; it then goes to the boundary along p and takes the projected step x = P(x - step phi). Otherwise the step is
-/// the exact minimizer along -beta, no further than the boundary, which lifts entries off their bounds. The projected
-/// step is expansion_step_fraction / lambda, for lambda the largest eigenvalue of A estimated by power iterations to a
-/// relative change of norm_estimate.tol, and the fraction must lie in (0, 2).
+/// the exact minimizer along -beta, no further than the boundary, which lifts entries off their bounds.
+///
+/// The projected step is expansion_step_fraction / lambda, the fraction in (0, 2), for lambda an estimate of A's
+/// largest eigenvalue lambda_max. MPRGP's convergence theory needs the step to be at most 2 / lambda_max, that is
+/// lambda >= expansion_step_fraction lambda_max / 2. lambda starts as theta + rho, for theta the largest Ritz value of
+/// Lanczos iterations configured by norm_estimate and rho its residual: an eigenvalue of A lies within rho of theta,
+/// and from the cold start it is lambda_max unless the cold start is nearly orthogonal to lambda_max's eigenvectors.
+/// Each step measures A's curvature v^T A v / v^T v along its direction v and raises lambda to it where it is larger;
+/// no curvature exceeds lambda_max, so this never shortens the step below expansion_step_fraction / lambda_max.
+/// norm_estimate.max_iters is at most 32.
+///
+/// With an estimate vector e, the Lanczos iterations start from e and leave there their estimate of lambda_max's
+/// eigenvector, a unit vector, for the next solve; a zero e is the cold start, and a solve that takes no step leaves e
+/// as it was. A start from a previous A can miss directions along which A has since grown stiffer, so theta + rho may
+/// fall short of lambda_max; the steps then raise lambda when they meet such a direction, though it need not reach
+/// expansion_step_fraction lambda_max / 2. The basis keeps the first Lanczos vectors, from which the estimate is
+/// formed; with fewer columns than iterations, forming it repeats the iterations' applies, so A must depend on its
+/// input alone. The number of columns changes neither the solve nor, beyond rounding, the estimate left in e.
 ///
 /// Conjugate gradient steps find which entries end on a bound in few steps where projected gradient steps can take
 /// many, as when rows nearly duplicate each other. grad is accumulated by recurrence.
 ///
-/// p holds the direction from one step to the next: it must not alias any vector of the PGD state, the problem's
-/// workspace, or anything else in use during the solve.
-template <class PVector>
+/// p holds the direction from one step to the next. p, e, and the basis must not alias each other, any vector of the
+/// PGD state, the problem's workspace, or anything else in use during the solve.
+template <class PVector, class EstimateVector = NoVector, class Basis = NoVector>
 class MPRGPStepStrategy {
+  static_assert(is_no_vector_v<EstimateVector> == is_no_vector_v<Basis>,
+                "MPRGPStepStrategy: an estimate vector comes with a basis, and a basis with an estimate vector.");
+
+  // the Lanczos iterations' scalars: 4 per iteration, and one more per estimate vector, for up to 32 iterations
+  static constexpr unsigned max_norm_estimate_iters = 32;
+  static constexpr size_t num_estimate_vectors = is_no_vector_v<EstimateVector> ? 0 : 1;
+  static constexpr size_t num_lanczos_scalars = (4 + num_estimate_vectors) * max_norm_estimate_iters;
+
  public:
   double proportioning = 1.0;
   double expansion_step_fraction = 1.8;
-  PowerConfig<double> norm_estimate{.max_iters = 50, .tol = 1e-2};
+  LanczosConfig<double> norm_estimate{.max_iters = 32, .tol = 1e-2, .largest = true, .smallest = false};
 
   template <class Scalar>
   using step_state_t = MPRGPStepState<Scalar>;
 
   KOKKOS_INLINE_FUNCTION
-  explicit MPRGPStepStrategy(PVector&& p) : p_(std::forward<PVector>(p)) {
+  explicit MPRGPStepStrategy(PVector&& p) MUNDY_REQUIRES(is_no_vector_v<EstimateVector>)
+      : MPRGPStepStrategy(std::forward<PVector>(p), NoVector{}, NoVector{}) {
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  MPRGPStepStrategy(PVector&& p, EstimateVector&& e, Basis&& basis)
+      : p_(std::forward<PVector>(p)), e_(std::forward<EstimateVector>(e)), basis_(std::forward<Basis>(basis)) {
   }
 
   template <class Problem, class State>
@@ -407,19 +436,24 @@ class MPRGPStepStrategy {
                               std::remove_cvref_t<decltype(state.x())>>,
                   "MPRGPStepStrategy: the problem's space must be a ConvexSpace.");
     constexpr value_type zero = static_cast<value_type>(0);
-    constexpr value_type one = static_cast<value_type>(1);
     const backend_t backend{};
     auto& p = p_.get();
 
-    // lambda_max(A) by power iterations from the all-ones vector, through p and grad; x holds their residual
-    backend_t::assign("MPRGP::initialize", p, one);
-    const auto eigen_problem = EigenProblem(prob.backend(), prob.A(), prob.workspace());
-    auto power_state = make_power_state(p, state.grad(), state.x());
-    const auto largest = solve_eigen_problem(
-        eigen_problem, make_power_strategy(RelativeChangeResidual{}, norm_estimate), power_state);
-    MUNDY_THROW_ASSERT(largest.eigenvalue > zero, std::invalid_argument,
-                       "MPRGPStepStrategy: A must have a positive eigenvalue.");
-    state.step_state().expansion_step = static_cast<value_type>(expansion_step_fraction) / largest.eigenvalue;
+    // lambda = theta + rho of Lanczos iterations through p, grad, and x, which x_tmp restores
+    Kokkos::Array<value_type, num_lanczos_scalars> scalars{};
+    auto lanczos_state =
+        make_lanczos_state(p, state.grad(), state.x(), NoVector{}, scalars, e_.get(), NoVector{}, basis_.get());
+    const LanczosConfig<value_type> cfg{.max_iters = norm_estimate.max_iters,
+                                        .tol = static_cast<value_type>(norm_estimate.tol),
+                                        .largest = norm_estimate.largest,
+                                        .smallest = norm_estimate.smallest};
+    const auto largest = solve_eigen_problem(EigenProblem(prob.backend(), prob.A(), prob.workspace()),
+                                             make_lanczos_strategy(cfg), lanczos_state)
+                             .largest;
+    const value_type lambda = largest.eigenvalue + largest.residual;
+    MUNDY_THROW_ASSERT(lambda > zero && lambda < NumTraits<value_type>::infinity(), std::invalid_argument,
+                       "MPRGPStepStrategy: A must have a positive, finite largest eigenvalue.");
+    state.step_state().expansion_step = static_cast<value_type>(expansion_step_fraction) / lambda;
     backend_t::deep_copy(state.x(), state.x_tmp());
 
     backend_t::assign("MPRGP::initialize", p, free_part(backend, prob.space(), state.x_tmp(), state.grad_tmp()));
@@ -433,7 +467,8 @@ class MPRGPStepStrategy {
     constexpr value_type one = static_cast<value_type>(1);
     const backend_t backend{};
     const auto& space = prob.space();
-    const value_type alpha = state.step_state().expansion_step;
+    value_type& expansion_step = state.step_state().expansion_step;
+    const value_type alpha = expansion_step;
     auto& p = p_.get();
     auto& x = state.x();
     auto& grad = state.grad();
@@ -462,6 +497,7 @@ class MPRGPStepStrategy {
                         Kokkos::Min<value_type>(to_boundary), step_to_boundary(backend, space, x_tmp, -chopped));
       MUNDY_THROW_ASSERT(beta_A_beta > zero, std::invalid_argument,
                          "MPRGPStepStrategy: the objective is unbounded below along the chopped gradient.");
+      expansion_step = within_curvature(expansion_step, beta_beta, beta_A_beta);
       const value_type step = min(beta_beta / beta_A_beta, to_boundary);  // grad^T beta = ||beta||^2
       const auto x_next = x_tmp - step * chopped;
       const auto grad_next = grad_tmp - step * A_chopped;
@@ -473,12 +509,15 @@ class MPRGPStepStrategy {
     // A p in grad, until grad is formed from it
     backend_t::apply(prob.A(), p, grad, prob.workspace());
     const auto A_direction = backend_t::entries(grad);
+    value_type p_p;
     value_type p_A_p;
     value_type grad_p;
     value_type to_boundary;
-    backend_t::reduce("MPRGP::conjugate_gradient_test", Kokkos::Sum<value_type>(p_A_p), direction * A_direction,
-                      Kokkos::Sum<value_type>(grad_p), grad_tmp * direction, Kokkos::Min<value_type>(to_boundary),
+    backend_t::reduce("MPRGP::conjugate_gradient_test", Kokkos::Sum<value_type>(p_p), direction * direction,
+                      Kokkos::Sum<value_type>(p_A_p), direction * A_direction, Kokkos::Sum<value_type>(grad_p),
+                      grad_tmp * direction, Kokkos::Min<value_type>(to_boundary),
                       step_to_boundary(backend, space, x_tmp, -direction));
+    expansion_step = within_curvature(expansion_step, p_p, p_A_p);
     if (p_A_p > zero && grad_p / p_A_p <= to_boundary) {
       // Conjugate gradient step, then the next direction, conjugate to p over the free entries
       const value_type step = grad_p / p_A_p;
@@ -498,14 +537,24 @@ class MPRGPStepStrategy {
     const auto grad_boundary = grad_tmp - to_boundary_step * A_direction;
     backend_t::assign(
         "MPRGP::expansion", x,
-        projection(backend, space, x_boundary - alpha * free_part(backend, space, x_boundary, grad_boundary)));
+        projection(backend, space, x_boundary - expansion_step * free_part(backend, space, x_boundary, grad_boundary)));
     backend_t::apply(prob.A(), x, grad, prob.workspace());
     axpby(backend, one, prob.q(), one, grad);
     backend_t::assign("MPRGP::expansion", p, free_part(backend, space, x, grad));
   }
 
  private:
+  /// \brief The expansion step at most expansion_step_fraction / R, for R = v_A_v / v_v the curvature of A along v.
+  template <class Scalar>
+  KOKKOS_FUNCTION Scalar within_curvature(Scalar expansion_step, Scalar v_v, Scalar v_A_v) const {
+    // expansion_step R > fraction, compared without dividing; a zero v has no curvature to compare
+    const Scalar fraction = static_cast<Scalar>(expansion_step_fraction);
+    return expansion_step * v_A_v > fraction * v_v ? fraction * v_v / v_A_v : expansion_step;
+  }
+
   mutable ::mundy::storage<PVector> p_;
+  mutable ::mundy::storage<EstimateVector> e_;
+  mutable ::mundy::storage<Basis> basis_;
 };
 
 /// \brief The PGD strategy: initialize/iterate/done/result over (Problem, State). StepStrategy is a PGDStepStrategy and
@@ -656,10 +705,18 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const PGDConfig<Scalar>& 
   return PGDStrategy(DefaultStepStrategy{}, DefaultResidualPolicy{}, cfg);
 }
 //
-/// \brief MPRGP steps, carrying their direction in p.
+/// \brief MPRGP steps, carrying their direction in p, with lambda_max estimated from the cold start.
 template <class PVector>
 KOKKOS_INLINE_FUNCTION auto make_mprgp_step_strategy(PVector&& p) {
   return MPRGPStepStrategy<PVector>(std::forward<PVector>(p));
+}
+//
+/// \brief MPRGP steps, carrying their direction in p, with lambda_max estimated from e, where the estimate leaves its
+/// eigenvector estimate, through a basis of the first Lanczos vectors.
+template <class PVector, class EstimateVector, class Basis>
+KOKKOS_INLINE_FUNCTION auto make_mprgp_step_strategy(PVector&& p, EstimateVector&& e, Basis&& basis) {
+  return MPRGPStepStrategy<PVector, EstimateVector, Basis>(std::forward<PVector>(p), std::forward<EstimateVector>(e),
+                                                           std::forward<Basis>(basis));
 }
 //
 /// \brief The state pgd iterates, over x, grad and their previous values, with the memory of pgd's step strategy.

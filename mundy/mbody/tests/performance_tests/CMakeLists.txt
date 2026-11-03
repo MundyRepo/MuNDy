@@ -36,6 +36,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   )
 
   tribits_add_executable(
+    MbodyNormEstimate
+    SOURCES MbodyNormEstimate.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
+  tribits_add_executable(
     ProppedCantileverConditioning
     SOURCES ProppedCantileverConditioning.cpp
     INSTALLABLE

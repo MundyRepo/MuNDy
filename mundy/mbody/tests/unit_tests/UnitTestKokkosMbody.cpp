@@ -3523,6 +3523,54 @@ auto make_linked_groove_problem(double dt, double torque) {
                     groove.mobility_model, dt, groove.cfg};
 }
 
+/// \brief 48 rods of radius 0.05 and length 1 in a 4 x 4 x 3 block, nearly along x at spacing 1.15 in x and 0.25 in
+/// y and z, each tilted at random by up to 0.15 rad until it is at least 0.02 from every rod placed before it, and
+/// drawn toward the block's center by a force load times their distance from it. Every pair within 0.25 of touching is
+/// a ReLCP contact with Rule's separation.
+template <typename Rule = SpherocylinderSeparation>
+auto make_pile_problem(double dt, double load) {
+  constexpr int nx = 4, ny = 4, nz = 3;
+  constexpr double along = 1.15, across = 0.25, max_tilt = 0.15;
+  const Vector3d middle{0.5 * along * (nx - 1), 0.5 * across * (ny - 1), 0.5 * across * (nz - 1)};
+  const Quaterniond along_x = axis_angle_to_quaternion(Vector3d{0.0, 1.0, 0.0}, 0.5 * Kokkos::numbers::pi_v<double>);
+  RodViews<HostExecSpace> rods(nx * ny * nz);
+  zero_rod_state(rods);
+  std::mt19937 rng(7);
+  std::uniform_real_distribution<double> uniform(-1.0, 1.0);
+  for (int k = 0; k < nx * ny * nz; ++k) {
+    rods.center(k) = Vector3d{along * (k % nx), across * ((k / nx) % ny), across * (k / (nx * ny))};
+    rods.radius(k) = 0.05;
+    rods.length(k) = 1.0;
+    for (bool clear = false; !clear;) {
+      const Vector3d tilt{0.0, max_tilt * uniform(rng), max_tilt * uniform(rng)};
+      const double angle = norm(tilt);
+      rods.orientation(k) = angle > 0.0 ? axis_angle_to_quaternion(tilt / angle, angle) * along_x : along_x;
+      clear = true;
+      for (int j = 0; j < k && clear; ++j) {
+        clear = Rule{}(rods, k, j).value >= 0.02;
+      }
+    }
+    rods.force(k) = load * (middle - Vector3d(rods.center(k)));
+  }
+  std::vector<std::pair<int, int>> pairs;
+  for (int i = 0; i < nx * ny * nz; ++i) {
+    for (int j = i + 1; j < nx * ny * nz; ++j) {
+      if (Rule{}(rods, i, j).value < 0.25) {
+        pairs.emplace_back(i, j);
+      }
+    }
+  }
+  ReLCPContactViews<HostExecSpace, Rule> contacts(pairs.size());
+  for (size_t p = 0; p < pairs.size(); ++p) {
+    contacts.rod_i(p) = pairs[p].first;
+    contacts.rod_j(p) = pairs[p].second;
+  }
+  MixedLCPConfig cfg;
+  cfg.outer_tol = 1e-8;
+  cfg.max_outer_iters = 10000;
+  return SolveInput{rods, make_constraint_set(contacts), LocalDragMobility{.viscosity = 1.0}, dt, cfg};
+}
+
 // A rod pushed into a groove settles level on both rails at the center height sqrt((2 r)^2 - w^2), exact at rest,
 // never overlapping a rail by more than length_tol. Along the frictionless rails a level rod has no rest position, so
 // its steady state is a slide, reached by t = 10 at every dt; the height error, tilt, and slide speed there all fall
@@ -3743,7 +3791,9 @@ TEST(Mbody, ReLCPHoldsBilateralRowsWhenRelinearized) {
 }
 
 // A rule reserving no generated rows grows the reserve when a step generates its first, and steps exactly as the
-// default reserve does, bit for bit. Serial execution fixes the order of every atomic sum.
+// default reserve does, bit for bit: the groove's one step, and three steps of the pile, whose solves carry what they
+// learn into the next. Through storage of each step's own the pile steps differently, so what the storage carries
+// reaches its steps. Serial execution fixes the order of every atomic sum.
 TEST(Mbody, ReLCPGrowsItsReserve) {
   constexpr double dt = 0.5;
   const auto reserved = make_groove_problem(dt, 1.0, 4.0);
@@ -3772,6 +3822,48 @@ TEST(Mbody, ReLCPGrowsItsReserve) {
                     .lambda_view(),
                 get<ReLCPContactViews<Kokkos::Serial>>(constraints_reserved).lambda_view()),
             0u);
+
+  // A pile over three steps
+  {
+    const auto reserved_pile = make_pile_problem(0.1, 4.0);
+    const auto unreserved_pile = make_pile_problem<UnreservedSpherocylinderSeparation>(0.1, 4.0);
+    const MixedReLCPConfig pile_cfg{reserved_pile.cfg, 20, 1e-6, 1e-6, false};
+    const auto rods_held = copy_to<Kokkos::Serial>(reserved_pile.rods);
+    const auto constraints_held = copy_to<Kokkos::Serial>(reserved_pile.constraints);
+    const auto rods_grown = copy_to<Kokkos::Serial>(unreserved_pile.rods);
+    const auto constraints_grown = copy_to<Kokkos::Serial>(unreserved_pile.constraints);
+    const auto rods_fresh = copy_to<Kokkos::Serial>(reserved_pile.rods);
+    const auto constraints_fresh = copy_to<Kokkos::Serial>(reserved_pile.constraints);
+    const auto load = copy_load(rods_held);
+    const auto held =
+        make_mixed_relcp_integrator(rods_held, constraints_held, reserved_pile.mobility_model, reserved_pile.dt);
+    const auto grown =
+        make_mixed_relcp_integrator(rods_grown, constraints_grown, unreserved_pile.mobility_model, unreserved_pile.dt);
+    const auto fresh =
+        make_mixed_relcp_integrator(rods_fresh, constraints_fresh, reserved_pile.mobility_model, reserved_pile.dt);
+    unsigned most_iters = 0;
+    for (int step = 0; step < 3; ++step) {
+      const MixedReLCPResult from_held = step_rods(held, pile_cfg, load);
+      const MixedReLCPResult from_grown = step_rods(grown, pile_cfg, load);
+      const MixedReLCPResult from_fresh = step_rods(with_fresh_storage(fresh), pile_cfg, load);
+      ASSERT_TRUE(from_held.converged && from_grown.converged && from_fresh.converged) << "step " << step;
+      EXPECT_EQ(from_grown.num_iters, from_held.num_iters) << "step " << step;
+      EXPECT_EQ(std::bit_cast<uint64_t>(from_grown.residual), std::bit_cast<uint64_t>(from_held.residual))
+          << "step " << step;
+      most_iters = std::max(most_iters, from_held.num_iters);
+    }
+    ASSERT_GT(most_iters, 1u) << "the pile's steps should generate rows";
+
+    // The steps
+    EXPECT_EQ(count_bit_differences(rods_grown.center_view(), rods_held.center_view()), 0u);
+    EXPECT_EQ(count_bit_differences(rods_grown.force_torque_view(), rods_held.force_torque_view()), 0u);
+    EXPECT_EQ(
+        count_bit_differences(
+            get<ReLCPContactViews<Kokkos::Serial, UnreservedSpherocylinderSeparation>>(constraints_grown).lambda_view(),
+            get<ReLCPContactViews<Kokkos::Serial>>(constraints_held).lambda_view()),
+        0u);
+    EXPECT_GT(count_bit_differences(rods_fresh.center_view(), rods_held.center_view()), 0u);
+  }
 }
 
 //@}
@@ -3964,7 +4056,9 @@ TEST(Mbody, IntegratorRebuildsStorageOfAnotherLayout) {
 //     between isotropic spheres, the force y = -(|r| - L) / (2 m dt + 1/k), to rounding: CG solves the one row exactly
 //     from zero and from the last step's scaled solution alike;
 //   - integrators over rods copied into new views for every step, each taking the last one's storage, step exactly as
-//     one integrator over rods kept in one set of views, bit for bit, on Serial.
+//     one integrator over rods kept in one set of views, bit for bit, on Serial: the fallback problem, and the pile,
+//     whose solves carry what they learn into the next. Through storage of each step's own the pile steps
+//     differently, so what the storage carries reaches its steps.
 TEST(Mbody, IntegratorStorageServesTheNextIntegrator) {
   // Two step sizes
   {
@@ -4032,6 +4126,87 @@ TEST(Mbody, IntegratorStorageServesTheNextIntegrator) {
                                     get<ContactViews<Kokkos::Serial>>(constraints_kept).lambda_view()),
               0u);
   }
+
+  // New views for every step of the pile
+  {
+    const auto p = make_pile_problem(0.1, 4.0);
+    const MixedReLCPConfig cfg{p.cfg, 20, 1e-6, 1e-6, false};
+    const auto rods_kept = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_kept = copy_to<Kokkos::Serial>(p.constraints);
+    const auto kept = make_mixed_relcp_integrator(rods_kept, constraints_kept, p.mobility_model, p.dt);
+    const auto rods_copied = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_copied = copy_to<Kokkos::Serial>(p.constraints);
+    auto storage = make_mixed_relcp_integrator(rods_copied, constraints_copied, p.mobility_model, p.dt).workspace();
+    const auto rods_fresh = copy_to<Kokkos::Serial>(p.rods);
+    const auto constraints_fresh = copy_to<Kokkos::Serial>(p.constraints);
+    const auto fresh = make_mixed_relcp_integrator(rods_fresh, constraints_fresh, p.mobility_model, p.dt);
+    const auto load = copy_load(rods_kept);
+
+    for (int step = 0; step < 3; ++step) {
+      ASSERT_TRUE(lcp_converged(step_rods(kept, cfg, load))) << "step " << step;
+      const auto rods_new = copy_to<Kokkos::Serial>(rods_copied);
+      const auto copied = make_mixed_relcp_integrator(rods_new, constraints_copied, p.mobility_model, p.dt,
+                                                      NoPreconditioner{}, storage);
+      storage = copied.workspace();
+      ASSERT_TRUE(lcp_converged(step_rods(copied, cfg, load))) << "step " << step;
+      deep_copy(rods_copied, rods_new);
+      ASSERT_TRUE(lcp_converged(step_rods(with_fresh_storage(fresh), cfg, load))) << "step " << step;
+    }
+
+    EXPECT_EQ(count_bit_differences(rods_copied.center_view(), rods_kept.center_view()), 0u);
+    EXPECT_EQ(count_bit_differences(rods_copied.orientation_view(), rods_kept.orientation_view()), 0u);
+    EXPECT_EQ(count_bit_differences(rods_copied.force_torque_view(), rods_kept.force_torque_view()), 0u);
+    EXPECT_EQ(count_bit_differences(get<ReLCPContactViews<Kokkos::Serial>>(constraints_copied).lambda_view(),
+                                    get<ReLCPContactViews<Kokkos::Serial>>(constraints_kept).lambda_view()),
+              0u);
+    EXPECT_GT(count_bit_differences(rods_fresh.center_view(), rods_kept.center_view()), 0u);
+  }
+}
+
+// The rows a step generates start its solves' estimate afresh whatever the storage holds there: a pile's step through
+// storage whose estimate past the pair rows is NaN takes exactly the step through untouched storage, bit for bit, while
+// one through storage whose estimate is zero, the cold start, steps differently. Serial execution fixes the order of
+// every atomic sum.
+TEST(Mbody, ReLCPNewRowsReadNoStaleStorage) {
+  const auto p = make_pile_problem(0.1, 4.0);
+  const MixedReLCPConfig cfg{p.cfg, 20, 1e-6, 1e-6, false};
+  const size_t num_pairs = get<ReLCPContactViews<HostExecSpace>>(p.constraints).size();
+  const auto rods_kept = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_kept = copy_to<Kokkos::Serial>(p.constraints);
+  const auto rods_poisoned = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_poisoned = copy_to<Kokkos::Serial>(p.constraints);
+  const auto rods_cold = copy_to<Kokkos::Serial>(p.rods);
+  const auto constraints_cold = copy_to<Kokkos::Serial>(p.constraints);
+  const auto load = copy_load(rods_kept);
+  const auto kept = make_mixed_relcp_integrator(rods_kept, constraints_kept, p.mobility_model, p.dt);
+  const auto poisoned = make_mixed_relcp_integrator(rods_poisoned, constraints_poisoned, p.mobility_model, p.dt);
+  const auto cold = make_mixed_relcp_integrator(rods_cold, constraints_cold, p.mobility_model, p.dt);
+
+  // A first step, then the storage's estimate past the pair rows poisoned, or all of it zeroed
+  ASSERT_TRUE(step_rods(kept, cfg, load).converged);
+  ASSERT_TRUE(step_rods(poisoned, cfg, load).converged);
+  ASSERT_TRUE(step_rods(cold, cfg, load).converged);
+  const auto& estimate = poisoned.workspace().lcp.linearization.eigenvector_estimate;
+  ASSERT_GT(estimate.extent(0), num_pairs);
+  Kokkos::deep_copy(Kokkos::subview(estimate, Kokkos::pair<size_t, size_t>(num_pairs, estimate.extent(0))),
+                    std::numeric_limits<double>::quiet_NaN());
+  Kokkos::deep_copy(cold.workspace().lcp.linearization.eigenvector_estimate, 0.0);
+
+  // The second step
+  const MixedReLCPResult from_kept = step_rods(kept, cfg, load);
+  const MixedReLCPResult from_poisoned = step_rods(poisoned, cfg, load);
+  const MixedReLCPResult from_cold = step_rods(cold, cfg, load);
+  ASSERT_TRUE(from_kept.converged && from_cold.converged) << from_kept << "\n" << from_cold;
+  ASSERT_GT(from_kept.num_iters, 1u) << "the step should generate rows";
+  EXPECT_TRUE(from_poisoned.converged) << from_poisoned;
+  EXPECT_EQ(from_poisoned.num_iters, from_kept.num_iters);
+  EXPECT_EQ(std::bit_cast<uint64_t>(from_poisoned.residual), std::bit_cast<uint64_t>(from_kept.residual));
+  EXPECT_EQ(count_bit_differences(rods_poisoned.force_torque_view(), rods_kept.force_torque_view()), 0u);
+  EXPECT_EQ(count_bit_differences(rods_poisoned.velocity_omega_view(), rods_kept.velocity_omega_view()), 0u);
+  EXPECT_EQ(count_bit_differences(get<ReLCPContactViews<Kokkos::Serial>>(constraints_poisoned).lambda_view(),
+                                  get<ReLCPContactViews<Kokkos::Serial>>(constraints_kept).lambda_view()),
+            0u);
+  EXPECT_GT(count_bit_differences(rods_cold.force_torque_view(), rods_kept.force_torque_view()), 0u);
 }
 
 // A step's unilateral solve starts from the multipliers in the families' lambda. At the configuration of a tight solve,
@@ -4316,7 +4491,7 @@ SolveInput<Link, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(s
   MixedLCPConfig cfg;
   cfg.max_cg_iters = 1000;
   // Tight enough that solver error sits far below the settled chain's geometric nonlinearity.
-  cfg.cg_tol = 1e-10;
+  cfg.cg_tol = 1e-8;
   cfg.outer_tol = 1e-10;
   return {rods, make_constraint_set(links, chain.springs), LocalDragMobility{.viscosity = 1.0}, dt, cfg};
 }

@@ -182,10 +182,13 @@ void advance_rods(const RodViews<ExecSpace>& rods, double dt) {
 /// The integrator holds handles to its rods and constraints, which share their data, so each step sees every value
 /// written through them; a different set of views (a resized family, a new contact list, other rods) needs a new
 /// integrator. It holds copies of the mobility model and the preconditioner policy, and the storage its steps write.
-/// Reusing the integrator reuses that storage, and each step's solves start from the previous step's solutions, so its
-/// steps agree with a fresh integrator's to within cg_tol. Copies of an integrator share its storage, so an integrator
-/// and its copies must not be used by more than one in-flight solve_step concurrently; make an integrator per
-/// concurrent solve.
+/// Reusing the integrator reuses that storage, and each step's solves start from the previous step's solutions and from
+/// an estimate the storage holds for each constraint row, so its steps meet the same tolerances as a fresh
+/// integrator's, but need not equal them. A family's rows keep their meaning from step to step while its entries do:
+/// rewriting a family's entries, or passing storage to another constraint list of the same layout, leaves that estimate
+/// misaligned, and steps still meet their tolerances but may take more iterations. Copies of an integrator share its
+/// storage, so an integrator and its copies must not be used by more than one in-flight solve_step concurrently; make
+/// an integrator per concurrent solve.
 template <typename ExecSpace, typename Model, typename Policy, typename... Families>
 class MixedLCPIntegrator
     : public impl::IntegratorData<
@@ -281,8 +284,8 @@ MixedLCPIntegrator<ExecSpace, Model, Policy, Families...> make_mixed_lcp_integra
 /// \brief The mixed LCP integrator above, in workspace's storage if it fits rods and constraints: the same rod count
 /// and row count for every family.
 ///
-/// Otherwise the integrator has storage of its own. Reused storage keeps its solutions, from which the next step's
-/// solves start, and its preconditioner op, made from the policy it was built with.
+/// Otherwise the integrator has storage of its own. Reused storage keeps its solutions and estimates, from which the
+/// next step's solves start, and its preconditioner op, made from the policy it was built with.
 template <typename ExecSpace, typename Model, typename Policy, typename... Families>
 MixedLCPIntegrator<ExecSpace, Model, Policy, Families...> make_mixed_lcp_integrator(
     const RodViews<ExecSpace>& rods, const ConstraintSet<Families...>& constraints, const Model& mobility_model,

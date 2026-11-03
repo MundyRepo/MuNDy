@@ -79,6 +79,18 @@ static_assert(ProjectedResidualPolicy<LinfNormProjectedGradientResidual, MundyMa
 static_assert(ProjectedResidualPolicy<LinfNormProjectedDiffResidual, MundyMathBackend, Vector3d, Vector3d,
                                       LowerBoundSpace<double>>,
               "The projected-difference residual measures an iterate against a convex space.");
+using cqpp3_t = decltype(make_cqpp<MundyMathBackend>(std::declval<Matrix3d>(), std::declval<Vector3d>(),
+                                                     std::declval<LowerBoundSpace<double>>()));
+using mprgp_state3_t = PGDState<double, Vector3d&, Vector3d&, Vector3d&, Vector3d&, MPRGPStepState<double>>;
+static_assert(
+    PGDStepStrategy<MPRGPStepStrategy<Vector3d&>, cqpp3_t, mprgp_state3_t> &&
+        PGDStepStrategy<MPRGPStepStrategy<Vector3d&, Vector3d&, Kokkos::Array<Vector3d, 2>&>, cqpp3_t, mprgp_state3_t>,
+    "MPRGP steps, from the cold start or from an estimate vector and a basis, are PGD step strategies.");
+static_assert(
+    std::is_same_v<MPRGPStepStrategy<Vector3d&>::step_state_t<double>, MPRGPStepState<double>> &&
+        std::is_same_v<MPRGPStepStrategy<Vector3d&, Vector3d&, Kokkos::Array<Vector3d, 2>&>::step_state_t<double>,
+                       MPRGPStepState<double>>,
+    "MPRGP's memory between steps is its expansion step, from either start.");
 static_assert(!ProjectedResidualPolicy<L2Residual, MundyMathBackend, Vector3d, Vector3d, LowerBoundSpace<double>>,
               "A vector residual is not a projected residual.");
 //@}
@@ -353,6 +365,80 @@ struct PeriodicLaplacianLCP {
       grad_star[i] = i % 2 == 0 ? 0.0 : 1.0;
     }
     return grad_star - get_A() * get_exact_solution();
+  }
+};
+
+/// \brief 0 <= A x + q _|_ x >= 0 with A = blockdiag(L + I / 100, 2 K) for the 8 x 8 periodic Laplacian L and the
+/// 16 x 16 Kac-Murdock-Szego matrix K_ij = 0.9^|i - j|, whose rows couple to none of L's. x* is PeriodicLaplacianLCP's
+/// on the first block and 0.5 + (i mod 5) / 10 on every third row i of the second; A x* + q is 1 off x*'s support.
+///
+/// L's top eigenvector (1, -1, ...) / sqrt(8), padded with zeros, is an eigenvector of A for 4.01, while the second
+/// block's curvature along its all-ones vector exceeds 19.
+struct BlockedKMSLCP {
+  static constexpr size_t N = 24;
+  using value_type = double;
+  using vector_t = Vector<value_type, N>;
+  using linear_op_t = Matrix<value_type, N, N>;
+  using backend_t = MundyMathBackend;
+
+  std::string name() const {
+    return "BlockedKMSLCP";
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  auto get_space() const {
+    return LowerBoundSpace<value_type>(0.0);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  static bool on_support(size_t i) {
+    return i < 8 ? i % 2 == 0 : (i - 8) % 3 == 0;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_exact_solution() const {
+    vector_t x;
+    for (size_t i = 0; i < N; ++i) {
+      x[i] = !on_support(i) ? 0.0 : (i < 8 ? 1.0 : 0.5 + static_cast<double>((i - 8) % 5) / 10.0);
+    }
+    return x;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_A() const {
+    auto A = linear_op_t::zeros();
+    for (size_t i = 0; i < 8; ++i) {
+      A(i, i) = 2.0 + 0.01;
+      A(i, (i + 1) % 8) = -1.0;
+      A(i, (i + 7) % 8) = -1.0;
+    }
+    for (size_t i = 0; i < 16; ++i) {
+      double power = 2.0;  // 2 * 0.9^|i - j|, for j moving away from i
+      for (size_t d = 0; i + d < 16; ++d, power *= 0.9) {
+        A(8 + i, 8 + i + d) = power;
+        A(8 + i + d, 8 + i) = power;
+      }
+    }
+    return A;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_q() const {
+    vector_t grad_star;
+    for (size_t i = 0; i < N; ++i) {
+      grad_star[i] = on_support(i) ? 0.0 : 1.0;
+    }
+    return grad_star - get_A() * get_exact_solution();
+  }
+
+  /// \brief L's top eigenvector, padded with zeros.
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_first_block_top_eigenvector() const {
+    vector_t e;
+    for (size_t i = 0; i < N; ++i) {
+      e[i] = i < 8 ? (i % 2 == 0 ? 1.0 : -1.0) / sqrt(8.0) : 0.0;
+    }
+    return e;
   }
 };
 
@@ -1008,6 +1094,70 @@ struct PeriodicLaplacianLCP {
 
  private:
   unsigned size_;
+};
+
+/// \brief math_backend::BlockedKMSLCP over views.
+struct BlockedKMSLCP {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using value_type = double;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using backend_t = KokkosBackend<exec_space>;
+
+  std::string name() const {
+    return "BlockedKMSLCP";
+  }
+
+  unsigned size() const {
+    return math_backend::BlockedKMSLCP::N;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space() const {
+    return LowerBoundSpace<value_type>(0.0);
+  }
+
+  vector_t get_exact_solution() const {
+    return to_view(math_backend::BlockedKMSLCP{}.get_exact_solution(), "x_exact");
+  }
+
+  vector_t get_q() const {
+    return to_view(math_backend::BlockedKMSLCP{}.get_q(), "q");
+  }
+
+  vector_t get_first_block_top_eigenvector() const {
+    return to_view(math_backend::BlockedKMSLCP{}.get_first_block_top_eigenvector(), "e");
+  }
+
+  linear_op_t get_A() const {
+    const auto A_math = math_backend::BlockedKMSLCP{}.get_A();
+    linear_op_t A("A", size(), size());
+    auto A_host = Kokkos::create_mirror_view(A);
+    for (size_t i = 0; i < size(); ++i) {
+      for (size_t j = 0; j < size(); ++j) {
+        A_host(i, j) = A_math(i, j);
+      }
+    }
+    Kokkos::deep_copy(A, A_host);
+    return A;
+  }
+
+ private:
+  static vector_t to_view(const math_backend::BlockedKMSLCP::vector_t& v, const char* label) {
+    vector_t view(std::string(label), math_backend::BlockedKMSLCP::N);
+    auto host = Kokkos::create_mirror_view(view);
+    for (size_t i = 0; i < math_backend::BlockedKMSLCP::N; ++i) {
+      host(i) = v[i];
+    }
+    Kokkos::deep_copy(view, host);
+    return view;
+  }
 };
 
 namespace congruent {
@@ -2097,6 +2247,157 @@ void expect_solves_end_on_an_apply_at_their_iterate(const MakePGD& make_pgd) {
   }
 }
 
+//! \name MPRGP runs
+//@{
+
+/// \brief u = eps / 2, the unit roundoff.
+constexpr double unit_roundoff = std::numeric_limits<double>::epsilon() / 2;
+
+/// \brief gamma_m = m u / (1 - m u), which bounds the relative rounding of an m-term sum or dot product (Higham,
+/// Accuracy and Stability of Numerical Algorithms, 2nd ed., Lemma 3.1).
+constexpr double rounding_gamma(double m) {
+  return m * unit_roundoff / (1.0 - m * unit_roundoff);
+}
+
+/// \brief An MPRGP solve: its expansion step once initialized, which is its longest, and at its end, its result, and x.
+template <class XVector>
+struct MPRGPRun {
+  double first_expansion_step = 0.0;
+  double last_expansion_step = 0.0;
+  PGDResult<double> result;
+  XVector x;
+};
+
+/// \brief The steps make_steps(p) on test's problem from start, a value or a vector, projected onto its space, with the
+/// projected-gradient residual to tol. grad, x_tmp, grad_tmp, and p start NaN-filled, so the solve reads none before
+/// writing it.
+template <class Test, class Start, class MakeSteps>
+auto run_mundy_math_mprgp(const Test& test, const Start& start, unsigned max_iters, double tol,
+                          const MakeSteps& make_steps) {
+  using vector_t = decltype(test.get_exact_solution());
+  constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+  MPRGPRun<vector_t> run;
+  vector_t grad, x_tmp, grad_tmp, p;
+  grad.fill(nan);
+  x_tmp.fill(nan);
+  grad_tmp.fill(nan);
+  p.fill(nan);
+  const auto space = test.get_space();
+  if constexpr (std::is_arithmetic_v<Start>) {
+    run.x.fill(start);
+  } else {
+    run.x = start;
+  }
+  MundyMathBackend::assign("start", run.x, projection(MundyMathBackend{}, space, run.x));
+
+  const auto A = test.get_A();
+  const auto q = test.get_q();
+  const auto cqpp = make_cqpp<MundyMathBackend>(A, q, space);
+  const auto pgd = make_pgd_solution_strategy(make_steps(p), LinfNormProjectedGradientResidual{},
+                                              PGDConfig<double>{.max_iters = max_iters, .tol = tol});
+  auto state = make_pgd_state(pgd, run.x, grad, x_tmp, grad_tmp);
+  pgd.initialize(cqpp, state);
+  run.first_expansion_step = state.step_state().expansion_step;
+  while (!pgd.done(state)) {
+    if (pgd.iterate(cqpp, state)) {
+      break;
+    }
+  }
+  run.result = pgd.result(state);
+  run.last_expansion_step = state.step_state().expansion_step;
+  return run;
+}
+
+/// \brief MPRGP on math_backend::BlockedKMSLCP inside a kernel, from x_0 = start, warm-started from its first block's
+/// top eigenvector with a basis of 8 columns, to the projected-gradient residual tol.
+inline MPRGPRun<math_backend::BlockedKMSLCP::vector_t> run_blocked_kms_in_kernel(double start, double tol) {
+  using vector_t = math_backend::BlockedKMSLCP::vector_t;
+  constexpr size_t n = math_backend::BlockedKMSLCP::N;
+  Kokkos::View<double[n], Kokkos::DefaultExecutionSpace::memory_space> x("x");
+  Kokkos::View<double[2], Kokkos::DefaultExecutionSpace::memory_space> steps("steps");
+  Kokkos::View<unsigned, Kokkos::DefaultExecutionSpace::memory_space> num_iters("num_iters");
+  Kokkos::View<bool, Kokkos::DefaultExecutionSpace::memory_space> converged("converged");
+  Kokkos::parallel_for(
+      "run_blocked_kms_in_kernel", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, 1), KOKKOS_LAMBDA(const int) {
+        const math_backend::BlockedKMSLCP problem;
+        const auto A = problem.get_A();
+        const auto q = problem.get_q();
+        const auto cqpp = make_cqpp<MundyMathBackend>(A, q, problem.get_space());
+        vector_t x_k, grad, x_tmp, grad_tmp, p;
+        x_k.fill(start);
+        auto e = problem.get_first_block_top_eigenvector();
+        Kokkos::Array<vector_t, 8> basis{};
+        const auto pgd =
+            make_pgd_solution_strategy(make_mprgp_step_strategy(p, e, basis), LinfNormProjectedGradientResidual{},
+                                       PGDConfig<double>{.max_iters = 1000, .tol = tol});
+        auto state = make_pgd_state(pgd, x_k, grad, x_tmp, grad_tmp);
+        pgd.initialize(cqpp, state);
+        steps(0) = state.step_state().expansion_step;
+        while (!pgd.done(state)) {
+          if (pgd.iterate(cqpp, state)) {
+            break;
+          }
+        }
+        steps(1) = state.step_state().expansion_step;
+        num_iters() = pgd.result(state).num_iters;
+        converged() = pgd.result(state).converged;
+        for (size_t i = 0; i < n; ++i) {
+          x(i) = x_k[i];
+        }
+      });
+  MPRGPRun<vector_t> run;
+  const auto x_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+  const auto steps_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, steps);
+  for (size_t i = 0; i < n; ++i) {
+    run.x[i] = x_host(i);
+  }
+  run.first_expansion_step = steps_host(0);
+  run.last_expansion_step = steps_host(1);
+  run.result.num_iters = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, num_iters)();
+  run.result.converged = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, converged)();
+  return run;
+}
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+/// \brief run_mundy_math_mprgp over views; x is returned on the host.
+template <class Test, class Start, class MakeSteps>
+auto run_kokkos_mprgp(const Test& test, const Start& start, unsigned max_iters, double tol,
+                      const MakeSteps& make_steps) {
+  using backend_t = KokkosBackend<decltype(test.get_exec_space())>;
+  using vector_t = decltype(test.get_exact_solution());
+  constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+  const size_t size = test.size();
+  vector_t x("x", size), grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size), p("p", size);
+  Kokkos::deep_copy(grad, nan);
+  Kokkos::deep_copy(x_tmp, nan);
+  Kokkos::deep_copy(grad_tmp, nan);
+  Kokkos::deep_copy(p, nan);
+  const auto space = test.get_space();
+  Kokkos::deep_copy(x, start);
+  backend_t::assign("start", x, projection(backend_t{}, space, x));
+
+  const auto A = test.get_A();
+  const auto q = test.get_q();
+  const auto cqpp = make_cqpp<backend_t>(A, q, space);
+  const auto pgd = make_pgd_solution_strategy(make_steps(p), LinfNormProjectedGradientResidual{},
+                                              PGDConfig<double>{.max_iters = max_iters, .tol = tol});
+  auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
+  MPRGPRun<decltype(Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x))> run;
+  pgd.initialize(cqpp, state);
+  run.first_expansion_step = state.step_state().expansion_step;
+  while (!pgd.done(state)) {
+    if (pgd.iterate(cqpp, state)) {
+      break;
+    }
+  }
+  run.result = pgd.result(state);
+  run.last_expansion_step = state.step_state().expansion_step;
+  run.x = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, x);
+  return run;
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+//@}
+
 //! \name Analytical solutions
 //@{
 
@@ -2468,6 +2769,273 @@ TEST(Convex, MPRGPSettlesNearDuplicateRows) {
   EXPECT_LE(x[0], std::numeric_limits<double>::epsilon());
   EXPECT_NEAR(x[1], 1.0 + eps, cfg.tol + std::cos(delta) * x[0]);
   EXPECT_LE(LinfNormProjectedGradientResidual{}(MundyMathBackend{}, x, A * x + q, space), cfg.tol);
+}
+//@}
+
+//! \name MPRGP's estimate of lambda_max
+//@{
+
+// MPRGP's convergence theory bounds its expansion step by 2 / lambda_max. From the cold start the first expansion step,
+// the solve's longest, is within it on problems of known lambda_max: 4.01 for PeriodicLaplacianLCP, along
+// (1, -1, ...), and 2 + sqrt(2) for tridiag(-1, 2, -1) of size 3. So is that of a solve started from the estimate
+// vector the cold one leaves. The step is 1.8 / lambda, within the bound once lambda >= 0.9 lambda_max: a 10% margin
+// against Paige's rounding term 3 sqrt(k) eps_1 ||A|| + 4 eps ||T||, below 1e-12 lambda_max here, so the comparisons
+// are exact.
+TEST(Convex, MPRGPStepMeetsTheory) {
+  const double sqrt2 = std::sqrt(2.0);
+  const auto expect_mundy_math = [](const auto& test, double lambda_max) {
+    using vector_t = decltype(test.get_exact_solution());
+    vector_t e{};
+    Kokkos::Array<vector_t, 8> basis{};
+    const auto cold =
+        run_mundy_math_mprgp(test, 99.99, 1000, 1e-10, [](auto& p) { return make_mprgp_step_strategy(p); });
+    const auto warm = [&](auto& p) { return make_mprgp_step_strategy(p, e, basis); };
+    run_mundy_math_mprgp(test, 99.99, 1000, 1e-10, warm);
+    const auto from_estimate = run_mundy_math_mprgp(test, 99.99, 1000, 1e-10, warm);
+    EXPECT_TRUE(cold.result.converged) << test.name() << ": " << cold.result;
+    EXPECT_TRUE(from_estimate.result.converged) << test.name() << ": " << from_estimate.result;
+    EXPECT_LE(cold.first_expansion_step, 2.0 / lambda_max) << test.name();
+    EXPECT_LE(from_estimate.first_expansion_step, 2.0 / lambda_max) << test.name();
+  };
+  expect_mundy_math(math_backend::PeriodicLaplacianLCP<8>{}, 4.01);
+  expect_mundy_math(math_backend::UnconstrainedSPD1Problem{}, 2.0 + sqrt2);
+  expect_mundy_math(math_backend::InactiveBoxConstrainedSPDProblem{}, 2.0 + sqrt2);
+  expect_mundy_math(math_backend::ActiveBoxConstrainedSPDProblem{}, 2.0 + sqrt2);
+  expect_mundy_math(math_backend::ActiveUpperBoundSPDProblem{}, 2.0 + sqrt2);
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  const auto expect_kokkos = [](const auto& test, double lambda_max) {
+    using vector_t = decltype(test.get_exact_solution());
+    vector_t e("e", test.size());
+    Kokkos::View<double* [8], Kokkos::LayoutLeft, typename vector_t::memory_space> basis("basis", test.size());
+    const auto cold = run_kokkos_mprgp(test, 99.99, 1000, 1e-10, [](auto& p) { return make_mprgp_step_strategy(p); });
+    const auto warm = [&](auto& p) { return make_mprgp_step_strategy(p, e, basis); };
+    run_kokkos_mprgp(test, 99.99, 1000, 1e-10, warm);
+    const auto from_estimate = run_kokkos_mprgp(test, 99.99, 1000, 1e-10, warm);
+    EXPECT_TRUE(cold.result.converged) << test.name() << ": " << cold.result;
+    EXPECT_TRUE(from_estimate.result.converged) << test.name() << ": " << from_estimate.result;
+    EXPECT_LE(cold.first_expansion_step, 2.0 / lambda_max) << test.name();
+    EXPECT_LE(from_estimate.first_expansion_step, 2.0 / lambda_max) << test.name();
+  };
+  for (const unsigned size : {8u, 64u}) {
+    expect_kokkos(kokkos_backend::PeriodicLaplacianLCP{size}, 4.01);
+    expect_kokkos(kokkos_backend::as_sparse(kokkos_backend::PeriodicLaplacianLCP{size}), 4.01);
+  }
+  const auto three_by_three =
+      std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{}, kokkos_backend::InactiveBoxConstrainedSPDProblem{},
+                      kokkos_backend::ActiveBoxConstrainedSPDProblem{}, kokkos_backend::ActiveUpperBoundSPDProblem{});
+  std::apply(
+      [&](const auto&... test) {
+        (expect_kokkos(test, 2.0 + sqrt2), ...);
+        (expect_kokkos(kokkos_backend::as_sparse(test), 2.0 + sqrt2), ...);
+      },
+      three_by_three);
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+}
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+// The estimate vector e: a zero e is the cold start, bit for bit, and the basis's number of columns changes neither the
+// solve nor, beyond rounding, the estimate it leaves in e. e on exit is a unit vector whose Rayleigh quotient is
+// lambda_max to within the estimate's tolerance, and a solve that takes no step leaves e as it was. A warm solve
+// allocates nothing but its sparse applies' allocations.
+TEST(Convex, MPRGPWarmStartContract) {
+  constexpr double tol = 1e-10;
+  const auto expect_contract = [](const auto& test) {
+    using vector_t = decltype(test.get_exact_solution());
+    using memory_space = typename vector_t::memory_space;
+    const size_t size = test.size();
+    const auto cold_steps = [](auto& p) { return make_mprgp_step_strategy(p); };
+    const auto warm_steps = [](auto& e, auto& basis) {
+      return [&](auto& p) { return make_mprgp_step_strategy(p, e, basis); };
+    };
+    const auto expect_same_solve = [&](const auto& run, const auto& reference, const std::string& what) {
+      EXPECT_EQ(run.result.num_iters, reference.result.num_iters) << test.name() << ", " << what;
+      EXPECT_EQ(run.first_expansion_step, reference.first_expansion_step) << test.name() << ", " << what;
+      EXPECT_EQ(run.last_expansion_step, reference.last_expansion_step) << test.name() << ", " << what;
+      for (size_t i = 0; i < size; ++i) {
+        EXPECT_EQ(run.x(i), reference.x(i)) << test.name() << ", " << what << ", entry " << i;
+      }
+    };
+
+    // A zero e is the cold start
+    vector_t e("e", size);
+    Kokkos::View<double* [32], Kokkos::LayoutLeft, memory_space> basis("basis", size);
+    const auto cold = run_kokkos_mprgp(test, 99.99, 1000, tol, cold_steps);
+    ASSERT_TRUE(cold.result.converged) << test.name() << ": " << cold.result;
+    expect_same_solve(run_kokkos_mprgp(test, 99.99, 1000, tol, warm_steps(e, basis)), cold, "zero e");
+
+    // One basis column or 32, from e = 0: the same solve, and the same estimate to rounding. As in
+    // Eigenvalues.LanczosBasisCapacity, each of the estimate's k-term sums rounds by k eps on either side and the
+    // normalizations by (n + 6) eps beyond the sums' difference, for k at most norm_estimate.max_iters = 32.
+    vector_t e_1("e_1", size), e_32("e_32", size);
+    Kokkos::View<double* [1], Kokkos::LayoutLeft, memory_space> basis_1("basis_1", size);
+    Kokkos::View<double* [32], Kokkos::LayoutLeft, memory_space> basis_32("basis_32", size);
+    const auto with_1 = run_kokkos_mprgp(test, 99.99, 1000, tol, warm_steps(e_1, basis_1));
+    const auto with_32 = run_kokkos_mprgp(test, 99.99, 1000, tol, warm_steps(e_32, basis_32));
+    expect_same_solve(with_1, with_32, "1 or 32 columns");
+    const double eps = std::numeric_limits<double>::epsilon();
+    const double k = make_mprgp_step_strategy(e).norm_estimate.max_iters;
+    const double estimate_tol = std::min(size * k * eps, (2 * k * (1 + std::sqrt(double(size))) + size + 6) * eps);
+    const auto e_1_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, e_1);
+    const auto e_32_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, e_32);
+    for (size_t i = 0; i < size; ++i) {
+      EXPECT_NEAR(e_1_host(i), e_32_host(i), estimate_tol) << test.name() << ", entry " << i;
+    }
+
+    // A solve that takes no step, from x* or capped at 0 iterations, leaves e as it was
+    vector_t e_kept = test.get_first_block_top_eigenvector();
+    const auto e_before = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, e_kept);
+    const auto at_solution = run_kokkos_mprgp(test, test.get_exact_solution(), 1000, tol, warm_steps(e_kept, basis));
+    const auto capped = run_kokkos_mprgp(test, 99.99, 0, tol, warm_steps(e_kept, basis));
+    EXPECT_EQ(at_solution.result.num_iters, 0u) << test.name();
+    EXPECT_EQ(capped.result.num_iters, 0u) << test.name();
+    const auto e_after = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, e_kept);
+    for (size_t i = 0; i < size; ++i) {
+      EXPECT_EQ(e_after(i), e_before(i)) << test.name() << ", entry " << i;
+    }
+  };
+  expect_contract(kokkos_backend::BlockedKMSLCP{});
+  expect_contract(kokkos_backend::as_sparse(kokkos_backend::BlockedKMSLCP{}));
+
+  // e on exit, on PeriodicLaplacianLCP of size 8: lambda_max = 4.01 is 0.586 from the next eigenvalue, and the cold
+  // start reaches every one of the five distinct eigenvalues.
+  //   - |e^T e - 1| <= 2 gamma_{n+3}: gamma_n for e's normalizing sum, 2u each for its square root, reciprocal, and
+  //     entrywise product (each doubled by squaring), and gamma_n for this test's sum.
+  //   - |R(e) - lambda_max| <= lambda_max (tol / (1 - tol) + 3 sqrt(k) eps_1 + 4 eps + gamma_{2n+1}): Paige's bound
+  //     puts theta within rho <= tol theta of lambda_max in exact arithmetic, so within tol lambda_max / (1 - tol), and
+  //     adds 3 sqrt(k) eps_1 ||A|| + 4 eps ||T|| in floating point, for k <= 32 iterations, ||T|| <= ||A|| = 4.01 and
+  //     eps_1 = 2 (7 + m beta) eps with m = 3 nonzeros per row and beta = || |A| || / ||A|| = 1 (Paige, Linear Algebra
+  //     Appl. 34, 1980); R(e) = theta for the Ritz vector in exact arithmetic; gamma_{2n+1} bounds this test's apply
+  //     and dot products and its quotient.
+  {
+    const kokkos_backend::PeriodicLaplacianLCP test{8};
+    using backend_t = KokkosBackend<decltype(test.get_exec_space())>;
+    using vector_t = decltype(test.get_exact_solution());
+    const size_t n = test.size();
+    const double lambda_max = 4.01;
+    vector_t e("e", n), A_e("A_e", n);
+    const double estimate_tol = make_mprgp_step_strategy(e).norm_estimate.tol;
+    Kokkos::View<double* [8], Kokkos::LayoutLeft, typename vector_t::memory_space> basis("basis", n);
+    run_kokkos_mprgp(test, 99.99, 1000, tol, [&](auto& p) { return make_mprgp_step_strategy(p, e, basis); });
+    backend_t::apply(test.get_A(), e, A_e);
+    const double e_e = dot(backend_t{}, e, e);
+    const double eps = std::numeric_limits<double>::epsilon();
+    EXPECT_LE(std::abs(e_e - 1.0), 2.0 * rounding_gamma(n + 3));
+    const double eps_1 = 2.0 * (7.0 + 3.0) * eps;
+    const double rayleigh_tol = lambda_max * (estimate_tol / (1.0 - estimate_tol) + 3.0 * std::sqrt(32.0) * eps_1 +
+                                              4.0 * eps + rounding_gamma(2 * n + 1));
+    EXPECT_NEAR(dot(backend_t{}, e, A_e) / e_e, lambda_max, rayleigh_tol);
+  }
+
+  // Nothing allocated but the sparse applies' allocations
+  {
+    const auto test = kokkos_backend::as_sparse(kokkos_backend::BlockedKMSLCP{});
+    using exec_space = decltype(test.get_exec_space());
+    using backend_t = KokkosBackend<exec_space>;
+    using vector_t = decltype(test.get_exact_solution());
+    const size_t size = test.size();
+    const auto A = test.get_A();
+    const auto q = test.get_q();
+    vector_t x("x", size), grad("grad", size), x_tmp("x_tmp", size), grad_tmp("grad_tmp", size), p("p", size),
+        e("e", size);
+    Kokkos::View<double* [8], Kokkos::LayoutLeft, typename vector_t::memory_space> basis("basis", size);
+    Kokkos::deep_copy(x, 99.99);
+    PGDResult<double> result;
+    const AllocationCount counted = count_allocations([&] {
+      const auto cqpp = make_cqpp<backend_t>(A, q, test.get_space());
+      const auto pgd =
+          make_pgd_solution_strategy(make_mprgp_step_strategy(p, e, basis), LinfNormProjectedGradientResidual{},
+                                     PGDConfig<double>{.max_iters = 1000, .tol = tol});
+      auto state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
+      result = solve_cqpp(cqpp, pgd, state);
+    });
+    EXPECT_TRUE(result.converged) << result;
+    EXPECT_GT(counted.sparse_applies, 0u);
+    EXPECT_EQ(counted.allocations, allocations_per_sparse_apply<exec_space>() * counted.sparse_applies);
+  }
+}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+
+// Started from an exact eigenvector of A for 4.01, BlockedKMSLCP's first block's top one, the estimate stops at once
+// and the first expansion step is beyond 2 / lambda_max: 2 / R(v) for v = (0, 1, ..., 1), whose curvature R(v) > 19
+// bounds lambda_max from below. The steps' curvature shortens the step, and the solve converges, from x_0 = 99.99 and
+// from x_0 = 0, on both backends, the MundyMath one in a kernel. The step stays above 1.8 / lambda_max:
+//   - The step's curvatures are Rayleigh quotients, each at most lambda_max <= G, Gershgorin's max_i sum_j |A_ij|, as
+//     computed with at most gamma_{2n} relative error in v^T A v (an apply of up to n terms per row, then a dot),
+//     gamma_n in v^T v, 2u in forming fraction v^T v / v^T A v, and gamma_n in G: step >= (1.8 / G) (1 - gamma_{4n+2}).
+//   - x is within (1 + lambda_max) / lambda_min ||x - P(x - (A x + q))||_2 of x* (the error bound of a strongly
+//     monotone affine variational inequality; Facchinei & Pang, Finite-Dimensional Variational Inequalities, 2003,
+//     Prop. 6.3.1). The natural residual's entries are at most the projected gradient's, which the solve holds to tol
+//     up to the rounding of A x + q, gamma_{n+1} (G ||x||_inf + ||q||_inf). lambda_max <= G, and lambda_min >= 0.01,
+//     the least of L's 0.01 and 2 K's 2 (1 - 0.9) / (1 + 0.9), the lower bound of a Kac-Murdock-Szego spectrum.
+TEST(Convex, MPRGPRecoversFromWarmUndershoot) {
+  constexpr double tol = 1e-10;
+  constexpr size_t n = math_backend::BlockedKMSLCP::N;
+  const math_backend::BlockedKMSLCP test;
+  const auto A = test.get_A();
+  const auto q = test.get_q();
+  const auto x_star = test.get_exact_solution();
+  using vector_t = math_backend::BlockedKMSLCP::vector_t;
+
+  // G and R(v)
+  double gershgorin = 0.0;
+  for (size_t i = 0; i < n; ++i) {
+    double row = 0.0;
+    for (size_t j = 0; j < n; ++j) {
+      row += abs(A(i, j));
+    }
+    gershgorin = max(gershgorin, row);
+  }
+  vector_t v;
+  for (size_t i = 0; i < n; ++i) {
+    v[i] = i < 8 ? 0.0 : 1.0;
+  }
+  const double curvature = dot(v, A * v) / dot(v, v);
+  const double fraction = make_mprgp_step_strategy(v).expansion_step_fraction;
+  const double q_max = max(abs(q));
+
+  const auto expect_recovers = [&](const auto& run, const std::string& what) {
+    // Hardness: the first step is beyond 2 / lambda_max, as R(v) <= lambda_max
+    EXPECT_GT(run.first_expansion_step * curvature, 2.0) << what;
+
+    // Recovery
+    ASSERT_TRUE(run.result.converged) << what << ": " << run.result;
+    EXPECT_LT(run.last_expansion_step, run.first_expansion_step) << what;
+    EXPECT_GE(run.last_expansion_step, fraction / gershgorin * (1.0 - rounding_gamma(4 * n + 2))) << what;
+    double x_max = 0.0;
+    double error = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+      x_max = max(x_max, abs(run.x[i]));
+      error = max(error, abs(run.x[i] - x_star[i]));
+    }
+    const double residual_bound = tol + rounding_gamma(n + 1) * (gershgorin * x_max + q_max);
+    EXPECT_LE(error, (1.0 + gershgorin) / 0.01 * std::sqrt(double(n)) * residual_bound) << what;
+  };
+
+  // MundyMath, in a kernel
+  for (const double x_0 : {99.99, 0.0}) {
+    expect_recovers(run_blocked_kms_in_kernel(x_0, tol), "MundyMath in a kernel from x_0 = " + std::to_string(x_0));
+  }
+
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  // Kokkos, dense and sparse
+  const auto expect_kokkos = [&](const auto& kokkos_test) {
+    using kokkos_vector_t = decltype(kokkos_test.get_exact_solution());
+    Kokkos::View<double* [8], Kokkos::LayoutLeft, typename kokkos_vector_t::memory_space> basis("basis", n);
+    for (const double x_0 : {99.99, 0.0}) {
+      kokkos_vector_t e = kokkos_test.get_first_block_top_eigenvector();
+      const auto kokkos_run =
+          run_kokkos_mprgp(kokkos_test, x_0, 1000, tol, [&](auto& p) { return make_mprgp_step_strategy(p, e, basis); });
+      MPRGPRun<vector_t> run{kokkos_run.first_expansion_step, kokkos_run.last_expansion_step, kokkos_run.result, {}};
+      for (size_t i = 0; i < n; ++i) {
+        run.x[i] = kokkos_run.x(i);
+      }
+      expect_recovers(run, kokkos_test.name() + " from x_0 = " + std::to_string(x_0));
+    }
+  };
+  expect_kokkos(kokkos_backend::BlockedKMSLCP{});
+  expect_kokkos(kokkos_backend::as_sparse(kokkos_backend::BlockedKMSLCP{}));
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 }
 //@}
 

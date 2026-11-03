@@ -35,12 +35,14 @@
 #include <mundy_math/cmath.hpp>                      // for mundy::{abs, sqrt}
 #include <mundy_math/impl/solver_backends_impl.hpp>  // for mundy::impl::vector_value_type
 #include <mundy_utils/requires.hpp>                  // for MUNDY_REQUIRES
+#include <mundy_utils/rng.hpp>                       // for mundy::make_philox
 
 namespace mundy {
 
 namespace impl {
 
-/// \brief The cold start of an eigen solve over vectors like x: entry i is a hash of i mapped into (-1, 1).
+/// \brief The cold start of an eigen solve over vectors like x: entry i is a counter-based Philox draw keyed by i,
+/// mapped into (-1, 1).
 ///
 /// Its entries follow no sign pattern or index structure, so it is not orthogonal to the structured directions an
 /// operator may single out, such as the all-ones vector of a circulant or a shifted Laplacian.
@@ -54,12 +56,10 @@ class ColdStartExpr {
   }
 
   KOKKOS_INLINE_FUNCTION value_type operator()(size_t i) const {
-    // splitmix64's finalizer; its top d - 1 bits h give (h + 1/2) 2^(2 - d) - 1 in [-1 + 2^(1 - d), 1 - 2^(1 - d)]
+    // the draw's top d - 1 bits h give (h + 1/2) 2^(2 - d) - 1 in [-1 + 2^(1 - d), 1 - 2^(1 - d)]
     constexpr int d = std::numeric_limits<value_type>::digits;
-    uint64_t z = static_cast<uint64_t>(i) + 0x9E3779B97F4A7C15ull;
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
-    z ^= z >> 31;
+    constexpr size_t stream = 0;
+    const uint64_t z = make_philox(i, stream).template draw<uint64_t>();
     const uint64_t h = z >> (64 - (d - 1));
     constexpr value_type spacing = static_cast<value_type>(1) / static_cast<value_type>(uint64_t{1} << (d - 2));
     return (static_cast<value_type>(h) + static_cast<value_type>(0.5)) * spacing - static_cast<value_type>(1);

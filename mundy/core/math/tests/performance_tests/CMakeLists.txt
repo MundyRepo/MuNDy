@@ -49,6 +49,12 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     CATEGORIES PERFORMANCE
   )
   tribits_add_executable(
+    MPRGPNormEstimate
+    SOURCES MPRGPNormEstimate.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+  tribits_add_executable(
     DirectSum
     SOURCES DirectSum.cpp
     INSTALLABLE

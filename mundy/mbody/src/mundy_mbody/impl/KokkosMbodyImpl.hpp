@@ -57,6 +57,7 @@
 #include <mundy_mbody/KokkosMbodyMobility.hpp>         // for mundy::mbody::Mobility
 #include <mundy_mbody/KokkosMbodyPreconditioners.hpp>  // for mundy::mbody::SchurPreconditionerPolicy
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
+#include <mundy_utils/rng.hpp>  // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>
 #include <mundy_utils/tuple.hpp>        // for mundy::{tuple, make_tuple, tuple_cat, get, tuple_size_v}
 #include <mundy_utils/type_traits.hpp>  // for mundy::index_finder_v
@@ -1987,8 +1988,9 @@ struct schur_preconditioner_of<NoPreconditioner, Linearization> {
 ///
 /// It is sized for one layout of rods and constraints (fits), and each call overwrites it in place. Only the storage of
 /// the blocks the layout has is allocated. S solves from the guess held in its output: S b, S B^T M D x and S y_rhs
-/// start from zero and then from their values at the previous solve. With a ReLCP family, the unilateral rows a step
-/// generates follow the families' rows, num_generated of them so far, in room that grows when a step needs more.
+/// start from zero and then from their values at the previous solve, as the unilateral solve's estimate of its
+/// operator's top eigenvector does. With a ReLCP family, the unilateral rows a step generates follow the families'
+/// rows, num_generated of them so far, in room that grows when a step needs more.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
 class LinearizationWorkspace {
  public:
@@ -1998,6 +2000,9 @@ class LinearizationWorkspace {
   using bilateral_geometry_t = decltype(make_block_geometry<ConstraintType::BILATERAL, ExecSpace>(
       std::declval<const ConstraintIndexMap<Families...>&>()));
   static constexpr bool is_preconditioned = !std::same_as<Policy, NoPreconditioner>;
+
+  /// \brief The columns of the basis of the unilateral solve's eigenvalue estimate, and so its most iterations.
+  static constexpr unsigned basis_columns = 16;
 
  private:
   using backend_t = KokkosBackend<ExecSpace>;
@@ -2054,13 +2059,15 @@ class LinearizationWorkspace {
         grad("grad", index_map.num_unilateral + generated_capacity_),
         x_tmp("x_tmp", index_map.num_unilateral + generated_capacity_),
         grad_tmp("grad_tmp", index_map.num_unilateral + generated_capacity_),
+        eigenvector_estimate("eigenvector_estimate", index_map.num_unilateral + generated_capacity_),
         dx("Dx", has_unilateral() ? num_rows() : 0),
         mdx("MDx", has_unilateral() && has_bilateral() ? num_rows() : 0),
         d_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(unilateral_geo, num_rods))),
         b_workspace(backend_t::make_workspace(make_block_force_op<ExecSpace>(geometry_, num_rods))),
         bt_workspace(backend_t::make_workspace(make_block_rate_op<ExecSpace>(geometry_, num_rods))),
         m_dt_workspace(backend_t::make_workspace(make_scaled_op<backend_t>(dt, mobility))),
-        mobility_workspace(backend_t::make_workspace(mobility)) {
+        mobility_workspace(backend_t::make_workspace(mobility)),
+        basis_entries_("basis_entries", basis_columns * (index_map.num_unilateral + generated_capacity_)) {
     // The step at this storage, whose values are not yet computed: only its sizes are read here.
     const CGConfig<double> cg_cfg{};
     const step_t step{index_map, num_rods, dt, unilateral_geo, q, kinv, mobility, u_free, PGDConfig<double>{}, cg_cfg};
@@ -2133,6 +2140,13 @@ class LinearizationWorkspace {
     return subrange(q, IndexRange{0, index_map_.num_unilateral + num_generated});
   }
 
+  /// \brief The basis of the unilateral solve's eigenvalue estimate over the first num_rows unilateral rows.
+  Kokkos::View<double* [basis_columns], Kokkos::LayoutLeft, typename ExecSpace::memory_space, Kokkos::MemoryUnmanaged>
+  basis_over(size_t num_rows) const {
+    return Kokkos::View<double* [basis_columns], Kokkos::LayoutLeft, typename ExecSpace::memory_space,
+                        Kokkos::MemoryUnmanaged>(basis_entries_.data(), num_rows);
+  }
+
   /// \brief Room for num_rows generated unilateral rows, keeping those generated and their q.
   void reserve_generated(size_t num_rows) {
     if constexpr (has_relcp_family_v<Families...>) {
@@ -2156,6 +2170,8 @@ class LinearizationWorkspace {
       Kokkos::realloc(grad, num_unilateral);
       Kokkos::realloc(x_tmp, num_unilateral);
       Kokkos::realloc(grad_tmp, num_unilateral);
+      Kokkos::resize(eigenvector_estimate, num_unilateral);
+      Kokkos::realloc(basis_entries_, basis_columns * num_unilateral);
       if (mixed_cqpp_workspace) {
         Kokkos::realloc(mixed_g_, num_unilateral);
       }
@@ -2214,6 +2230,7 @@ class LinearizationWorkspace {
   view_t grad;
   view_t x_tmp;
   view_t grad_tmp;
+  view_t eigenvector_estimate;  // the unilateral solve's estimate of its operator's top eigenvector
   view_t dx;
   view_t mdx;
   apply_workspace_t<d_t> d_workspace;
@@ -2227,7 +2244,8 @@ class LinearizationWorkspace {
   std::optional<mixed_cqpp_workspace_t> mixed_cqpp_workspace;
 
  private:
-  view_t mixed_g_;  // g's storage, over every unilateral row it has room for
+  view_t mixed_g_;        // g's storage, over every unilateral row it has room for
+  view_t basis_entries_;  // the estimate basis's columns, each over every unilateral row there is room for
 };
 
 /// \brief The step data of rods and constraints at their current configuration, where their mobility is mobility,
@@ -2402,14 +2420,43 @@ double augment(StepData<ExecSpace, MobilityOp, Families...>& step,
   return largest;
 }
 
+/// \brief e's entries past its first num_carried := a fixed generic vector with the norm of its first num_carried.
+///
+/// The generic vector's entries lie in [-1, 1) and follow no sign pattern or index structure. A zero carried part
+/// leaves e zero.
+template <typename ExecSpace>
+void start_new_rows(const Kokkos::View<double*, typename ExecSpace::memory_space>& e, size_t num_carried) {
+  const size_t num_rows = e.extent(0);
+  if (num_carried >= num_rows) {
+    return;
+  }
+  constexpr size_t stream = 1;
+  Kokkos::parallel_for(
+      "start_new_rows", Kokkos::RangePolicy<ExecSpace>(num_carried, num_rows),
+      KOKKOS_LAMBDA(const size_t i) { e(i) = make_philox(i, stream).template uniform<double>(-1.0, 1.0); });
+  double carried_sq = 0.0;
+  double new_sq = 0.0;
+  Kokkos::parallel_reduce(
+      "start_new_rows_norms", Kokkos::RangePolicy<ExecSpace>(0, num_rows),
+      KOKKOS_LAMBDA(const size_t i, double& carried, double& added) {
+        (i < num_carried ? carried : added) += e(i) * e(i);
+      },
+      carried_sq, new_sq);
+  const double scale = new_sq > 0.0 ? Kokkos::sqrt(carried_sq / new_sq) : 0.0;
+  Kokkos::parallel_for(
+      "start_new_rows_scale", Kokkos::RangePolicy<ExecSpace>(num_carried, num_rows),
+      KOKKOS_LAMBDA(const size_t i) { e(i) *= scale; });
+}
+
 /// \brief Solve the mixed LCP with the step's unilateral block and the bilateral block at workspace's linearization
 /// point, into out.
 ///
 /// to_free_end is the displacement Delta from the linearization point's configuration to the step's constraint-free end
 /// configuration, so the bilateral linear term b = psi + B^T Delta is the linear model about that configuration of psi
-/// at that end. The unilateral solve starts from x_start's entries and from zero on any rows past them. out shares no
-/// storage with to_free_end or x_start. The Schur complement's preconditioner is refreshed at the linearization point
-/// first.
+/// at that end. The unilateral solve starts from x_start's entries and from zero on any rows past them. Its estimate of
+/// its operator's top eigenvector starts from workspace's on x_start's rows and, past them, from a fixed generic
+/// vector of the carried part's norm, and the solve leaves its estimate there. out shares no storage with to_free_end
+/// or x_start. The Schur complement's preconditioner is refreshed at the linearization point first.
 template <typename ExecSpace, typename MobilityOp, typename Policy, typename... Families>
 void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& step,
                          LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>& workspace,
@@ -2459,8 +2506,13 @@ void solve_linearization(const StepData<ExecSpace, MobilityOp, Families...>& ste
     view_t x_tmp = subrange(workspace.x_tmp, unilateral_rows);
     view_t grad_tmp = subrange(workspace.grad_tmp, unilateral_rows);
     view_t direction = subrange(workspace.q_rate, unilateral_rows);
-    auto pgd = make_pgd_solution_strategy(make_mprgp_step_strategy(direction), LinfNormProjectedGradientResidual{},
-                                          step.pgd_config);
+    view_t e = subrange(workspace.eigenvector_estimate, unilateral_rows);
+    // rows new since the last solve: every eigenvalue above the last solve's has an eigenvector on them
+    start_new_rows<ExecSpace>(e, started.end);
+    auto mprgp = make_mprgp_step_strategy(direction, e, workspace.basis_over(num_unilateral));
+    // H's inner solves start from their last result, so no estimate iteration runs past the basis
+    mprgp.norm_estimate.max_iters = LinearizationWorkspace<ExecSpace, MobilityOp, Policy, Families...>::basis_columns;
+    auto pgd = make_pgd_solution_strategy(mprgp, LinfNormProjectedGradientResidual{}, step.pgd_config);
     auto pgd_state = make_pgd_state(pgd, x, grad, x_tmp, grad_tmp);
     if (has_bilateral) {
       const auto S = make_schur_complement(step, workspace.geometry(), step.cg_config, *workspace.preconditioner);
