@@ -4491,8 +4491,8 @@ SolveInput<Link, TriplePointAngularSpringViews<HostExecSpace>> make_cantilever(s
   MixedLCPConfig cfg;
   cfg.max_cg_iters = 1000;
   // Tight enough that solver error sits far below the settled chain's geometric nonlinearity.
-  cfg.cg_tol = 1e-8;
-  cfg.outer_tol = 1e-10;
+  cfg.cg_tol = 1e-9;
+  cfg.outer_tol = 1e-9;
   return {rods, make_constraint_set(links, chain.springs), LocalDragMobility{.viscosity = 1.0}, dt, cfg};
 }
 
