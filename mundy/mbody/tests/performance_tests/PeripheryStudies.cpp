@@ -51,6 +51,7 @@
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy
+#include <MundyMath_config.hpp>                 // for HAVE_MUNDYMATH_{BELOS,TPETRA}
 #include <mundy_geom/randomize.hpp>             // for mundy::generate_random_unit_quaternion
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Vector3.hpp>              // for Vector3
@@ -58,6 +59,7 @@
 #include <mundy_mbody/Periphery.hpp>           // for fill_skfie_matrix, apply_skfie, PeripheryT, ...
 #include <mundy_utils/rng.hpp>                 // for mundy::make_philox
 
+#if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
 namespace mundy {
 
 namespace mbody {
@@ -1335,11 +1337,13 @@ void print_usage(std::ostream& os) {
 }  // namespace mbody
 
 }  // namespace mundy
+#endif  // HAVE_MUNDYMATH_BELOS && HAVE_MUNDYMATH_TPETRA
 
 int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
 
+#if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
   using mundy::mbody::kStudies;
   std::vector<const mundy::mbody::Study*> selected;
   bool valid = argc > 1;
@@ -1364,6 +1368,10 @@ int main(int argc, char** argv) {
   } else {
     mundy::mbody::print_usage(std::cerr);
   }
+#else
+  std::cout << "PeripheryStudies skipped: requires the Belos and Tpetra TPLs.\n";
+  const bool valid = true;
+#endif
 
   Kokkos::finalize();
   stk::parallel_machine_finalize();
