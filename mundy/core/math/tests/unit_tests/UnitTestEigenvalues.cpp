@@ -863,18 +863,28 @@ TEST(Eigenvalues, PowerIterates) {
       q_prev = q_prev / norm(q_prev);
       expected_next = expected_next / norm(expected_next);
       const double lambda = numerator / denominator;
-      const double residual = norm(A * q_prev - lambda * q_prev);
+      const Vector3d r = A * q_prev - lambda * q_prev;
+      const double residual = norm(r);
+      double q_dot_r = 0.0;  // sum_i |q_i| |r_i|
+      for (size_t i = 0; i < 3; ++i) {
+        q_dot_r += std::abs(q_prev[i]) * std::abs(r[i]);
+      }
 
-      // q: k + 1 roundings of its direction, and the normalizations of q and of the reference, (n/2 + 3) and
-      // (n/2 + 2) eps. lambda = q^T A q: twice q's direction and norm errors, the n-term dot, and the reference's two
-      // sums and quotient. The residual of (lambda, q) moves with both, and with its own rounding.
-      const double q_floor = (k + n + 6) * eps;
-      const double lambda_bound = (2 * k + 4 * n + 5) * eps * lambda;
-      const double residual_bound = lambda_bound + (k + n + 13) * eps + (n + 2) * eps * residual;
+      // To first order, for u = eps / 2. The entries of q and of A q are powers of 2 times one significand, so q's
+      // direction is exact and only norms round: q's by (n/2 + 3) u (n-term dot, sqrt, reciprocal, scaling), the
+      // reference's by ((n - 1)/2 + 3) u (its squares are exact). lambda = q^T A q: the n-term dot, n u, q's squared
+      // norm, (n + 6) u, and the reference's two sums and quotient, (2n - 1) u. The residual: r is orthogonal to q, so
+      // lambda's error moves it only to second order. Relative to |r|, the norms of q round by (n + 5.5) u together,
+      // each side's subtraction by u and its norm by (n/2 + 1) u; the product lambda q rounds by u lambda per side
+      // along r, sum |q_i| |r_i| / |r|.
+      const double u = 0.5 * eps;
+      const double q_floor = (n / 2.0 + 3 + (n - 1) / 2.0 + 3) * u;
+      const double lambda_bound = (4 * n + 5) * u * lambda;
+      const double residual_bound = (2 * n + 9.5) * u * residual + 2 * u * lambda * q_dot_r / residual;
       ASSERT_FALSE(strategy.iterate(problem, state));
       EXPECT_EQ(state.iter(), k);
-      EXPECT_NEAR(state.eigenvalue(), lambda, std::min(1e-14, lambda_bound));
-      EXPECT_NEAR(state.residual(), residual, std::min(1e-10 * residual, residual_bound));
+      EXPECT_NEAR(state.eigenvalue(), lambda, lambda_bound);
+      EXPECT_NEAR(state.residual(), residual, residual_bound);
       for (size_t i = 0; i < 3; ++i) {
         EXPECT_NEAR(state.q()[i], expected_next[i], q_floor) << "component " << i;
       }
@@ -899,15 +909,24 @@ TEST(Eigenvalues, PowerIterates) {
     }
 
     // Compare the late ratios. With q_k proportional to sum_j a_j lambda_j^k u_j, the ratio is rate to within
-    // rate (x^2 + 2 e^2), for e = |a_{N-1} / a_N| rate^k the second mode's weight and x^2 the lower modes' weights,
-    // relative to the second's, scaled by their distance to lambda_N; each residual also rounds by (n + 6) eps ||L||
-    // and by the noise (n + 4) eps ||L|| / (1 - rate) the iteration keeps in q.
+    // rate (x^2 / 2 + e^2 (1 + x^2)), for e = |a_{N-1} / a_N| rate^k the second mode's weight and x^2 the lower modes'
+    // weights, relative to the second's, scaled by their distance to lambda_N. Rounding, to first order for
+    // u = eps / 2: a residual is measured to within (2 ||L|| + lambda_N) u (the apply's 2 additions per row, the
+    // product lambda q) plus (N + 5) u of itself (q's norm, the subtraction, the norm); a step turns q by at most
+    // phi = (1 + 2 ||L|| / lambda_N) u (the apply, the scaling), which moves the next residual by ||L|| phi; the
+    // reference rate rounds by 23 u and the ratio by u. Noise accumulated in q contracts at the signal's rates, so it
+    // cancels from the ratio: along the second mode it changes e by a relative u / e, inside the e^2 term's slack over
+    // its leading e^2 (1 - rate^2); along lower modes it adds terms below the injection's by factors of order x and
+    // u / e.
     const auto start = random_start<N>(7);
     const double lambda_top = laplacian_eigenvalue(N, N);
     const double gap = lambda_top - laplacian_eigenvalue(N, N - 1);
     const double a_top = dot(start, laplacian_eigenvector<N>(N));
     const double a_second = dot(start, laplacian_eigenvector<N>(N - 1));
-    const double residual_rounding = ((N + 6) + (N + 4) / (1.0 - rate)) * eps * norm_L_bound;
+    const double u = 0.5 * eps;
+    const double measurement = (2 * norm_L_bound + lambda_top) * u;
+    const double injection = norm_L_bound * (1 + 2 * norm_L_bound / lambda_top) * u;
+    const double relative_rounding = (2 * (N + 5) + 23 + 1) * u;
     for (size_t k = 100; k + 1 < residuals.size(); ++k) {
       const double e = std::abs(a_second / a_top) * std::pow(rate, static_cast<double>(k));
       double x_squared = 0.0;
@@ -918,8 +937,9 @@ TEST(Eigenvalues, PowerIterates) {
                               (lambda_top - lambda_j) / gap;
         x_squared += weight * weight;
       }
-      const double ratio_bound = rate * (x_squared + 2.0 * e * e + 2.0 * residual_rounding / residuals[k + 1]);
-      EXPECT_NEAR(residuals[k + 1] / residuals[k], rate, std::min(1e-5, ratio_bound)) << "iteration " << k;
+      const double ratio_bound = rate * (x_squared / 2 + e * e * (1 + x_squared) +
+                                         (2 * measurement + injection) / residuals[k + 1] + relative_rounding);
+      EXPECT_NEAR(residuals[k + 1] / residuals[k], rate, ratio_bound) << "iteration " << k;
     }
   }
 }
@@ -998,8 +1018,9 @@ TEST(Eigenvalues, PowerLimits) {
 }
 
 // Both ends of sign L, as a matrix and matrix-free on each backend and inside a kernel: the dominant end comes first
-// from the power method, and the bounds order the ends by sign. A converged end's eigenvalue is within ||r|| <= tol of
-// an eigenvalue, before r's rounding.
+// from the power method, and the bounds order the ends by sign. A converged end's Rayleigh quotient is within
+// ||r||^2 / gap of an eigenvalue (Kato-Temple), negligible at ||r|| <= tol, so its error is the rounding of q^T A q,
+// far below tol.
 TEST(Eigenvalues, PowerEndpoints) {
   {
     SCOPED_TRACE("MundyMathBackend");
@@ -1082,17 +1103,30 @@ TEST(Eigenvalues, PowerEndpoints) {
     const auto eigenvalues_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, eigenvalues);
     const auto converged_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, converged);
     for (size_t e = 0; e < num_entities; ++e) {
-      // The dominant (largest) end: tol plus r's rounding; the opposite end adds the shifted solve's, on an operator of
-      // norm <= 2 ||A||
+      // To first order, for u = eps / 2. A residual within tol moves a Rayleigh quotient only by (tol + m)^2 / gap
+      // (Kato-Temple), for m <= the rounding below. The dominant end: the apply's product and 2 additions per row,
+      // 3 u ||(e + 1) L||, as e + 1 need not be a power of 2; the N-term dot and q's squared norm, (2N + 6) u lambda;
+      // the reference's 4 sin^2 and scaling, 12 u lambda. The opposite end rounds on its own: the shift sigma is an
+      // exact double that is added back, so the dominant end's error cancels. The shift adds u sigma and u |mu| to the
+      // apply, for mu = lambda - sigma the shifted eigenvalue; the dot and q's squared norm add (2N + 6) u |mu|, adding
+      // sigma back u lambda, and the reference 12 u lambda.
       const double scale = static_cast<double>(e + 1);
       const double tol = 1e-12;
-      const double rounding = (1.5 * N + 3) * eps * norm_L_bound * scale;
+      const double u = 0.5 * eps;
+      const double largest = scale * laplacian_eigenvalue(N, N);
+      const double smallest = scale * laplacian_eigenvalue(N, 1);
+      const double largest_gap = scale * (laplacian_eigenvalue(N, N) - laplacian_eigenvalue(N, N - 1));
+      const double smallest_gap = scale * (laplacian_eigenvalue(N, 2) - laplacian_eigenvalue(N, 1));
+      const double apply = 3 * norm_L_bound * scale * u;
+      const double largest_rounding = apply + (2.0 * N + 6) * u * largest + 12 * u * largest;
+      const double smallest_rounding =
+          apply + u * largest + (2.0 * N + 7) * u * (largest - smallest) + u * smallest + 12 * u * smallest;
+      const double largest_bound = largest_rounding + (tol + largest_rounding) * (tol + largest_rounding) / largest_gap;
+      const double smallest_bound =
+          smallest_rounding + (tol + smallest_rounding) * (tol + smallest_rounding) / smallest_gap;
       EXPECT_TRUE(converged_host(e)) << "entity " << e;
-      EXPECT_NEAR(eigenvalues_host(e, 0), scale * laplacian_eigenvalue(N, N), std::min(1e-12 * scale, tol + rounding))
-          << "entity " << e;
-      EXPECT_NEAR(eigenvalues_host(e, 1), scale * laplacian_eigenvalue(N, 1),
-                  std::min(1e-12 * scale, 2 * tol + 3 * rounding))
-          << "entity " << e;
+      EXPECT_NEAR(eigenvalues_host(e, 0), largest, largest_bound) << "entity " << e;
+      EXPECT_NEAR(eigenvalues_host(e, 1), smallest, smallest_bound) << "entity " << e;
     }
   }
 }
@@ -1110,10 +1144,16 @@ TEST(Eigenvalues, PowerPolicies) {
     const auto change_result = solve_eigen_problem(problem, make_power_strategy(ChangeResidual{}, config), by_change);
     ASSERT_TRUE(residual_result.converged);
     ASSERT_TRUE(change_result.converged);
-    // The Rayleigh quotient's error e_k contracts by rho^2 = (lambda_{N-1} / lambda_N)^2 per step, so a change
-    // e_{k-1} - e_k <= tol leaves e_k <= tol rho^2 / (1 - rho^2), plus the rounding of the n-term q^T A q
+    // The Rayleigh quotient's error e_k contracts by rho^2 = (lambda_{N-1} / lambda_N)^2 per step. Each measured
+    // lambda rounds by R (L's apply, the N-term dot, q's normalization), so a measured change <= tol gives
+    // e_{k-1} (1 - rho^2) <= tol + 2 R, and the returned lambda is within a tol + (1 + 2 a) R of lambda_N, for
+    // a = rho^2 / (1 - rho^2), plus the reference's 4 sin^2 rounding
     const double rho = laplacian_eigenvalue(N, N - 1) / laplacian_eigenvalue(N, N);
-    const double change_bound = tol * rho * rho / (1.0 - rho * rho) + (N + 8) * eps * norm_L_bound;
+    const double lambda_top = laplacian_eigenvalue(N, N);
+    const double amplification = rho * rho / (1.0 - rho * rho);
+    const double lambda_rounding = (norm_L_bound + (N + 3) * lambda_top) * eps;
+    const double change_bound =
+        amplification * tol + (1.0 + 2.0 * amplification) * lambda_rounding + 5.5 * eps * lambda_top;
     EXPECT_NEAR(residual_result.eigenvalue, laplacian_eigenvalue(N, N), 1e-12);
     EXPECT_NEAR(change_result.eigenvalue, laplacian_eigenvalue(N, N), change_bound);
     EXPECT_LE(norm(by_residual.r()), tol);
@@ -1292,8 +1332,9 @@ TEST(Eigenvalues, LanczosIterates) {
   }
   {
     SCOPED_TRACE("monotone toward the ends");
-    // Both ends move monotonically toward the spectrum's ends from inside (interlacing); max_iters = 16 keeps every
-    // iteration within the solve's measurement of every step up to 16
+    // Both ends move monotonically toward the spectrum's ends from inside (interlacing, exact for the stored T); each
+    // theta is within 4 eps ||T|| of T's extreme eigenvalue, so consecutive thetas may step back by 8 eps ||T||.
+    // max_iters = 16 keeps every iteration within the solve's measurement of every step up to 16
     constexpr size_t N = 16;
     constexpr unsigned max_iters = 16;
     const double smallest = laplacian_eigenvalue(N, 1);
@@ -1309,11 +1350,13 @@ TEST(Eigenvalues, LanczosIterates) {
       SCOPED_TRACE(::testing::Message() << "iteration " << k);
       const bool stopped = strategy.iterate(problem, state);
       ASSERT_EQ(state.iter(), k);
-      const double floor = k * eps * norm_of_t(state.alpha(), state.beta(), k);
+      const double norm_T = norm_of_t(state.alpha(), state.beta(), k);
+      const double floor = k * eps * norm_T;
+      const double step_back = 8.0 * eps * norm_T;
       EXPECT_GE(state.smallest().eigenvalue, smallest - floor);
       EXPECT_LE(state.largest().eigenvalue, largest + floor);
-      EXPECT_LE(state.smallest().eigenvalue, previous_smallest + floor);
-      EXPECT_GE(state.largest().eigenvalue, previous_largest - floor);
+      EXPECT_LE(state.smallest().eigenvalue, previous_smallest + step_back);
+      EXPECT_GE(state.largest().eigenvalue, previous_largest - step_back);
       previous_smallest = state.smallest().eigenvalue;
       previous_largest = state.largest().eigenvalue;
       if (stopped) break;
@@ -1325,12 +1368,13 @@ TEST(Eigenvalues, LanczosIterates) {
 }
 
 // At the stop of every max_iters = 1, 2, ... from the cold start, until the solve stops on its own: each end's theta
-// is the extreme eigenvalue of its T to 2 eps ||T||, the bisection's width; its rho matches the dense reference while
-// unconverged; a converged rho meets the convergence rule; and theta lies within rho + k eps ||T|| of an eigenvalue of
-// A, of the extreme one once converged. With tol = 0 the rotated spectra stop only on an invariant T, beta_k at
-// rounding, which the loss of orthogonality delays past N; 4N bounds it. On the n = 1000 diagonal with a separated
-// top, over max_iters 1, 2, 4, ..., 512 with tol 1e-12, the top end converges early, and T then holds duplicate Ritz
-// values, two eigenvalues within rounding of the top end's theta, while the bottom end is still measured.
+// is the extreme eigenvalue of its T to 4 eps ||T||, the bisection's accuracy; its rho matches the dense reference
+// while unconverged; a converged rho meets the convergence rule; and theta lies within rho + k eps ||T|| of an
+// eigenvalue of A, of the extreme one once converged. With tol = 0 the rotated spectra stop only on an invariant T,
+// beta_k at rounding, which the loss of orthogonality delays past N; 4N bounds it. On the n = 1000 diagonal with a
+// separated top, over max_iters 1, 2, 4, ..., 512 with tol 1e-12, the top end converges early, and T then holds
+// duplicate Ritz values, two eigenvalues within rounding of the top end's theta, while the bottom end is still
+// measured.
 TEST(Eigenvalues, LanczosCertificates) {
   const auto expect_certified = [](const auto& state, const EigenBounds<double>& result, const auto& spectrum,
                                    size_t n, double construction, double tol) {
@@ -1341,7 +1385,7 @@ TEST(Eigenvalues, LanczosCertificates) {
       const double norm_T = norm_of_t(state.alpha(), state.beta(), k);
       const double floor = k * eps * norm_T;
       const auto reference = reference_end(state, k, largest);
-      EXPECT_NEAR(end.eigenvalue, reference.eigenvalue, 2.0 * eps * norm_T);
+      EXPECT_NEAR(end.eigenvalue, reference.eigenvalue, 4.0 * eps * norm_T);
       if (end.converged) {
         EXPECT_LE(end.residual, std::max(tol * std::abs(end.eigenvalue), floor));
         EXPECT_LE(std::abs(end.eigenvalue - (largest ? spectrum[n - 1] : spectrum[0])),
@@ -1873,8 +1917,9 @@ TEST(Eigenvalues, LanczosBasisCapacity) {
     expect_close(kokkos_estimates.template operator()<k - 1, Preconditioned>(is_warm), kokkos_reference, tolerance);
     expect_close(kokkos_estimates.template operator()<k, Preconditioned>(is_warm), kokkos_reference, tolerance);
 
-    // The backends round differently, so they agree to the orthogonality the Lanczos vectors keep, k eps ||A|| / rho
-    // per entry over N entries, and up to sign: an eigenvector's sign is arbitrary
+    // The backends' T differ by rounding, which moves an estimate by a term of order k eps ||A|| / rho over the gap
+    // between T's Ritz values (Paige), with no explicit constant, so this allowance is empirical; and they agree up to
+    // sign: an eigenvector's sign is arbitrary
     const auto& result = std::get<0>(reference);
     const double drift = N * k * eps * norm_DLD_bound / std::min(result.largest.residual, result.smallest.residual);
     const auto signed_like = [](const auto& x, const auto& y) {
@@ -2040,13 +2085,20 @@ TEST(Eigenvalues, LanczosEigenvectorStart) {
       const auto result = solve_one_end(largest, estimate, LanczosConfig<double>{.max_iters = N, .tol = 1e-10});
       const auto& end = largest ? result.largest : result.smallest;
       const double floor = N * eps * norm_L_bound;
+      // theta to first order, for u = eps / 2; the start's distance from the eigenvector moves the Rayleigh quotient
+      // only to second order. alpha = v^T A v rounds by the apply's 2 additions per row, 2 u ||L||, by the N-term
+      // dot, N u lambda, and by the start's unit scaling, ||v||^2 = 1 + (N + 6) u. Bisection on the 1 x 1 T_1 ends
+      // within its half-width eps |alpha| of alpha, plus u |alpha| for the midpoint. The reference 4 sin^2 rounds by
+      // 11 u lambda: 3 u on the argument, 1 ulp on sin, 1 u on the product.
+      const double lambda = laplacian_eigenvalue(N, k);
+      const double eigenvalue_bound = (norm_L_bound + (N + 3) * lambda + 1.5 * lambda + 5.5 * lambda) * eps;
       // The estimate is the eigenvector rescaled to unit norm: its entries, at most sqrt(2 / (N + 1)), move by the
       // eigenvector's norm error, from sines whose arguments reach k pi, and by the normalizations' (N/2 + 6) eps
       const double entry_bound = std::sqrt(2.0 / (N + 1)) *
                                  (std::sqrt(2.0) * (3.0 * Kokkos::numbers::pi_v<double> * k + 4) + N / 2.0 + 6) * eps;
       EXPECT_TRUE(end.converged) << result;
       EXPECT_EQ(end.num_iters, 1u);
-      EXPECT_NEAR(end.eigenvalue, laplacian_eigenvalue(N, k), end.residual + floor);
+      EXPECT_NEAR(end.eigenvalue, lambda, eigenvalue_bound);
       for (size_t i = 0; i < N; ++i) {
         EXPECT_NEAR(estimate[i], eigenvector[i], std::min(floor, entry_bound)) << "entry " << i;
       }

@@ -429,10 +429,12 @@ class PowerStrategy {
 /// the iterations have visited. T's extreme eigenvalues (Ritz values) approach A's from inside the spectrum, usually
 /// long before the iteration count nears A's size.
 ///
-/// For each end the config asks for, the solve reports a Ritz value theta and its residual rho: after k iterations, A
-/// has an eigenvalue within rho + k eps ||T|| of theta, for eps the machine epsilon. From a cold start that eigenvalue
-/// is the extreme one. An end converges once rho <= tol |theta|, or once rho is at that rounding level; the solve may
-/// run up to k / 8 iterations past it.
+/// For each end the config asks for, the solve reports a Ritz value theta and its residual rho. In exact arithmetic A
+/// has an eigenvalue within rho of theta. In floating point, for a theta separated from T's other eigenvalues, the
+/// distance is at most 3 (rho + sqrt(k) eps_1 ||A||) plus theta's own error of 4 eps ||T||, for eps the machine epsilon
+/// and eps_1 a multiple of it that grows with A's size and its nonzeros per row (Paige, Linear Algebra Appl. 34, 1980).
+/// From a cold start that eigenvalue is generically the extreme one. An end converges once rho <= tol |theta|, or once
+/// rho reaches the rounding level k eps ||T||; the solve may run up to k / 8 iterations past it.
 ///
 /// The solve starts from the sum of one unit vector per wanted end: along the end's estimate vector, or along a fixed
 /// cold start for an end without one or with a zero estimate, which the cold start then replaces. On exit each
@@ -445,6 +447,10 @@ class PowerStrategy {
 /// P proves not to be positive definite; no end is then converged. A start that is not finite, or on which P is not
 /// positive, stops it at its first iteration. A true return of iterate ends the solve. The problem's workspace is
 /// unspecified on return.
+///
+/// The recurrence is Paige's (IMA J. Appl. Math. 10, 1972), run without reorthogonalization as in Cullum & Willoughby
+/// (Lanczos Algorithms for Large Symmetric Eigenvalue Computations, Birkhauser 1985); with P it is Lanczos for P A in
+/// the P^-1 inner product (Saad, Numerical Methods for Large Eigenvalue Problems, SIAM 2011).
 template <class Config, class Precond = NoPreconditioner>
 class LanczosStrategy {
  public:

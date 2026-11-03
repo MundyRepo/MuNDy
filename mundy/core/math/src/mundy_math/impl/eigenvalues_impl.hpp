@@ -162,7 +162,7 @@ KOKKOS_INLINE_FUNCTION Scalar next_pivot(Scalar alpha, Scalar sigma, Scalar beta
 /// \brief The number of eigenvalues below sigma of the leading k x k block of the tridiagonal (alpha, beta).
 ///
 /// It is the number of negative pivots of the block's LDL^T (Sturm count): exact for a matrix within pivmin of the
-/// block in each diagonal entry.
+/// block in each diagonal entry (Kahan, Stanford report CS41, 1966).
 template <class Scalar>
 KOKKOS_FUNCTION unsigned eigenvalues_below(const Scalar* alpha, const Scalar* beta, unsigned k, Scalar sigma,
                                            Scalar pivmin) {
@@ -178,9 +178,12 @@ KOKKOS_FUNCTION unsigned eigenvalues_below(const Scalar* alpha, const Scalar* be
 
 /// \brief The largest (or smallest) eigenvalue of the leading k x k block of the tridiagonal (alpha, beta).
 ///
-/// Bisection on Sturm counts to an absolute width of 2 eps norm, so the result is within that width of the block's
-/// extreme eigenvalue whatever its multiplicity. [lower, upper] must hold it to within the width; lower may be a lower
-/// bound on the largest eigenvalue (any earlier block's, by interlacing) and upper an upper bound on the smallest.
+/// Bisection on Sturm counts to an absolute width of 2 eps norm. Each count is exact for the block perturbed by
+/// pivmin = eps norm on its diagonal and by rounding in its entries, so the result is within 4 eps norm of the block's
+/// extreme eigenvalue whatever its multiplicity: half the width, pivmin, and under 2 eps norm of rounding.
+///
+/// [lower, upper] must hold it to within the width; lower may be a lower bound on the largest eigenvalue (any earlier
+/// block's, by interlacing) and upper an upper bound on the smallest.
 template <class Scalar>
 KOKKOS_FUNCTION Scalar extreme_eigenvalue(const Scalar* alpha, const Scalar* beta, unsigned k, bool largest,
                                           Scalar lower, Scalar upper, Scalar norm) {
@@ -206,8 +209,9 @@ KOKKOS_FUNCTION Scalar extreme_eigenvalue(const Scalar* alpha, const Scalar* bet
 ///
 /// s is T_k's eigenvector at theta, from the twisted factorization of T_k - theta I: the pivots D+ of L+ D+ L+^T
 /// (forward) and D- of U- D- U-^T (backward) meet at the twist r = argmin |gamma_r|, gamma_r = D+_r + D-_r -
-/// (alpha_r - theta), where s_r = 1, which keeps s stable even where T_k has eigenvalues within rounding of theta.
-/// s / ||s|| is written to s_out unless it is null. forward and backward are scratch of k entries.
+/// (alpha_r - theta), where s_r = 1, which keeps s stable even where T_k has eigenvalues within rounding of theta
+/// (Parlett & Dhillon, Linear Algebra Appl. 267, 1997). s / ||s|| is written to s_out unless it is null. forward and
+/// backward are scratch of k entries.
 template <class Scalar>
 KOKKOS_FUNCTION Scalar ritz_residual(const Scalar* alpha, const Scalar* beta, unsigned k, Scalar theta, Scalar norm,
                                      Scalar* forward, Scalar* backward, Scalar* s_out) {
