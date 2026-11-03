@@ -64,47 +64,10 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
                                                         const PointType& point,                                   //
                                                         const LineSegmentType& line_segment) {
   using Scalar = typename PointType::value_type;
-  const auto& p1 = line_segment.start();
-  const auto& p2 = line_segment.end();
-  const auto p21 = p2 - p1;
-
-  // Define some temporary variables
-  mundy::Vector3<Scalar> closest_point_tmp;
-  Scalar t_tmp;
-
-  // Get parametric location
-  const Scalar num = mundy::dot(p21, point - p1);
-  if ((num < mundy::get_zero_tolerance<Scalar>()) & (num > -mundy::get_zero_tolerance<Scalar>())) {
-    // CASE 1: The vector from p1 to x is orthogonal to the line.
-    // In this case, the closest point is p1 and the parametric coordinate is 0.
-    closest_point_tmp = p1;
-    t_tmp = static_cast<Scalar>(0.0);
-  } else {
-    const Scalar denom = dot(p21, p21);
-
-    if (denom < mundy::get_zero_tolerance<Scalar>()) {
-      // CASE 2: The line is degenerate (i.e., p1 and p2 are numerically the same point).
-      // In this case, either point could really be the closest point. We'll arbitrarily pick p1 and set t to 0.
-      closest_point_tmp = p1;
-      t_tmp = static_cast<Scalar>(0.0);
-    } else {
-      // CASE 3: The line is well-defined and we can compute the closest point.
-      t_tmp = num / denom;
-
-      if (t_tmp < static_cast<Scalar>(0.0)) {
-        // CASE 3.1: The parameter for the infinite line is less than 0. Therefore, the closest point is p1.
-        closest_point_tmp = p1;
-      } else if (t_tmp > static_cast<Scalar>(1.0)) {
-        // CASE 3.2: The parameter for the infinite line is greater than 1. Therefore, the closest point is p2.
-        closest_point_tmp = p2;
-      } else {
-        // CASE 3.3: The closest point is falls within the line segment.
-        closest_point_tmp = p1 + t_tmp * p21;
-      }
-    }
-  }
-
-  return distance(point, closest_point_tmp);
+  Point<Scalar> closest_point;
+  Scalar arch_length;
+  mundy::Vector3<Scalar> sep;
+  return distance(distance_type, point, line_segment, closest_point, arch_length, sep);
 }
 
 /// \brief Compute the euclidean distance between a point and a line segment

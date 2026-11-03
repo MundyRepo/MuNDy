@@ -373,7 +373,7 @@ struct MPRGPStepState {
 ///
 /// Entries off every bound are free. The free gradient phi is grad on the free entries and 0 elsewhere; the chopped
 /// gradient beta = g^P - phi is the projected gradient on the entries on a bound, the pull that would lift them off it.
-/// While beta is small against phi, ||beta||^2 <= proportioning^2 phi~^T phi with phi~ = (x - P(x - step phi)) / step,
+/// While beta is small against phi, ||beta||^2 <= proportioning^2 phi~^T phi for proportioning > 0, with phi~ = (x - P(x - step phi)) / step,
 /// each step is a conjugate gradient step over the free entries along a direction p, unless that step would cross a
 /// bound; it then goes to the boundary along p and takes the projected step x = P(x - step phi). Otherwise the step is
 /// the exact minimizer along -beta, no further than the boundary, which lifts entries off their bounds.
@@ -436,6 +436,9 @@ class MPRGPStepStrategy {
                               std::remove_cvref_t<decltype(state.x())>>,
                   "MPRGPStepStrategy: the problem's space must be a ConvexSpace.");
     constexpr value_type zero = static_cast<value_type>(0);
+    MUNDY_THROW_ASSERT(proportioning > 0.0, std::invalid_argument, "MPRGPStepStrategy: proportioning must be positive.");
+    MUNDY_THROW_ASSERT(expansion_step_fraction > 0.0 && expansion_step_fraction < 2.0, std::invalid_argument,
+                       "MPRGPStepStrategy: expansion_step_fraction must lie in (0, 2).");
     const backend_t backend{};
     auto& p = p_.get();
 

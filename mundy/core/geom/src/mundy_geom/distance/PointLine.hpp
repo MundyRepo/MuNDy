@@ -62,13 +62,10 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
                                                         const PointType& point,                                   //
                                                         const LineType& line) {
   using Scalar = typename PointType::value_type;
-
-  // Compute the projection of the vector onto the line's direction
-  auto line_to_point = point - line.center();
-  Scalar projection = mundy::dot(line_to_point, line.direction());
-
-  // Compute the magnitude of the component of the vector perpendicular to the line
-  return distance(projection * line.direction(), line_to_point);
+  Point<Scalar> closest_point;
+  Scalar arch_length;
+  mundy::Vector3<Scalar> sep;
+  return distance(distance_type, point, line, closest_point, arch_length, sep);
 }
 
 /// \brief Compute the euclidean distance between a point and a line

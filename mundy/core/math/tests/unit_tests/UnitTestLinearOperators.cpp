@@ -140,7 +140,7 @@ struct WorkspaceOnlyScaleOp {
   size_t n_;
 };
 
-// Provides its own fused scaled-apply (HasScaledApplyMember), so ScaledOp can pick the fast path for it.
+// Provides its own fused scaled apply (HasScaledApplyMember).
 struct FusedScaleOp {
   size_t domain_size() const {
     return 3;
@@ -220,7 +220,7 @@ TEST(LinearOperators, QuadraticFormOpWorksWithWorkspaceOnlyChildren) {
   EXPECT_DOUBLE_EQ(result[2], 30.0 * 3.0);
 }
 
-TEST(LinearOperators, ScaledOpUsesGenericFallbackForAnUnfusedOp) {
+TEST(LinearOperators, ScaledOpScalesItsOp) {
   ScaleOp op(2.0);
   op.set_size(3);
   auto scaled = ScaledOp(backend_t{}, /*alpha=*/4.0, ScaleOp(op));
@@ -235,17 +235,21 @@ TEST(LinearOperators, ScaledOpUsesGenericFallbackForAnUnfusedOp) {
   EXPECT_DOUBLE_EQ(result[2], 4.0 * 2.0 * 3.0);
 }
 
-TEST(LinearOperators, ScaledOpUsesFusedFastPathWhenAvailable) {
-  auto scaled = ScaledOp(backend_t{}, /*alpha=*/4.0, FusedScaleOp{});
-
+// The backend's scaled apply y := alpha op(x) + beta y reaches the op's own; ScaledOp of that op agrees with the
+// unfused case above.
+TEST(LinearOperators, ScaledApplyOfAFusedOp) {
   const view_t x = make_view({1.0, 2.0, 3.0});
-  view_t y = scaled.make_range_vector();
-  scaled.apply(x, y);
+  view_t y = make_view({1.0, 1.0, 1.0});
+  backend_t::apply(4.0, FusedScaleOp{}, x, 0.5, y);
+  const std::vector<double> fused = to_host(y);
+  EXPECT_DOUBLE_EQ(fused[0], 4.0 * 2.0 * 1.0 + 0.5);
+  EXPECT_DOUBLE_EQ(fused[1], 4.0 * 2.0 * 2.0 + 0.5);
+  EXPECT_DOUBLE_EQ(fused[2], 4.0 * 2.0 * 3.0 + 0.5);
 
-  // FusedScaleOp::apply(alpha, x, beta, y) computes alpha*(2*x) + beta*y; ScaledOp calls it with beta=0, so the
-  // observable result is identical to the generic-fallback case above -- what differs is which code path
-  // Backend::apply(alpha, op, x, beta, y) selects, not the answer.
-  const std::vector<double> result = to_host(y);
+  auto scaled = ScaledOp(backend_t{}, /*alpha=*/4.0, FusedScaleOp{});
+  view_t z = scaled.make_range_vector();
+  scaled.apply(x, z);
+  const std::vector<double> result = to_host(z);
   EXPECT_DOUBLE_EQ(result[0], 4.0 * 2.0 * 1.0);
   EXPECT_DOUBLE_EQ(result[1], 4.0 * 2.0 * 2.0);
   EXPECT_DOUBLE_EQ(result[2], 4.0 * 2.0 * 3.0);

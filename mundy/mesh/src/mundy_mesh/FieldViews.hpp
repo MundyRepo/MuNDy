@@ -44,7 +44,7 @@
 #include <mundy_geom/primitives/OBB.hpp>   // for mundy::OBB
 #include <mundy_math/Matrix3.hpp>          // for mundy::get_matrix3 and mundy::Matrix3
 #include <mundy_math/Quaternion.hpp>       // for mundy::get_quaternion and mundy::Quaternion
-#include <mundy_math/ScalarWrapper.hpp>    // for mundy::get_scalar and mundy::ScalarView
+#include <mundy_math/Scalar.hpp>           // for mundy::get_scalar
 #include <mundy_math/ShiftedAccessor.hpp>  // for mundy::get_shifted_accessor and mundy::get_shifted_accessor
 #include <mundy_math/Vector3.hpp>          // for mundy::get_vector3 and mundy::Vector3
 
@@ -213,7 +213,7 @@ inline auto obb_field_data(const FieldType& f, stk::mesh::Entity e,
 //! \name stk::mesh::NgpField data views
 ///@{
 
-/// \brief Get a view of a field's data as a ScalarWrapper.
+/// \brief Get a view of a field's data as a Scalar.
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto scalar_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return get_scalar<typename FieldType::value_type>(f(i));

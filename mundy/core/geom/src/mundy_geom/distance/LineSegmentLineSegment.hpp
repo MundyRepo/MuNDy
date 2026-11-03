@@ -81,89 +81,13 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
              const LineSegmentType1& line_segment1,                    //
              const LineSegmentType2& line_segment2) {
   using Scalar = typename LineSegmentType1::value_type;
-
-  // Part of this function was adapted from VTK's vtkLine::DistanceBetweenLineSegments, which, in turn adapted part of
-  // it from "GeometryAlgorithms.com"
-  const auto& l0 = line_segment1.start();
-  const auto& l1 = line_segment1.end();
-  const auto& m0 = line_segment2.start();
-  const auto& m1 = line_segment2.end();
-
-  const auto u = l1 - l0;
-  const auto v = m1 - m0;
-  const auto w = l0 - m0;
-  const Scalar a = mundy::dot(u, u);
-  const Scalar b = mundy::dot(u, v);
-  const Scalar c = mundy::dot(v, v);
-  const Scalar d = mundy::dot(u, w);
-  const Scalar e = mundy::dot(v, w);
-  const Scalar D = a * c - b * b;  // always >= 0
-
-  // Compute the line parameters of the two closest points.
-  // D <= 0 catches truly degenerate segments (a=0 or c=0 -> D=0) and floating-point noise.
-  // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
-  constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
-  if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {
-    // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
-    // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
-    const Scalar dist1 = distance(l0, line_segment2);
-    const Scalar dist2 = distance(l1, line_segment2);
-    const Scalar dist3 = distance(m0, line_segment1);
-    const Scalar dist4 = distance(m1, line_segment1);
-
-    // Determine which of the 4 distances is the minimum using exact Scalar comparison.
-    Scalar min_distance = min(min(dist1, dist2), min(dist3, dist4));
-    return min_distance;
-  }
-
-  // CASE 2: The lines aren't parallel. Get the closest points on the infinite lines.
-  // TODO(palmerb4): Comment the various if-else cases in terms of their physical meaning.
-  Scalar sN = b * e - c * d;
-  Scalar tN = a * e - b * d;
-  Scalar sD = D;                        // sc = sN / sD, default sD = D >= 0
-  Scalar tD = D;                        // tc = tN / tD, default tD = D >= 0
-  if (sN < static_cast<Scalar>(0.0)) {  // sc < 0 => the s=0 edge is visible
-    sN = static_cast<Scalar>(0.0);
-    tN = e;
-    tD = c;
-  } else if (sN > sD) {  // sc > 1 => the s=1 edge is visible
-    sN = sD;
-    tN = e + b;
-    tD = c;
-  }
-
-  if (tN < static_cast<Scalar>(0.0)) {  // tc < 0 => the t=0 edge is visible
-    tN = static_cast<Scalar>(0.0);
-
-    // Recompute sc for this edge
-    if (-d < static_cast<Scalar>(0.0)) {
-      sN = static_cast<Scalar>(0.0);
-    } else if (-d > a) {
-      sN = sD;
-    } else {
-      sN = -d;
-      sD = a;
-    }
-  } else if (tN > tD) {  // tc > 1 => the t=1 edge is visible
-    tN = tD;
-
-    // Recompute sc for this edge
-    if ((-d + b) < static_cast<Scalar>(0.0)) {
-      sN = static_cast<Scalar>(0.0);
-    } else if ((-d + b) > a) {
-      sN = sD;
-    } else {
-      sN = (-d + b);
-      sD = a;
-    }
-  }
-
-  // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  const Scalar arch_length1 = (mundy::abs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
-  const Scalar arch_length2 = (mundy::abs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
-  const auto closest_point1 = l0 + arch_length1 * u;
-  const auto closest_point2 = m0 + arch_length2 * v;
-  return distance(closest_point1, closest_point2);
+  Point<Scalar> closest_point1;
+  Point<Scalar> closest_point2;
+  Scalar arch_length1;
+  Scalar arch_length2;
+  mundy::Vector3<Scalar> sep;
+  return distance(distance_type, line_segment1, line_segment2, closest_point1, closest_point2, arch_length1,
+                  arch_length2, sep);
 }
 
 /// \brief Compute the distance between two line segments

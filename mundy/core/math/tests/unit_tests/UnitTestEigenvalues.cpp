@@ -1160,6 +1160,12 @@ TEST(Eigenvalues, PowerPolicies) {
     EXPECT_GT(norm(by_change.r()), 1e3 * tol);
   }
   {
+    SCOPED_TRACE("the relative change of an unchanged estimate, zero included");
+    EXPECT_EQ(RelativeChangeResidual{}(0.0, 0.0), 0.0);
+    EXPECT_EQ(RelativeChangeResidual{}(2.0, 2.0), 0.0);
+    EXPECT_EQ(RelativeChangeResidual{}(2.0, 1.0), 0.5);
+  }
+  {
     SCOPED_TRACE("a zero image under the change policy");
     // A e_1 = 0: e_1 is an eigenvector the residual policy would accept, but the change policy measures no residual
     // and needs A q != 0 to take the next step

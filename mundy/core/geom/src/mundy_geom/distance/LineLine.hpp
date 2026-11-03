@@ -65,27 +65,12 @@ KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const S
                                                         const LineType1& line1,                                   //
                                                         const LineType2& line2) {
   using Scalar = typename LineType1::value_type;
-
-  // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
-  const auto center_center = line1.center() - line2.center();
-  const Scalar a = mundy::dot(line1.direction(), line1.direction());
-  const Scalar b = mundy::dot(line1.direction(), line2.direction());
-  const Scalar c = mundy::dot(line2.direction(), line2.direction());
-  const Scalar d = mundy::dot(line1.direction(), center_center);
-  const Scalar e = mundy::dot(line2.direction(), center_center);
-  const Scalar D = a * c - b * b;  // always >= 0
-
-  // Check if the lines are colinear
-  // Two infinite colinear lines intersect at all points.
-  if (D < mundy::get_zero_tolerance<Scalar>()) {
-    return static_cast<Scalar>(0.0);
-  }
-
-  // Compute the closest points on the lines
-  const Scalar inv_D = static_cast<Scalar>(1.0) / D;
-  const auto closest_point1 = line1.center() + (b * e - c * d) * line1.direction() * inv_D;
-  const auto closest_point2 = line2.center() + (a * e - b * d) * line2.direction() * inv_D;
-  return distance(closest_point1, closest_point2);
+  Point<Scalar> closest_point1;
+  Point<Scalar> closest_point2;
+  Scalar arch_length1;
+  Scalar arch_length2;
+  mundy::Vector3<Scalar> sep;
+  return distance(distance_type, line1, line2, closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 
 /// \brief Compute the distance between two lines

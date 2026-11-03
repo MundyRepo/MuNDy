@@ -36,7 +36,9 @@
 
 namespace mundy {
 
-// Composite linear operators built from other operators; not specific to any one problem class.
+// Composite linear operators built from other operators, including the reduced operators of the mixed problems in
+// cqpp.hpp. They compose through constructors and make_*_op factories, not arithmetic operators: a native matrix
+// carries no backend to resolve an operator against.
 
 /// \brief Declare a workspace member `name`: its backing storage and mutable/const getters.
 ///
@@ -400,6 +402,8 @@ class CongruentMixedReducedOp {
 };
 
 /// \brief The sum Op := op1 + op2 of two operators sharing a domain and range.
+///
+/// apply(x, y) requires that x and y not alias.
 template <class Backend, class Op1, class Op2>
 class SumOp {
  public:
@@ -497,9 +501,6 @@ class SumOp {
 };
 
 /// \brief The scalar multiple Op := alpha * op.
-///
-/// Uses op's own fused scaled apply where op provides one; otherwise applies op, through its workspace, and scales the
-/// result in place.
 template <class Backend, class Scalar, class Op>
 class ScaledOp {
  public:
@@ -569,14 +570,8 @@ class ScaledOp {
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     using value_type = impl::vector_value_type<YVector>;
-    constexpr auto zero = static_cast<value_type>(0);
-    const auto alpha = static_cast<value_type>(alpha_);
-    if constexpr (HasScaledApplyMember<std::remove_cvref_t<Op>, value_type, XVector, YVector>) {
-      Backend::apply(alpha, op(), x, zero, y, workspace.op_workspace());
-    } else {
-      Backend::apply(op(), x, y, workspace.op_workspace());
-      axpby(Backend{}, alpha, y, zero, y);
-    }
+    Backend::apply(op(), x, y, workspace.op_workspace());
+    axpby(Backend{}, static_cast<value_type>(alpha_), y, static_cast<value_type>(0), y);
   }
 
   template <class XVector, class YVector>
@@ -1002,6 +997,18 @@ template <typename Backend, class LinearOpDT, class LinearOpM, class LinearOpD>
 KOKKOS_INLINE_FUNCTION auto make_quadratic_form(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D) {
   return QuadraticFormOp(Backend{}, std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M),
                          std::forward<LinearOpD>(D));
+}
+
+template <typename Backend, class LinearOpA, class LinearOpL>
+KOKKOS_INLINE_FUNCTION auto make_mixed_reduced_op(LinearOpA&& A, LinearOpL&& L) {
+  return MixedReducedOp(Backend{}, std::forward<LinearOpA>(A), std::forward<LinearOpL>(L));
+}
+
+template <typename Backend, class LinearOpDT, class LinearOpM, class LinearOpD, class LinearOpL>
+KOKKOS_INLINE_FUNCTION auto make_congruent_mixed_reduced_op(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D,
+                                                            LinearOpL&& L) {
+  return CongruentMixedReducedOp(Backend{}, std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M),
+                                 std::forward<LinearOpD>(D), std::forward<LinearOpL>(L));
 }
 
 template <typename Backend, class Op1, class Op2>

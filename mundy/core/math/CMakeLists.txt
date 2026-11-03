@@ -68,7 +68,6 @@ set(NOINSTALLHEADERS
   src/mundy_math/QuasiUniformSpherocylinder.hpp
   src/mundy_math/residuals.hpp
   src/mundy_math/ScalarBinaryOpTraits.hpp
-  src/mundy_math/ScalarWrapper.hpp
   src/mundy_math/ShiftedAccessor.hpp
   src/mundy_math/solver_backends.hpp
   src/mundy_math/sparse_matrix.hpp

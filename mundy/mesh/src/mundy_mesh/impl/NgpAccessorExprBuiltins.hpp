@@ -35,7 +35,7 @@
 // Mundy math headers needed for the forwarded function calls
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Quaternion.hpp>
-#include <mundy_math/ScalarWrapper.hpp>
+#include <mundy_math/Scalar.hpp>
 #include <mundy_math/Vector.hpp>
 
 namespace mundy {

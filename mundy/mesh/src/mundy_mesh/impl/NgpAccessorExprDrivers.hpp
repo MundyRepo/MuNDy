@@ -148,7 +148,7 @@ class NgpForEachEntityExprDriver {
           if constexpr (std::is_same_v<val_t, value_type>) {
             // Directly compatible types; just combine
             reduction.join(value, val_ref);
-          } else if constexpr (is_scalar_wrapper_v<val_t>) {
+          } else if constexpr (is_scalar_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
             reduction.join(value, val_ref[0]);
           } else {
@@ -283,7 +283,7 @@ class NgpForEachEntityPairExprDriver {
           if constexpr (std::is_same_v<val_t, value_type>) {
             // Directly compatible types; just combine
             reduction.join(value, val_ref);
-          } else if constexpr (is_scalar_wrapper_v<val_t>) {
+          } else if constexpr (is_scalar_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
             reduction.join(value, val_ref[0]);
           } else {

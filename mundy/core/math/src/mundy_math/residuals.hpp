@@ -102,6 +102,8 @@ struct LinfNormProjectedGradientResidual {
 
 /// \brief res = ||x - P(x - h grad)||_inf / h for the step h = 1e-6 (line 17 / Eq 25 of Mazhar 2015), or 0 if x has
 /// none.
+///
+/// The difference rounds to ulp(x), so res resolves no finer than about eps ||x||_inf / h, a floor that scales with x.
 struct LinfNormProjectedDiffResidual {
   template <typename Backend, typename XVector, typename GradVector, typename Space,
             typename ReductionScalar = impl::vector_value_type<GradVector>>
@@ -132,11 +134,12 @@ struct ChangeResidual {
   }
 };
 
-/// \brief res = |current - previous| / |current| (relative). Scale-independent, unlike ChangeResidual.
+/// \brief res = |current - previous| / |current| (relative), or 0 if current = previous. Scale-independent, unlike
+/// ChangeResidual.
 struct RelativeChangeResidual {
   template <class Scalar>
   KOKKOS_FUNCTION Scalar operator()(Scalar current, Scalar previous) const {
-    return abs(current - previous) / abs(current);
+    return current == previous ? Scalar(0) : abs(current - previous) / abs(current);
   }
 };
 //@}

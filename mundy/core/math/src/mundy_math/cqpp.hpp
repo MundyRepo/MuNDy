@@ -35,7 +35,7 @@
 #include <mundy_math/Vector.hpp>     // for mundy::Vector
 #include <mundy_math/cmath.hpp>
 #include <mundy_math/convex_spaces.hpp>  // for mundy::ConvexSpace and the *Space types
-#include <mundy_math/linear_ops.hpp>     // for mundy::{QuadraticFormOp, MixedReducedOp, CongruentMixedReducedOp, ...}
+#include <mundy_math/linear_ops.hpp>     // for mundy::{make_mixed_reduced_op, make_congruent_mixed_reduced_op, ...}
 #include <mundy_math/pgd.hpp>        // for the PGD method (PGDStrategy, PGDResult, ...) -- see "Methods for CQPP" below
 #include <mundy_math/residuals.hpp>  // for the projected-gradient residual policies
 #include <mundy_math/solver_backends.hpp>  // for mundy::{Backend, Workspace, concepts, ...}
@@ -385,7 +385,7 @@ KOKKOS_FUNCTION auto to_cqpp(
   // The reduced problem holds copies of A and L and is formed in P's storage.
   auto A_copy = P.A();
   auto L_copy = P.L();
-  auto H = MixedReducedOp(backend_t{}, std::move(A_copy), std::move(L_copy));
+  auto H = make_mixed_reduced_op<backend_t>(std::move(A_copy), std::move(L_copy));
 
   auto a_workspace = P.a_workspace();
   auto l_workspace = P.l_workspace();
@@ -415,8 +415,8 @@ KOKKOS_FUNCTION auto to_cqpp(
   auto M_copy = P.M();
   auto D_copy = P.D();
   auto L_copy = P.L();
-  auto H =
-      CongruentMixedReducedOp(backend_t{}, std::move(DT_copy), std::move(M_copy), std::move(D_copy), std::move(L_copy));
+  auto H = make_congruent_mixed_reduced_op<backend_t>(std::move(DT_copy), std::move(M_copy), std::move(D_copy),
+                                                      std::move(L_copy));
 
   auto dt_workspace = P.dt_workspace();
   auto m_workspace = P.m_workspace();
