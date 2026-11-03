@@ -226,9 +226,9 @@ cmake \
 -DMundy_ENABLE_STKFMM=OFF \
 -DMundy_ENABLE_PVFMM=OFF \
 -DMundy_ENABLE_KokkosKernels=ON \
--DMundy_ENABLE_Tpetra=${MUNDY_ENABLE_TPETRA:-OFF} \
--DMundy_ENABLE_Belos=${MUNDY_ENABLE_BELOS:-OFF} \
--DMundy_ENABLE_MueLu=${MUNDY_ENABLE_MUELU:-OFF} \
+-DMundy_ENABLE_Tpetra=${MUNDY_ENABLE_TPETRA:-ON} \
+-DMundy_ENABLE_Belos=${MUNDY_ENABLE_BELOS:-ON} \
+-DMundy_ENABLE_MueLu=${MUNDY_ENABLE_MUELU:-ON} \
 ${coverage_args} \
 ${ccache_args} \
 ${MUNDY_SOURCE_DIR}
