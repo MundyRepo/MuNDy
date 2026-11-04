@@ -82,8 +82,8 @@ void expect_exact_for_polynomials(const Scalar* points, const Scalar* weights, u
       for (int c = 0; a + b + c <= max_degree; ++c) {
         double sum = 0.0;
         for (unsigned i = 0; i < num_points; ++i) {
-          sum += weights[i] * std::pow(points[3 * i], a) * std::pow(points[3 * i + 1], b) *
-                 std::pow(points[3 * i + 2], c);
+          sum +=
+              weights[i] * std::pow(points[3 * i], a) * std::pow(points[3 * i + 1], b) * std::pow(points[3 * i + 2], c);
         }
         EXPECT_NEAR(sum, monomial_sphere_integral(a, b, c), tolerance)
             << "n = " << n << ", x^" << a << " y^" << b << " z^" << c;

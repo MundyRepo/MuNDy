@@ -183,8 +183,8 @@ int main(int argc, char** argv) {
         std::vector<double> p2p(3 * n, 0.0);
         p2p_seconds = median_seconds("STKFMM P2P", [&] {
           std::fill(p2p.begin(), p2p.end(), 0.0);
-          fmms.begin()->second->evaluateKernel(kernel, omp_get_max_threads(), stkfmm::PPKERNEL::SLS2T, n,
-                                               points.data(), forces.data(), n, points.data(), p2p.data());
+          fmms.begin()->second->evaluateKernel(kernel, omp_get_max_threads(), stkfmm::PPKERNEL::SLS2T, n, points.data(),
+                                               forces.data(), n, points.data(), p2p.data());
         });
       }
       std::printf("%8zu %12.4g %12.4g", n, direct_seconds, p2p_seconds);

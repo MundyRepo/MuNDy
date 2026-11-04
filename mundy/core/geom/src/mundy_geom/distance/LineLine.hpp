@@ -28,12 +28,12 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/Types.hpp>                            // for mundy::SharedNormalSigned
-#include <mundy_geom/distance/impl/DistanceScalingImpl.hpp>         // for mundy::impl::{centred_scale_exponent, scaled_norm}
-#include <mundy_geom/primitives/Line.hpp>                           // for mundy::Line
-#include <mundy_geom/primitives/Point.hpp>                          // for mundy::Point
-#include <mundy_math/Vector3.hpp>                                   // for mundy::Vector3, mundy::dot, mundy::cross
-#include <mundy_math/cmath.hpp>                                     // for mundy::passive_scalar_t
+#include <mundy_geom/distance/Types.hpp>                     // for mundy::SharedNormalSigned
+#include <mundy_geom/distance/impl/DistanceScalingImpl.hpp>  // for mundy::impl::{centred_scale_exponent, scaled_norm}
+#include <mundy_geom/primitives/Line.hpp>                    // for mundy::Line
+#include <mundy_geom/primitives/Point.hpp>                   // for mundy::Point
+#include <mundy_math/Vector3.hpp>                            // for mundy::Vector3, mundy::dot, mundy::cross
+#include <mundy_math/cmath.hpp>                              // for mundy::passive_scalar_t
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {

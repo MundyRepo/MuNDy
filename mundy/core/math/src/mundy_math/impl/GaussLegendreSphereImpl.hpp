@@ -25,7 +25,7 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::Array, KOKKOS_INLINE_FUNCTION
 
 // Mundy
-#include <mundy_math/DoubleDouble.hpp>             // for mundy::DoubleDouble, mundy::sqrt
+#include <mundy_math/DoubleDouble.hpp>            // for mundy::DoubleDouble, mundy::sqrt
 #include <mundy_math/impl/DoubleDoubleImpl.hpp>   // for mundy::impl::{SinCos, sin_cos_of_turn_fraction}
 #include <mundy_math/impl/GaussLegendreImpl.hpp>  // for mundy::impl::gauss_legendre_point
 

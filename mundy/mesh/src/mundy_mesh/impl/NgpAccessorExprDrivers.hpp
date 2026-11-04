@@ -24,14 +24,14 @@
 /// \file NgpAccessorExprDrivers.hpp
 /// \brief NGP expression kernel drivers: NgpForEachEntityExprDriver and NgpForEachEntityPairExprDriver.
 
+#include <mundy_mesh/ForEachEntity.hpp>
+#include <mundy_mesh/NgpFieldBLAS.hpp>
 #include <mundy_mesh/impl/NgpAccessorExprCachable.hpp>
 #include <mundy_mesh/impl/NgpAccessorExprEntityBase.hpp>
 #include <mundy_mesh/impl/NgpAccessorExprEntityExpr.hpp>
 #include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>
 #include <mundy_utils/StringLiteral.hpp>
 #include <mundy_utils/requires.hpp>
-#include <mundy_mesh/NgpFieldBLAS.hpp>
-#include <mundy_mesh/ForEachEntity.hpp>
 
 namespace mundy {
 

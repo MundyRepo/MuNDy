@@ -141,8 +141,8 @@ class CQPP {
 ///
 /// Just like the CQPP, we will either accept the simple case of (A, q, L, f_b) or the more general case of (DT, M, D,
 /// q, BT, S, B, b).
-template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename Space, typename WorkspaceA = impl::workspace_for_t<std::remove_cvref_t<LinearOpA>>,
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector, typename Space,
+          typename WorkspaceA = impl::workspace_for_t<std::remove_cvref_t<LinearOpA>>,
           typename WorkspaceL = impl::workspace_for_t<std::remove_cvref_t<LinearOpL>>>
 MUNDY_REQUIRES(ConvexSpace<Space, Backend, std::remove_cvref_t<QVector>>)
 class MCQPP {
@@ -372,8 +372,8 @@ class CongruentMCQPP {
   mutable lmdx_vector_t lmdx_;
 };
 
-template <class Backend, class LinearOpA, class QVector, class LinearOpL, class FVector, class Space,
-          class AWorkspace, class LWorkspace>
+template <class Backend, class LinearOpA, class QVector, class LinearOpL, class FVector, class Space, class AWorkspace,
+          class LWorkspace>
 KOKKOS_FUNCTION auto to_cqpp(
     const MCQPP<Backend, LinearOpA, QVector, LinearOpL, FVector, Space, AWorkspace, LWorkspace>& P) {
   // get the type of P no ref
@@ -402,9 +402,8 @@ KOKKOS_FUNCTION auto to_cqpp(
 
 template <class Backend, class LinearOpDT, class LinearOpM, class LinearOpD, class QVector, class LinearOpL,
           class FVector, class Space, class DTWorkspace, class MWorkspace, class DWorkspace, class LWorkspace>
-KOKKOS_FUNCTION auto to_cqpp(
-    const CongruentMCQPP<Backend, LinearOpDT, LinearOpM, LinearOpD, QVector, LinearOpL, FVector, Space,
-                         DTWorkspace, MWorkspace, DWorkspace, LWorkspace>& P) {
+KOKKOS_FUNCTION auto to_cqpp(const CongruentMCQPP<Backend, LinearOpDT, LinearOpM, LinearOpD, QVector, LinearOpL,
+                                                  FVector, Space, DTWorkspace, MWorkspace, DWorkspace, LWorkspace>& P) {
   using value_type = std::remove_reference_t<decltype(P)>::value_type;
 
   auto backend = P.backend();
@@ -463,21 +462,19 @@ CQPP(Backend, LinearOp&&, QVector&&, const Space&, const Workspace&)
     -> CQPP<Backend, LinearOp, QVector, Space, Workspace>;
 
 /// \brief Deduction guide for MCQPP
-template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename Space>
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector, typename Space>
 MUNDY_REQUIRES(ConvexSpace<std::remove_cvref_t<Space>, Backend, std::remove_cvref_t<QVector>>)
 MCQPP(Backend, LinearOpA&&, QVector&&, LinearOpL&&, FVector&&, const Space&)
     -> MCQPP<Backend, LinearOpA, QVector, LinearOpL, FVector, Space>;
 
-template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename Space, typename AWorkspace, typename LWorkspace>
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector, typename Space,
+          typename AWorkspace, typename LWorkspace>
 MUNDY_REQUIRES(ConvexSpace<std::remove_cvref_t<Space>, Backend, std::remove_cvref_t<QVector>>)
 MCQPP(Backend, LinearOpA&&, QVector&&, LinearOpL&&, FVector&&, const Space&, const AWorkspace&, const LWorkspace&)
     -> MCQPP<Backend, LinearOpA, QVector, LinearOpL, FVector, Space, AWorkspace, LWorkspace>;
 
-template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename Space, typename AWorkspace, typename LWorkspace, typename GVector, typename AxVector,
-          typename LAxVector>
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector, typename Space,
+          typename AWorkspace, typename LWorkspace, typename GVector, typename AxVector, typename LAxVector>
 MUNDY_REQUIRES(ConvexSpace<std::remove_cvref_t<Space>, Backend, std::remove_cvref_t<QVector>>)
 MCQPP(Backend, LinearOpA&&, QVector&&, LinearOpL&&, FVector&&, const Space&, const AWorkspace&, const LWorkspace&,
       const GVector&, const AxVector&, const LAxVector&)
@@ -535,8 +532,7 @@ KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&
   auto A = make_quadratic_form<Backend>(std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M),
                                         std::forward<LinearOpD>(D));
   auto workspace = A.make_workspace(std::forward<FVector>(f), std::forward<UVector>(u));
-  return CQPP(Backend{}, std::move(A), std::forward<QVector>(q), std::forward<Space>(space),
-              std::move(workspace));
+  return CQPP(Backend{}, std::move(A), std::forward<QVector>(q), std::forward<Space>(space), std::move(workspace));
 }
 
 template <typename Backend, typename LinearOp, typename QVector, typename Space, typename Workspace>
@@ -546,21 +542,19 @@ KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOp&& A, QVector&& q, Space&& space, 
               std::forward<Workspace>(workspace));
 }
 
-template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename Space>
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector, typename Space>
 MUNDY_REQUIRES(ConvexSpace<std::remove_cvref_t<Space>, Backend, std::remove_cvref_t<QVector>>)
-KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b,
-                                            Space&& space) {
+KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b, Space&& space) {
   return MCQPP(Backend{}, std::forward<LinearOpA>(A), std::forward<QVector>(q), std::forward<LinearOpL>(L),
                std::forward<FVector>(f_b), std::forward<Space>(space));
 }
 
-template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename Space, typename AWorkspace, typename LWorkspace>
+template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector, typename Space,
+          typename AWorkspace, typename LWorkspace>
 MUNDY_REQUIRES(ConvexSpace<std::remove_cvref_t<Space>, Backend, std::remove_cvref_t<QVector>>)
 KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q,    //
                                             LinearOpL&& L, FVector&& f_b,  //
-                                            Space&& space,           //
+                                            Space&& space,                 //
                                             AWorkspace&& a_workspace,      //
                                             LWorkspace&& l_workspace) {
   return MCQPP(Backend{}, std::forward<LinearOpA>(A), std::forward<QVector>(q), std::forward<LinearOpL>(L),
@@ -617,18 +611,11 @@ KOKKOS_FUNCTION auto make_mixed_cqpp_workspace(const LinearOpDT& DT, const Linea
                                                const QVector& q, const LinearOpB& B, const LinearOpS& S,
                                                const LinearOpBT& BT) {
   const auto L = make_quadratic_form<Backend>(B, S, BT);
-  auto workspace = MixedCQPPWorkspace{Backend::make_range_vector(S),
-                                      Backend::make_range_vector(B),
-                                      impl::make_workspace(S),
-                                      impl::make_workspace(B),
-                                      impl::make_workspace(DT),
-                                      impl::make_workspace(M),
-                                      impl::make_workspace(D),
-                                      impl::make_workspace(L),
-                                      Backend::make_vector_like(q),
-                                      Backend::make_range_vector(D),
-                                      Backend::make_range_vector(M),
-                                      Backend::make_range_vector(L)};
+  auto workspace =
+      MixedCQPPWorkspace{Backend::make_range_vector(S), Backend::make_range_vector(B), impl::make_workspace(S),
+                         impl::make_workspace(B),       impl::make_workspace(DT),      impl::make_workspace(M),
+                         impl::make_workspace(D),       impl::make_workspace(L),       Backend::make_vector_like(q),
+                         Backend::make_range_vector(D), Backend::make_range_vector(M), Backend::make_range_vector(L)};
   impl::zero_s_guesses<Backend>(workspace);
   return workspace;
 }
@@ -641,20 +628,20 @@ KOKKOS_FUNCTION auto make_mixed_cqpp_workspace(const LinearOpDT& DT, const Linea
                                                const QVector& q, const LinearOpB& B, const LinearOpS& S,
                                                const LinearOpBT& BT, const SWorkspace& s_workspace) {
   const auto L = make_quadratic_form<Backend>(B, S, BT);
-  auto workspace = MixedCQPPWorkspace{Backend::make_range_vector(S),
-                                      Backend::make_range_vector(B),
-                                      SWorkspace(s_workspace),
-                                      impl::make_workspace(B),
-                                      impl::make_workspace(DT),
-                                      impl::make_workspace(M),
-                                      impl::make_workspace(D),
-                                      L.make_workspace(Backend::make_domain_vector(S), Backend::make_range_vector(S),
-                                                       impl::make_workspace(B), SWorkspace(s_workspace),
-                                                       impl::make_workspace(BT)),
-                                      Backend::make_vector_like(q),
-                                      Backend::make_range_vector(D),
-                                      Backend::make_range_vector(M),
-                                      Backend::make_range_vector(L)};
+  auto workspace =
+      MixedCQPPWorkspace{Backend::make_range_vector(S),
+                         Backend::make_range_vector(B),
+                         SWorkspace(s_workspace),
+                         impl::make_workspace(B),
+                         impl::make_workspace(DT),
+                         impl::make_workspace(M),
+                         impl::make_workspace(D),
+                         L.make_workspace(Backend::make_domain_vector(S), Backend::make_range_vector(S),
+                                          impl::make_workspace(B), SWorkspace(s_workspace), impl::make_workspace(BT)),
+                         Backend::make_vector_like(q),
+                         Backend::make_range_vector(D),
+                         Backend::make_range_vector(M),
+                         Backend::make_range_vector(L)};
   impl::zero_s_guesses<Backend>(workspace);
   return workspace;
 }
@@ -666,9 +653,9 @@ template <typename Backend, typename LinearOpDT, typename LinearOpM, typename Li
           typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename BVector, typename Space,
           typename Workspace>
 MUNDY_REQUIRES(ConvexSpace<std::remove_cvref_t<Space>, Backend, std::remove_cvref_t<QVector>>)
-KOKKOS_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B,
-                                     LinearOpS&& S, LinearOpBT&& BT, BVector&& b, Space&& space,
-                                     Workspace&& workspace) {
+KOKKOS_FUNCTION
+    auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B, LinearOpS&& S,
+                         LinearOpBT&& BT, BVector&& b, Space&& space, Workspace&& workspace) {
   using backend_t = Backend;
 
   // f_b = B S b. B and S are only forwarded (not read again) after this, into make_quadratic_form, which is the one
@@ -693,8 +680,7 @@ KOKKOS_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&&
                                      LinearOpS&& S, LinearOpBT&& BT, BVector&& b, Space&& space) {
   return make_mixed_cqpp<Backend>(std::forward<LinearOpDT>(DT), std::forward<LinearOpM>(M), std::forward<LinearOpD>(D),
                                   std::forward<QVector>(q), std::forward<LinearOpB>(B), std::forward<LinearOpS>(S),
-                                  std::forward<LinearOpBT>(BT), std::forward<BVector>(b),
-                                  std::forward<Space>(space),
+                                  std::forward<LinearOpBT>(BT), std::forward<BVector>(b), std::forward<Space>(space),
                                   make_mixed_cqpp_workspace<Backend>(DT, M, D, q, B, S, BT));
 }
 

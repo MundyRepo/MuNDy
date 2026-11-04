@@ -1078,16 +1078,19 @@ void verify_periodic_2particle(const ListType& list, stk::mesh::Entity node_a, s
   EXPECT_EQ(list.size(), 2u);
 
   // Each owner sees the other: A (idx 0) -> B, B (idx 1) -> A.
-  EXPECT_TRUE(holds_on_device(list, KOKKOS_LAMBDA(const ListType& l) {
-    return l.num_neighbors(0) == 1 && l.num_neighbors(1) == 1;
-  })) << "each owner must have exactly one neighbor.";
-  EXPECT_TRUE(holds_on_device(list, KOKKOS_LAMBDA(const ListType& l) {
-    return l.target_entity(0) == node_a && l.target_entity(1) == node_b;
-  })) << "target entities must be (node_a, node_b).";
-  EXPECT_TRUE(holds_on_device(list, KOKKOS_LAMBDA(const ListType& l) {
-    return l.num_neighbors(0) > 0 && l.num_neighbors(1) > 0 && l.get_neighbor(0, 0) == node_b &&
-           l.get_neighbor(1, 0) == node_a;
-  })) << "owner A's neighbor must be node_b and owner B's must be node_a.";
+  EXPECT_TRUE(holds_on_device(
+      list, KOKKOS_LAMBDA(const ListType& l) { return l.num_neighbors(0) == 1 && l.num_neighbors(1) == 1; }))
+      << "each owner must have exactly one neighbor.";
+  EXPECT_TRUE(holds_on_device(
+      list, KOKKOS_LAMBDA(const ListType& l) { return l.target_entity(0) == node_a && l.target_entity(1) == node_b; }))
+      << "target entities must be (node_a, node_b).";
+  EXPECT_TRUE(holds_on_device(
+      list,
+      KOKKOS_LAMBDA(const ListType& l) {
+        return l.num_neighbors(0) > 0 && l.num_neighbors(1) > 0 && l.get_neighbor(0, 0) == node_b &&
+               l.get_neighbor(1, 0) == node_a;
+      }))
+      << "owner A's neighbor must be node_b and owner B's must be node_a.";
 
   const auto pairs = collect_periodic_pairs(list);
   ASSERT_EQ(pairs.size(), 2u);

@@ -1074,14 +1074,13 @@ concept ConstraintFamily =
 /// \brief A unilateral pair family whose true separation a rule gives at any configuration, so an integrator can
 /// constrain its pairs again where a step leaves them overlapping.
 template <typename F>
-concept ReLCPFamily =
-    ConstraintFamily<F> && (F::constraint_type == ConstraintType::UNILATERAL) && (F::bodies_per_entry == 2) &&
-    (F::rows_per_entry == 1) && PairSeparationRule<typename F::rule_type, typename F::execution_space> &&
-    requires(const F& f) {
-      { F::reserved_rows_per_entry } -> std::convertible_to<size_t>;
-      f.rod_i_view();
-      f.rod_j_view();
-    };
+concept ReLCPFamily = ConstraintFamily<F> && (F::constraint_type == ConstraintType::UNILATERAL) &&
+                      (F::bodies_per_entry == 2) && (F::rows_per_entry == 1) &&
+                      PairSeparationRule<typename F::rule_type, typename F::execution_space> && requires(const F& f) {
+                        { F::reserved_rows_per_entry } -> std::convertible_to<size_t>;
+                        f.rod_i_view();
+                        f.rod_j_view();
+                      };
 
 /// \brief Whether no type appears twice among Types.
 template <typename... Types>

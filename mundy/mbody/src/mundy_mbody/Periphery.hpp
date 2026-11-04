@@ -284,11 +284,11 @@ View read_matrix_market_with_extents(const std::string& filename, const size_t r
 }  // namespace impl
 
 /// \brief The direct_sum accumulator that adds target t's 3-vector sum to entries 3 t, 3 t + 1, 3 t + 2 of out.
-#define ADD_TO_VECTOR3_ENTRIES(out) \
+#define ADD_TO_VECTOR3_ENTRIES(out)                           \
   KOKKOS_LAMBDA(const size_t t, const mundy::Vector3d& sum) { \
-    out(3 * t + 0) += sum[0]; \
-    out(3 * t + 1) += sum[1]; \
-    out(3 * t + 2) += sum[2]; \
+    out(3 * t + 0) += sum[0];                                 \
+    out(3 * t + 1) += sum[1];                                 \
+    out(3 * t + 2) += sum[2];                                 \
   }
 
 /// \brief Copy a host std::vector<double> into a fresh device (LayoutLeft) view of the same length.
@@ -711,8 +711,7 @@ void apply_stokes_double_layer_kernel_ss(const ExecutionSpace& space,           
     return mundy::Vector3d{dx * coeff, dy * coeff, dz * coeff};
   };
 
-  mundy::direct_sum(space, num_points, num_points, stokes_double_layer_computation,
-                    ADD_TO_VECTOR3_ENTRIES(velocities));
+  mundy::direct_sum(space, num_points, num_points, stokes_double_layer_computation, ADD_TO_VECTOR3_ENTRIES(velocities));
 }
 
 /// \brief Apply the stokes double layer kernel to map a source density to target velocities: u_target += T q_source
@@ -897,8 +896,8 @@ void fill_stokes_double_layer_matrix(const ExecutionSpace& space,               
         const double tmp_vec1 = scale_factor * rinv5 * r_dot_scaled_normal * dy;
         const double tmp_vec2 = scale_factor * rinv5 * r_dot_scaled_normal * dz;
 
-            // T (local) = r outer tmp_vec = r outer r (r dot normal) * -3 / (4 pi r^5 viscosity)
-            // clang-format off
+        // T (local) = r outer tmp_vec = r outer r (r dot normal) * -3 / (4 pi r^5 viscosity)
+        // clang-format off
         T(t * 3 + 0, s * 3 + 0) = dx * tmp_vec0; T(t * 3 + 0, s * 3 + 1) = dx * tmp_vec1; T(t * 3 + 0, s * 3 + 2) = dx * tmp_vec2;
         T(t * 3 + 1, s * 3 + 0) = dy * tmp_vec0; T(t * 3 + 1, s * 3 + 1) = dy * tmp_vec1; T(t * 3 + 1, s * 3 + 2) = dy * tmp_vec2;
         T(t * 3 + 2, s * 3 + 0) = dz * tmp_vec0; T(t * 3 + 2, s * 3 + 1) = dz * tmp_vec1; T(t * 3 + 2, s * 3 + 2) = dz * tmp_vec2;
@@ -1233,8 +1232,8 @@ void apply_skfie(const ExecutionSpace& space,                           //
     coeff *= -scale_factor * rinv5;
 
     // Compute the complementarity term v += normal(t) * normal(s) dot q(s) w(s) / (viscosity |Gamma|)
-    const double scaled_normal_dot_density = (normal_s0 * q_s0 + normal_s1 * q_s1 + normal_s2 * q_s2) *
-                                           quadrature_weight_s * complementary_scale;
+    const double scaled_normal_dot_density =
+        (normal_s0 * q_s0 + normal_s1 * q_s1 + normal_s2 * q_s2) * quadrature_weight_s * complementary_scale;
 
     return mundy::Vector3d{dx * coeff + scaled_normal_dot_density * normal_t0,
                            dy * coeff + scaled_normal_dot_density * normal_t1,

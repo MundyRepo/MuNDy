@@ -1804,9 +1804,9 @@ TEST(Mbody, ReLCPFamilyInLCPMatchesContacts) {
   ASSERT_TRUE(relcp_result.converged) << relcp_result;
 
   EXPECT_EQ(relcp_result.num_iters, result.num_iters);
-  EXPECT_EQ(count_bit_differences(relcp_contacts.lambda_view(),
-                                  get<ContactViews<HostExecSpace>>(constraints).lambda_view()),
-            0u);
+  EXPECT_EQ(
+      count_bit_differences(relcp_contacts.lambda_view(), get<ContactViews<HostExecSpace>>(constraints).lambda_view()),
+      0u);
   EXPECT_EQ(count_bit_differences(relcp_rods.force_torque_view(), rods.force_torque_view()), 0u);
   EXPECT_EQ(count_bit_differences(relcp_rods.velocity_omega_view(), rods.velocity_omega_view()), 0u);
 }
@@ -2910,10 +2910,10 @@ TEST(Mbody, IterationsDoNotAllocate) {
 
   // Both blocks, with the Schur complement preconditioned by its self-mobility Jacobi
   slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9}, SelfMobilityJacobi{});
-  const auto [jacobi_short, jacobi_short_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-5, 1e-5}, SelfMobilityJacobi{});
-  const auto [jacobi_long, jacobi_long_allocations] =
-      slcp_allocations(p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9}, SelfMobilityJacobi{});
+  const auto [jacobi_short, jacobi_short_allocations] = slcp_allocations(
+      p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-5, 1e-5}, SelfMobilityJacobi{});
+  const auto [jacobi_long, jacobi_long_allocations] = slcp_allocations(
+      p.rods, c, p.mobility_model, p.dt, MixedSLCPConfig{p.cfg, 1000, 1e-9, 1e-9}, SelfMobilityJacobi{});
   ASSERT_TRUE(jacobi_short.converged && jacobi_long.converged) << jacobi_short << "\n" << jacobi_long;
   ASSERT_LT(jacobi_short.num_iters, jacobi_long.num_iters);
   EXPECT_EQ(jacobi_short_allocations, jacobi_long_allocations);
@@ -3480,7 +3480,9 @@ double largest_overlap(const RodViews<Space>& rods, const ReLCPContactViews<Spac
   double largest = 0.0;
   Kokkos::parallel_reduce(
       "largest_overlap", Kokkos::RangePolicy<Space>(0, pairs.size()),
-      KOKKOS_LAMBDA(const int p, double& m) { m = Kokkos::max(m, -Rule{}(rods, pairs.rod_i(p), pairs.rod_j(p)).value); },
+      KOKKOS_LAMBDA(const int p, double& m) {
+        m = Kokkos::max(m, -Rule{}(rods, pairs.rod_i(p), pairs.rod_j(p)).value);
+      },
       Kokkos::Max<double>(largest));
   return Kokkos::max(largest, 0.0);
 }
@@ -3608,8 +3610,8 @@ TEST(Mbody, ReLCPSettlesInGroove) {
     {
       const auto rods = copy_to<TestExecSpace>(p.rods);
       const auto load = copy_load(rods);
-      const auto integrator = make_mixed_lcp_integrator(
-          rods, with_contact_views(copy_to<TestExecSpace>(p.constraints)), p.mobility_model, dt);
+      const auto integrator = make_mixed_lcp_integrator(rods, with_contact_views(copy_to<TestExecSpace>(p.constraints)),
+                                                        p.mobility_model, dt);
       for (int step = 0; step < num_steps; ++step) {
         ASSERT_TRUE(lcp_converged(step_rods(integrator, p.cfg, load))) << "at dt=" << dt << ", step " << step;
       }
@@ -3638,10 +3640,10 @@ TEST(Mbody, ReLCPResolvesOverlap) {
   {
     const auto rods = copy_to<TestExecSpace>(p.rods);
     const auto load = copy_load(rods);
-    ASSERT_TRUE(lcp_converged(step_rods(make_mixed_lcp_integrator(rods, with_contact_views(copy_to<TestExecSpace>(
-                                                                              p.constraints)),
-                                                                    p.mobility_model, dt),
-                                        p.cfg, load)));
+    ASSERT_TRUE(lcp_converged(
+        step_rods(make_mixed_lcp_integrator(rods, with_contact_views(copy_to<TestExecSpace>(p.constraints)),
+                                            p.mobility_model, dt),
+                  p.cfg, load)));
     EXPECT_GT(largest_overlap(rods, pairs), 1e-3);
   }
 
@@ -3649,9 +3651,9 @@ TEST(Mbody, ReLCPResolvesOverlap) {
   for (const double length_tol : {1e-3, 1e-6, 1e-9}) {
     const auto rods = copy_to<TestExecSpace>(p.rods);
     const auto load = copy_load(rods);
-    const MixedReLCPResult result = step_rods(
-        make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt),
-        MixedReLCPConfig{p.cfg, 20, length_tol, length_tol, false}, load);
+    const MixedReLCPResult result =
+        step_rods(make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt),
+                  MixedReLCPConfig{p.cfg, 20, length_tol, length_tol, false}, load);
     ASSERT_TRUE(result.converged && lcp_converged(result)) << result << " at length_tol=" << length_tol;
     EXPECT_GT(result.num_iters, 1u) << "at length_tol=" << length_tol;
     EXPECT_LE(largest_overlap(rods, pairs), length_tol) << "at length_tol=" << length_tol;
@@ -3769,9 +3771,9 @@ TEST(Mbody, ReLCPHoldsBilateralRowsWhenRelinearized) {
   for (const bool relinearize_bilateral : {false, true}) {
     const auto rods = copy_to<TestExecSpace>(p.rods);
     const auto load = copy_load(rods);
-    const MixedReLCPResult result = step_rods(
-        make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt),
-        MixedReLCPConfig{p.cfg, 20, length_tol, length_tol, relinearize_bilateral}, load);
+    const MixedReLCPResult result =
+        step_rods(make_mixed_relcp_integrator(rods, copy_to<TestExecSpace>(p.constraints), p.mobility_model, dt),
+                  MixedReLCPConfig{p.cfg, 20, length_tol, length_tol, relinearize_bilateral}, load);
     ASSERT_TRUE(result.converged && lcp_converged(result)) << result << " relinearized=" << relinearize_bilateral;
     EXPECT_GT(result.num_iters, 1u) << "relinearized=" << relinearize_bilateral;
     EXPECT_LE(largest_overlap(rods, pairs), length_tol) << "relinearized=" << relinearize_bilateral;
@@ -3805,8 +3807,8 @@ TEST(Mbody, ReLCPGrowsItsReserve) {
   const MixedReLCPConfig cfg{reserved.cfg, 20, 1e-6, 1e-6, false};
 
   // Solve
-  const MixedReLCPResult from_reserve = solve_step(
-      make_mixed_relcp_integrator(rods_reserved, constraints_reserved, reserved.mobility_model, dt), cfg);
+  const MixedReLCPResult from_reserve =
+      solve_step(make_mixed_relcp_integrator(rods_reserved, constraints_reserved, reserved.mobility_model, dt), cfg);
   const MixedReLCPResult grown = solve_step(
       make_mixed_relcp_integrator(rods_unreserved, constraints_unreserved, unreserved.mobility_model, dt), cfg);
   ASSERT_TRUE(from_reserve.converged) << from_reserve;

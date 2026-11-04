@@ -43,14 +43,14 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/NumTraits.hpp>        // for mundy::NumTraits
-#include <mundy_math/Tolerance.hpp>        // for mundy::get_relaxed_zero_tolerance<T>
-#include <mundy_math/cmath.hpp>            // for mundy::sqrt
+#include <mundy_math/NumTraits.hpp>              // for mundy::NumTraits
+#include <mundy_math/Tolerance.hpp>              // for mundy::get_relaxed_zero_tolerance<T>
+#include <mundy_math/cmath.hpp>                  // for mundy::sqrt
 #include <mundy_math/impl/eigenvalues_impl.hpp>  // for mundy::impl::{cold_start, extreme_eigenvalue, ...}
-#include <mundy_math/linear_ops.hpp>       // for mundy::make_shifted_op
-#include <mundy_math/preconditioners.hpp>  // for mundy::{NoPreconditioner, Preconditioner}
-#include <mundy_math/residuals.hpp>        // for the vector and change residual policies
-#include <mundy_math/solver_backends.hpp>  // for mundy::impl::{vector_value_type, ...}
+#include <mundy_math/linear_ops.hpp>             // for mundy::make_shifted_op
+#include <mundy_math/preconditioners.hpp>        // for mundy::{NoPreconditioner, Preconditioner}
+#include <mundy_math/residuals.hpp>              // for the vector and change residual policies
+#include <mundy_math/solver_backends.hpp>        // for mundy::impl::{vector_value_type, ...}
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/storage.hpp>
 #include <mundy_utils/throw_assert.hpp>
@@ -882,8 +882,7 @@ class LanczosStrategy {
       const auto W = Backend::entries(state.Av());
       const auto PW = Backend::entries(state.v());
       if (columns == 2) {
-        Backend::assign("LanczosStrategy::resume", state.Bv_prev(), Bv_1, state.Bv(), W / beta, state.v(),
-                        PW / beta);
+        Backend::assign("LanczosStrategy::resume", state.Bv_prev(), Bv_1, state.Bv(), W / beta, state.v(), PW / beta);
       } else {
         Backend::assign("LanczosStrategy::resume", state.Bv_prev(),
                         Backend::entries(Backend::column(basis, columns - 2)) / state.beta()[columns - 3], state.Bv(),
@@ -937,11 +936,11 @@ class LanczosStrategy {
     const bool measured = end.num_iters > 0;
     const value_type lower = largest && measured ? end.eigenvalue : gershgorin.lower;
     const value_type upper = !largest && measured ? end.eigenvalue : gershgorin.upper;
-    const value_type theta = impl::extreme_eigenvalue(state.alpha(), state.beta(), k, largest, lower, upper,
-                                                      gershgorin.norm_bound);
-    const value_type rho = impl::ritz_residual(state.alpha(), state.beta(), k, theta, gershgorin.norm_bound,
-                                               state.forward_pivots(), state.backward_pivots(),
-                                               static_cast<value_type*>(nullptr));
+    const value_type theta =
+        impl::extreme_eigenvalue(state.alpha(), state.beta(), k, largest, lower, upper, gershgorin.norm_bound);
+    const value_type rho =
+        impl::ritz_residual(state.alpha(), state.beta(), k, theta, gershgorin.norm_bound, state.forward_pivots(),
+                            state.backward_pivots(), static_cast<value_type*>(nullptr));
     const value_type relative_floor = static_cast<value_type>(cfg_.tol) * abs(theta);
     const value_type rounding_floor = rounding_level(k, gershgorin.norm_bound);
     end = {k, rho, theta, rho <= (relative_floor > rounding_floor ? relative_floor : rounding_floor)};
@@ -1088,8 +1087,8 @@ PowerStrategy(ResidualPolicy, Config = {}) -> PowerStrategy<ResidualPolicy, Conf
 template <class VVector, class BvPrevVector, class AvVector, class BvVector, class ScalarArray, class LargestVector,
           class SmallestVector, class Basis>
 LanczosState(VVector&&, BvPrevVector&&, AvVector&&, BvVector&&, ScalarArray&&, LargestVector&&, SmallestVector&&,
-             Basis&&) -> LanczosState<VVector, BvPrevVector, AvVector, BvVector, ScalarArray, LargestVector,
-                                      SmallestVector, Basis>;
+             Basis&&)
+    -> LanczosState<VVector, BvPrevVector, AvVector, BvVector, ScalarArray, LargestVector, SmallestVector, Basis>;
 
 template <class Config>
 LanczosStrategy(Config) -> LanczosStrategy<Config>;

@@ -60,6 +60,7 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
+
   # The head-to-head against STKFMM's Stokes FMM needs the (optional) STKFMM TPL.
   if(${PACKAGE_NAME}_ENABLE_STKFMM)
     tribits_add_executable(

@@ -43,8 +43,8 @@ namespace impl {
 /// element.
 template <class Scalar, class Toroidal, class Points, class Weights>
 KOKKOS_INLINE_FUNCTION constexpr void write_trapezoidal_torus_ring(unsigned n, unsigned m, double aspect_ratio,
-                                                                 unsigned i, const Toroidal& toroidal, Points& points,
-                                                                 Weights& weights) {
+                                                                   unsigned i, const Toroidal& toroidal, Points& points,
+                                                                   Weights& weights) {
   const SinCos<DoubleDouble> poloidal = sin_cos_of_turn_fraction<DoubleDouble>(i, n);
   const DoubleDouble distance_from_axis = aspect_ratio + poloidal.cos;
   const UnevaluatedSum half_pi = pi_over_2();

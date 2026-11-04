@@ -113,7 +113,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_link_crs_needs_updated_field(lmd).clear_device_sync_state();
   }
 
-  virtual void update_post_mesh_mod() override {   
+  virtual void update_post_mesh_mod() override {
     // The internal copy of the NGP mesh and NGP link meta data must be updated to reflect any changes to the host mesh.
     impl::get_ngp_mesh(ngp_coo_data_) = stk::mesh::get_updated_ngp_mesh(coo_data_.bulk_data());
     NgpLinkMetaDataT<NgpMemSpace>& ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);

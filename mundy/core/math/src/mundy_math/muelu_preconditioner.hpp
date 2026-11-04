@@ -211,8 +211,8 @@ template <class Backend, class Matrix, class Scalar>
 MueLuPreconditioner(Backend, const Matrix&, const MueLuConfig<Scalar>&) -> MueLuPreconditioner<Backend, Matrix>;
 
 template <class Backend, class Matrix, class NearNullSpace, class Scalar>
-MueLuPreconditioner(Backend, const Matrix&, const NearNullSpace&,
-                    const MueLuConfig<Scalar>&) -> MueLuPreconditioner<Backend, Matrix>;
+MueLuPreconditioner(Backend, const Matrix&, const NearNullSpace&, const MueLuConfig<Scalar>&)
+    -> MueLuPreconditioner<Backend, Matrix>;
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 /// \brief The MueLu preconditioner of A.

@@ -51,8 +51,8 @@
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy
-#include <MundyMath_config.hpp>                 // for HAVE_MUNDYMATH_{BELOS,TPETRA}
-#include <mundy_geom/randomize.hpp>             // for mundy::generate_random_unit_quaternion
+#include <MundyMath_config.hpp>                // for HAVE_MUNDYMATH_{BELOS,TPETRA}
+#include <mundy_geom/randomize.hpp>            // for mundy::generate_random_unit_quaternion
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_math/Vector3.hpp>              // for Vector3
 #include <mundy_math/cmath.hpp>                // for mundy::rsqrt
@@ -845,10 +845,12 @@ enum class DoubleLayerOperator {
   SkfieMatrixFree           //!< M, applied by apply_skfie
 };
 
-constexpr std::array<DoubleLayerOperator, 6> kDoubleLayerOperators = {
-    DoubleLayerOperator::TDense,     DoubleLayerOperator::TMatrixFree,
-    DoubleLayerOperator::InteriorTraceDense, DoubleLayerOperator::ExteriorTraceMatrixFree,
-    DoubleLayerOperator::SkfieDense, DoubleLayerOperator::SkfieMatrixFree};
+constexpr std::array<DoubleLayerOperator, 6> kDoubleLayerOperators = {DoubleLayerOperator::TDense,
+                                                                      DoubleLayerOperator::TMatrixFree,
+                                                                      DoubleLayerOperator::InteriorTraceDense,
+                                                                      DoubleLayerOperator::ExteriorTraceMatrixFree,
+                                                                      DoubleLayerOperator::SkfieDense,
+                                                                      DoubleLayerOperator::SkfieMatrixFree};
 
 const char* to_string(const DoubleLayerOperator op) {
   switch (op) {
@@ -1018,8 +1020,7 @@ StudyVector apply_matrix_free_twin(const DoubleLayerOperator op, const double vi
     case DoubleLayerOperator::TDense:
       return apply_double_layer_operator(DoubleLayerOperator::TMatrixFree, viscosity, surface, q);
     case DoubleLayerOperator::InteriorTraceDense: {
-      StudyVector u =
-          apply_double_layer_operator(DoubleLayerOperator::ExteriorTraceMatrixFree, viscosity, surface, q);
+      StudyVector u = apply_double_layer_operator(DoubleLayerOperator::ExteriorTraceMatrixFree, viscosity, surface, q);
       KokkosBlas::axpy(StudyExecSpace{}, -1.0 / viscosity, q, u);
       return u;
     }
@@ -1160,8 +1161,7 @@ void overlapping_pair_study(std::ostream& csv) {
 
     // The coefficients (RPY, RPYC, Stokes) along one direction.
     auto coefficients = [&](const Vector3d& direction) {
-      const StudyVector forces =
-          to_device<StudyExecSpace>({0.0, 0.0, 0.0, direction[0], direction[1], direction[2]});
+      const StudyVector forces = to_device<StudyExecSpace>({0.0, 0.0, 0.0, direction[0], direction[1], direction[2]});
       std::array<StudyVector, 3> velocities = {StudyVector("v_rpy", 6), StudyVector("v_rpyc", 6),
                                                StudyVector("v_stokes", 6)};
       apply_rpy_kernel(space, viscosity, positions, positions, radii, radii, forces, velocities[0]);
@@ -1287,8 +1287,7 @@ void run_periphery_sphere_study() {
     const auto periphery = make_cavity_periphery<ExecSpace>(periphery_order, periphery_radius, 1.0);
     for (const auto& order : body_orders) {
       for (const auto& sval : svals) {
-        periphery_sphere_spd(csv, order, periphery, periphery_order, periphery_radius, sval, r,
-                             kNumOrientationSamples);
+        periphery_sphere_spd(csv, order, periphery, periphery_order, periphery_radius, sval, r, kNumOrientationSamples);
       }
     }
   }

@@ -357,8 +357,8 @@ TYPED_TEST(QuaternionSingleTypeTest, RotationVectorRoundTrip) {
 
   // Round trip over the whole principal range, including both ends: near zero the axis is arbitrary
   // but the rotation vector is not, and near pi the scalar part goes to zero.
-  for (const T angle : {static_cast<T>(0), static_cast<T>(1e-7), static_cast<T>(0.35), pi / 2,
-                        pi - static_cast<T>(1e-6)}) {
+  for (const T angle :
+       {static_cast<T>(0), static_cast<T>(1e-7), static_cast<T>(0.35), pi / 2, pi - static_cast<T>(1e-6)}) {
     const AVector3<T> expected = angle * axis;
     is_close_debug(quaternion_to_rotation_vector(axis_angle_to_quaternion(axis, angle)), expected,
                    "Rotation vector round trip failed.");
@@ -370,7 +370,8 @@ TYPED_TEST(QuaternionSingleTypeTest, RotationVectorRoundTrip) {
 
   // Past pi the shorter way round is the other direction: 3 pi / 2 about the axis is pi / 2 about
   // its opposite. Asserting this pins the canonicalization rather than leaving it implicit.
-  const AVector3<T> shorter_way = quaternion_to_rotation_vector(axis_angle_to_quaternion(axis, static_cast<T>(1.5) * pi));
+  const AVector3<T> shorter_way =
+      quaternion_to_rotation_vector(axis_angle_to_quaternion(axis, static_cast<T>(1.5) * pi));
   EXPECT_NEAR(norm(shorter_way - (-(pi / 2) * axis)), static_cast<T>(0), tol);
 
   // Only the direction matters, down to scales where the squared components underflow.

@@ -137,10 +137,9 @@ TYPED_TEST(Vector3SingleTypeTest, Perp) {
   // axis directions are the discriminating cases: an implementation that crossed with a *fixed*
   // reference axis yields an exactly zero cross product for the one direction it picked, and NaN
   // once normalized. The non-unit inputs check that only the direction of v matters.
-  const std::vector<Vector3<T>> directions = {Vector3<T>(1, 0, 0),  Vector3<T>(0, 1, 0),   Vector3<T>(0, 0, 1),
-                                              Vector3<T>(-1, 0, 0), Vector3<T>(0, -1, 0),  Vector3<T>(0, 0, -1),
-                                              Vector3<T>(1, 1, 1),  Vector3<T>(3, 0, 4),   Vector3<T>(0, 5, 12),
-                                              Vector3<T>(-7, 2, -3)};
+  const std::vector<Vector3<T>> directions = {
+      Vector3<T>(1, 0, 0),  Vector3<T>(0, 1, 0), Vector3<T>(0, 0, 1), Vector3<T>(-1, 0, 0), Vector3<T>(0, -1, 0),
+      Vector3<T>(0, 0, -1), Vector3<T>(1, 1, 1), Vector3<T>(3, 0, 4), Vector3<T>(0, 5, 12), Vector3<T>(-7, 2, -3)};
 
   const R tol = static_cast<R>(32) * std::numeric_limits<R>::epsilon();
   for (const Vector3<T>& v : directions) {

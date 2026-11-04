@@ -180,8 +180,7 @@ KOKKOS_INLINE_FUNCTION constexpr SinCos<DoubleDoubleType> sin_cos_of_turn_fracti
     ++quadrant;
   }
   const UnevaluatedSum half_pi = pi_over_2();
-  const DoubleDoubleType t =
-      DoubleDoubleType(half_pi.hi, half_pi.lo) * static_cast<double>(r) / static_cast<double>(m);
+  const DoubleDoubleType t = DoubleDoubleType(half_pi.hi, half_pi.lo) * static_cast<double>(r) / static_cast<double>(m);
   return rotate_by_quadrant(sin_cos_taylor(t), static_cast<int>(quadrant % 4));
 }
 

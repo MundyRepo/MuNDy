@@ -30,7 +30,8 @@
 /// The cantilever is that of ProppedCantileverMatchesHenckyBarChain, and its Schur operator is A = dt B^T M B + K^-1.
 /// - --conditioning estimates the ends of the spectrum of P A at the initial configuration by Lanczos, each end to the
 ///   relative tolerance, and appends a row to <prefix>_conditioning.csv.
-/// - --iterations solves A x = b by preconditioned CG at the start of each of S + 1 steps, b = psi + dt B^T u_free being
+/// - --iterations solves A x = b by preconditioned CG at the start of each of S + 1 steps, b = psi + dt B^T u_free
+/// being
 ///   a step's first right-hand side, from x = 0 or, with --warm-start, from the last step's solution; the steps between
 ///   are taken by the integrator. It appends a row per step to <prefix>_iterations.csv.
 /// --timings adds the setup and solve times.
@@ -431,8 +432,7 @@ void measure_conditioning(const Options& options, const Policy& policy, const Li
   csv << identity(options, n) << "," << smallest << "," << largest << "," << condition_number;
   std::cout << options.preconditioner << " conditioning: N " << sci(static_cast<double>(options.num_segments))
             << ", rows " << sci(static_cast<double>(n)) << ", dt " << sci(options.dt) << ", smallest eigenvalue "
-            << sci(smallest) << ", largest eigenvalue " << sci(largest) << " in " << num_iters
-            << " Lanczos iterations"
+            << sci(smallest) << ", largest eigenvalue " << sci(largest) << " in " << num_iters << " Lanczos iterations"
             << ", condition number " << sci(condition_number);
   if (options.timings) {
     csv << "," << setup.assembly << "," << setup.setup << "," << lanczos_seconds;
@@ -456,7 +456,8 @@ CGResult<double> solve_schur(const Options& options, const Linearization& linear
   if constexpr (std::is_same_v<Precond, NoPreconditioner>) {
     result = solve_linear_system(system, make_cg_solution_strategy(RelativeL2Residual{}, config), state);
   } else {
-    result = solve_linear_system(system, make_cg_solution_strategy(RelativeL2Residual{}, config, preconditioner), state);
+    result =
+        solve_linear_system(system, make_cg_solution_strategy(RelativeL2Residual{}, config, preconditioner), state);
   }
   if (!result.converged) {
     throw std::runtime_error("ProppedCantileverConditioning: CG did not converge within " +
@@ -491,10 +492,9 @@ void measure_iterations(const Options& options, const Policy& policy, const RodV
   const MixedSLCPConfig step_cfg{lcp_cfg, 50, 1e-9, 1e-9};
   const auto integrator = make_mixed_slcp_integrator(rods, constraints, model, options.dt, stepping_policy());
 
-  std::ofstream csv =
-      open_csv(options.prefix + "_iterations.csv",
-               std::string(kIdentityHeader) + ",WarmStart,Step,CgTol,Iterations" +
-                   (options.timings ? ",AssemblySeconds,SetupSeconds,SolveSeconds" : ""));
+  std::ofstream csv = open_csv(options.prefix + "_iterations.csv",
+                               std::string(kIdentityHeader) + ",WarmStart,Step,CgTol,Iterations" +
+                                   (options.timings ? ",AssemblySeconds,SetupSeconds,SolveSeconds" : ""));
   view_t previous;
   for (unsigned step = 0; step <= options.steps; ++step) {
     reset_rod_state(rods, load);

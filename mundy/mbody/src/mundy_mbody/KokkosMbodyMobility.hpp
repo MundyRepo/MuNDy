@@ -76,7 +76,7 @@ concept MobilityModel = requires(const Model& model, const RodViews<ExecSpace>& 
 
 /// \brief Slender-body drag on each rod alone, with no hydrodynamic coupling between rods.
 ///
-/// Drag coefficients from Lowen 1994: Brownian dynamics of hard spherocylinders 
+/// Drag coefficients from Lowen 1994: Brownian dynamics of hard spherocylinders
 ///
 /// A rod of length L and radius a, with L' = L + 2a and p = L' / 2a, moves under force F and torque T as
 ///   velocity = c_perp (I - t t^T) F + c_para t t^T F,  omega = c_rot T

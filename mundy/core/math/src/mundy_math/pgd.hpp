@@ -226,15 +226,14 @@ KOKKOS_FUNCTION void projected_step(const Problem& prob, State& state, typename 
 /// along s. A positive semi-definite A makes s^T A s non-negative; where it is zero (s = 0, or A has no curvature along
 /// s), current_step is kept.
 template <class Backend, class State>
-KOKKOS_FUNCTION typename State::value_type bb_step_size(const State& state,
-                                                        typename State::value_type current_step) {
+KOKKOS_FUNCTION typename State::value_type bb_step_size(const State& state, typename State::value_type current_step) {
   using value_type = typename State::value_type;
   const auto s = Backend::entries(state.x()) - Backend::entries(state.x_tmp());
   const auto y = Backend::entries(state.grad()) - Backend::entries(state.grad_tmp());
-  value_type ss;  // s^T s
-  value_type sy;  // s^T A s
-  Backend::reduce("PGD::bb_step_size", Kokkos::Sum<value_type>(ss), s * s, //
-                                       Kokkos::Sum<value_type>(sy), s * y);
+  value_type ss;                                                            // s^T s
+  value_type sy;                                                            // s^T A s
+  Backend::reduce("PGD::bb_step_size", Kokkos::Sum<value_type>(ss), s * s,  //
+                  Kokkos::Sum<value_type>(sy), s * y);
   MUNDY_THROW_ASSERT(sy >= -get_zero_tolerance<value_type>(), std::invalid_argument,
                      "PGD: s^T A s < -tolerance, so A is not positive semi-definite.");
   return sy > static_cast<value_type>(0) ? ss / sy : current_step;
@@ -311,8 +310,8 @@ struct NonmonotoneBBStepStrategy {
     auto& memory = state.step_state();
 
     impl::projected_step(prob, state, memory.step_size);
-    const value_type grad_d = dot(backend_t{}, state.x(), state.grad_tmp()) -
-                              dot(backend_t{}, state.x_tmp(), state.grad_tmp());
+    const value_type grad_d =
+        dot(backend_t{}, state.x(), state.grad_tmp()) - dot(backend_t{}, state.x_tmp(), state.grad_tmp());
     const value_type d_A_d =
         reduce_sum(backend_t{}, (backend_t::entries(state.x()) - backend_t::entries(state.x_tmp())) *
                                     (backend_t::entries(state.grad()) - backend_t::entries(state.grad_tmp())));
@@ -336,8 +335,7 @@ struct NonmonotoneBBStepStrategy {
   KOKKOS_FUNCTION static auto objective(const Problem& prob, const XVector& x, const GradVector& grad) {
     using value_type = impl::vector_value_type<XVector>;
     using backend_t = decltype(prob.backend());
-    return static_cast<value_type>(0.5) * (dot(backend_t{}, x, grad) +
-                                           dot(backend_t{}, x, prob.q()));
+    return static_cast<value_type>(0.5) * (dot(backend_t{}, x, grad) + dot(backend_t{}, x, prob.q()));
   }
 
   template <class Scalar>
@@ -373,10 +371,11 @@ struct MPRGPStepState {
 ///
 /// Entries off every bound are free. The free gradient phi is grad on the free entries and 0 elsewhere; the chopped
 /// gradient beta = g^P - phi is the projected gradient on the entries on a bound, the pull that would lift them off it.
-/// While beta is small against phi, ||beta||^2 <= proportioning^2 phi~^T phi for proportioning > 0, with phi~ = (x - P(x - step phi)) / step,
-/// each step is a conjugate gradient step over the free entries along a direction p, unless that step would cross a
-/// bound; it then goes to the boundary along p and takes the projected step x = P(x - step phi). Otherwise the step is
-/// the exact minimizer along -beta, no further than the boundary, which lifts entries off their bounds.
+/// While beta is small against phi, ||beta||^2 <= proportioning^2 phi~^T phi for proportioning > 0, with phi~ = (x -
+/// P(x - step phi)) / step, each step is a conjugate gradient step over the free entries along a direction p, unless
+/// that step would cross a bound; it then goes to the boundary along p and takes the projected step x = P(x - step
+/// phi). Otherwise the step is the exact minimizer along -beta, no further than the boundary, which lifts entries off
+/// their bounds.
 ///
 /// The projected step is expansion_step_fraction / lambda, the fraction in (0, 2), for lambda an estimate of A's
 /// largest eigenvalue lambda_max. MPRGP's convergence theory needs the step to be at most 2 / lambda_max, that is
@@ -432,11 +431,12 @@ class MPRGPStepStrategy {
   KOKKOS_FUNCTION void initialize(const Problem& prob, State& state) const {
     using value_type = typename State::value_type;
     using backend_t = decltype(prob.backend());
-    static_assert(ConvexSpace<std::remove_cvref_t<decltype(prob.space())>, backend_t,
-                              std::remove_cvref_t<decltype(state.x())>>,
-                  "MPRGPStepStrategy: the problem's space must be a ConvexSpace.");
+    static_assert(
+        ConvexSpace<std::remove_cvref_t<decltype(prob.space())>, backend_t, std::remove_cvref_t<decltype(state.x())>>,
+        "MPRGPStepStrategy: the problem's space must be a ConvexSpace.");
     constexpr value_type zero = static_cast<value_type>(0);
-    MUNDY_THROW_ASSERT(proportioning > 0.0, std::invalid_argument, "MPRGPStepStrategy: proportioning must be positive.");
+    MUNDY_THROW_ASSERT(proportioning > 0.0, std::invalid_argument,
+                       "MPRGPStepStrategy: proportioning must be positive.");
     MUNDY_THROW_ASSERT(expansion_step_fraction > 0.0 && expansion_step_fraction < 2.0, std::invalid_argument,
                        "MPRGPStepStrategy: expansion_step_fraction must lie in (0, 2).");
     const backend_t backend{};
@@ -725,11 +725,12 @@ KOKKOS_INLINE_FUNCTION auto make_mprgp_step_strategy(PVector&& p, EstimateVector
 /// \brief The state pgd iterates, over x, grad and their previous values, with the memory of pgd's step strategy.
 template <class StepStrategy, class ResidualPolicy, class Config, class XVector, class GradVector, class XTmpVector,
           class GradTmpVector>
-KOKKOS_INLINE_FUNCTION auto make_pgd_state([[maybe_unused]] const PGDStrategy<StepStrategy, ResidualPolicy, Config>& pgd,
-                                           XVector&& x,         //
-                                           GradVector&& grad,   //
-                                           XTmpVector&& x_tmp,  //
-                                           GradTmpVector&& grad_tmp) {
+KOKKOS_INLINE_FUNCTION auto make_pgd_state(
+    [[maybe_unused]] const PGDStrategy<StepStrategy, ResidualPolicy, Config>& pgd,
+    XVector&& x,         //
+    GradVector&& grad,   //
+    XTmpVector&& x_tmp,  //
+    GradTmpVector&& grad_tmp) {
   using scalar_t = impl::vector_value_type<XVector>;
   using step_state_t = typename StepStrategy::template step_state_t<scalar_t>;
   return PGDState<scalar_t, XVector, GradVector, XTmpVector, GradTmpVector, step_state_t>(

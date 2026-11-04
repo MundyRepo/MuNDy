@@ -45,16 +45,16 @@
 #include <mundy_geom/primitives.hpp>
 #include <mundy_math/Quaternion.hpp>  // for mundy::{quaternion_to_rotation_vector, rotation_vector_jacobian}
 #include <mundy_math/Scalar.hpp>
-#include <mundy_math/Vector3.hpp>          // for mundy::{cross, perp}
-#include <mundy_math/convex_spaces.hpp>    // for mundy::LowerBoundSpace
-#include <mundy_math/cqpp.hpp>             // for mundy::{make_mixed_cqpp, solve_mixed_cqpp}
-#include <mundy_math/lcp.hpp>              // for mundy::{make_lcp, solve_lcp}
-#include <mundy_math/linear_ops.hpp>       // for mundy::{make_concat_domain_op, make_scaled_op, make_sum_op, ...}
-#include <mundy_math/linear_system.hpp>    // for mundy::{CGConfig, make_cg_inv_op}
-#include <mundy_math/pgd.hpp>              // for mundy::{make_mprgp_step_strategy, PGDConfig, PGDResult, ...}
-#include <mundy_math/residuals.hpp>        // for mundy::LinfNormProjectedGradientResidual
-#include <mundy_math/solver_backends.hpp>  // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
-#include <mundy_mbody/KokkosMbodyMobility.hpp>         // for mundy::mbody::Mobility
+#include <mundy_math/Vector3.hpp>               // for mundy::{cross, perp}
+#include <mundy_math/convex_spaces.hpp>         // for mundy::LowerBoundSpace
+#include <mundy_math/cqpp.hpp>                  // for mundy::{make_mixed_cqpp, solve_mixed_cqpp}
+#include <mundy_math/lcp.hpp>                   // for mundy::{make_lcp, solve_lcp}
+#include <mundy_math/linear_ops.hpp>            // for mundy::{make_concat_domain_op, make_scaled_op, make_sum_op, ...}
+#include <mundy_math/linear_system.hpp>         // for mundy::{CGConfig, make_cg_inv_op}
+#include <mundy_math/pgd.hpp>                   // for mundy::{make_mprgp_step_strategy, PGDConfig, PGDResult, ...}
+#include <mundy_math/residuals.hpp>             // for mundy::LinfNormProjectedGradientResidual
+#include <mundy_math/solver_backends.hpp>       // for mundy::{KokkosBackend, LinearOperator, HasScaledApplyMember}
+#include <mundy_mbody/KokkosMbodyMobility.hpp>  // for mundy::mbody::Mobility
 #include <mundy_mbody/KokkosMbodyPreconditioners.hpp>  // for mundy::mbody::SchurPreconditionerPolicy
 #include <mundy_mbody/KokkosMbodyTypes.hpp>
 #include <mundy_utils/rng.hpp>  // for mundy::make_philox
@@ -1842,8 +1842,8 @@ LengthAngleMax max_displacement(const DisplacementView& displacement, size_t num
 template <typename ExecSpace, typename MobilityOp, typename... Families>
 struct StepData {
   using view_t = Kokkos::View<double*, typename ExecSpace::memory_space>;
-  using unilateral_geometry_t = decltype(make_unilateral_geometry<ExecSpace>(
-      std::declval<const ConstraintIndexMap<Families...>&>(), size_t{}));
+  using unilateral_geometry_t =
+      decltype(make_unilateral_geometry<ExecSpace>(std::declval<const ConstraintIndexMap<Families...>&>(), size_t{}));
 
   ConstraintIndexMap<Families...> index_map;
   size_t num_rods;
@@ -2762,7 +2762,6 @@ double slcp_merit(const StepData<ExecSpace, MobilityOp, Families...>& step,
   return std::max(
       {rows.length / length_tol, rows.angle / angle_tol, moved.length / length_tol, moved.angle / angle_tol});
 }
-
 
 //! \name Sequences of linearizations
 //@{

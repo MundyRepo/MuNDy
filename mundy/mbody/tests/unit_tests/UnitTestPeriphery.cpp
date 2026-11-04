@@ -953,9 +953,9 @@ TEST(Periphery, BodyInSphericalCavityMatchesHappelAndBrenner) {
     const RigidVelocity& scaled = velocities_by_viscosity[1][i];
     EXPECT_LT(norm(viscosity_ratio * scaled.velocity - reference.velocity) / norm(reference.velocity), cfg.tol)
         << "U must scale as 1 / viscosity, order=" << orders[i];
-    EXPECT_LT(norm(viscosity_ratio * scaled.angular_velocity - reference.angular_velocity) /
-                  norm(reference.angular_velocity),
-              cfg.tol)
+    EXPECT_LT(
+        norm(viscosity_ratio * scaled.angular_velocity - reference.angular_velocity) / norm(reference.angular_velocity),
+        cfg.tol)
         << "Omega must scale as 1 / viscosity, order=" << orders[i];
   }
 }

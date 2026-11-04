@@ -239,8 +239,8 @@ void direct_sum_with_lanes(const ExecSpace& space, const size_t num_targets, con
   if (num_targets == 0) {
     return;
   }
-  const DirectSumLanes<typename types::value_type, Interaction, Accumulate> kernel{interaction, accumulate,
-                                                                                 num_targets, num_sources};
+  const DirectSumLanes<typename types::value_type, Interaction, Accumulate> kernel{interaction, accumulate, num_targets,
+                                                                                   num_sources};
   const int vector_length = std::min(Lanes, policy_t::vector_length_max());
   const int team_size =
       std::min(TargetsPerTeam, policy_t(space, 1, 1, vector_length).team_size_max(kernel, Kokkos::ParallelForTag{}));

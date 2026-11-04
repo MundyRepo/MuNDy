@@ -115,17 +115,27 @@ view_t make_points(const size_t n, const double phase) {
 /// \brief The benchmarked variants, in table order.
 enum Variant { kDefault, kPanel1, kPanel2, kPanel4, kPanel8, kFlat, kNumVariants };
 const char* const kVariantNames[kNumVariants] = {"direct_sum (default)", "panels of 1", "panels of 2",
-                                                 "panels of 4", "panels of 8", "flat (no panel)"};
+                                                 "panels of 4",          "panels of 8", "flat (no panel)"};
 
 /// \brief Run variant v once on n points: the full O(n^2) Stokeslet sum, finished before returning.
 void run_variant(const Variant v, const size_t n, const Stokeslet& interaction, const AddTo& accumulate) {
   const exec_space space;
   switch (v) {
-    case kDefault: mundy::direct_sum(space, n, n, interaction, accumulate); break;
-    case kPanel1: mundy::impl::direct_sum_with_panels<1>(space, n, n, interaction, accumulate); break;
-    case kPanel2: mundy::impl::direct_sum_with_panels<2>(space, n, n, interaction, accumulate); break;
-    case kPanel4: mundy::impl::direct_sum_with_panels<4>(space, n, n, interaction, accumulate); break;
-    case kPanel8: mundy::impl::direct_sum_with_panels<8>(space, n, n, interaction, accumulate); break;
+    case kDefault:
+      mundy::direct_sum(space, n, n, interaction, accumulate);
+      break;
+    case kPanel1:
+      mundy::impl::direct_sum_with_panels<1>(space, n, n, interaction, accumulate);
+      break;
+    case kPanel2:
+      mundy::impl::direct_sum_with_panels<2>(space, n, n, interaction, accumulate);
+      break;
+    case kPanel4:
+      mundy::impl::direct_sum_with_panels<4>(space, n, n, interaction, accumulate);
+      break;
+    case kPanel8:
+      mundy::impl::direct_sum_with_panels<8>(space, n, n, interaction, accumulate);
+      break;
     default:
       Kokkos::parallel_for("DirectSum::flat", Kokkos::RangePolicy<exec_space>(space, 0, n),
                            FlatSum{interaction, accumulate, n});
@@ -187,7 +197,7 @@ int main(int argc, char** argv) {
       const AddTo accumulate{view_t("velocities", 3 * n)};
       for (int v = 0; v < kNumVariants; ++v) {
         benches[v].complexityN(n).run(kVariantNames[v] + std::string(", N=") + std::to_string(n),
-                 [&] { run_variant(static_cast<Variant>(v), n, interaction, accumulate); });
+                                      [&] { run_variant(static_cast<Variant>(v), n, interaction, accumulate); });
       }
     }
 

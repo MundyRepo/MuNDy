@@ -275,8 +275,8 @@ void expect_near_reference(const std::vector<double>& actual, const std::vector<
 
 /// \brief Run interaction through every decomposition against the reference.
 template <class DeviceInteraction, class HostInteraction>
-void expect_every_decomposition_matches(const size_t num_targets, const size_t num_sources,
-                                        const size_t num_components, const DeviceInteraction& device_interaction,
+void expect_every_decomposition_matches(const size_t num_targets, const size_t num_sources, const size_t num_components,
+                                        const DeviceInteraction& device_interaction,
                                         const HostInteraction& host_interaction, const double rel_tol) {
   const std::vector<double> reference = serial_reference(num_targets, num_sources, host_interaction);
   const DeviceSpace space;
@@ -307,7 +307,7 @@ TEST(DirectSum, ScalarSumsMatchTheSerialReference) {
   const DeviceView targets = make_points(37, 0.1);
   const DeviceView sources = make_points(53, 0.2);
   expect_every_decomposition_matches(37, 53, 1, InverseDistance<DeviceView>{targets, sources},
-                                  InverseDistance<HostView>{to_host(targets), to_host(sources)}, 1e-14);
+                                     InverseDistance<HostView>{to_host(targets), to_host(sources)}, 1e-14);
 }
 
 TEST(DirectSum, VectorSumsMatchTheSerialReference) {
@@ -315,14 +315,14 @@ TEST(DirectSum, VectorSumsMatchTheSerialReference) {
   const DeviceView sources = make_points(41, 0.4);
   const DeviceView forces = make_points(41, 0.5);
   expect_every_decomposition_matches(29, 41, 3, Stokeslet<DeviceView>{targets, sources, forces},
-                                  Stokeslet<HostView>{to_host(targets), to_host(sources), to_host(forces)}, 1e-14);
+                                     Stokeslet<HostView>{to_host(targets), to_host(sources), to_host(forces)}, 1e-14);
 }
 
 TEST(DirectSum, MatrixSumsMatchTheSerialReference) {
   const DeviceView targets = make_points(10, 0.6);
   const DeviceView sources = make_points(13, 0.7);
   expect_every_decomposition_matches(10, 13, 9, StokesletTensor<DeviceView>{targets, sources},
-                                  StokesletTensor<HostView>{to_host(targets), to_host(sources)}, 1e-14);
+                                     StokesletTensor<HostView>{to_host(targets), to_host(sources)}, 1e-14);
 }
 
 TEST(DirectSum, CustomPassiveScalarSumsMatchTheSerialReference) {
@@ -330,14 +330,14 @@ TEST(DirectSum, CustomPassiveScalarSumsMatchTheSerialReference) {
   const DeviceView targets = make_points(11, 0.15);
   const DeviceView sources = make_points(17, 0.25);
   expect_every_decomposition_matches(11, 17, 2, InverseDistanceDD<DeviceView>{targets, sources},
-                                  InverseDistanceDD<HostView>{to_host(targets), to_host(sources)}, 1e-30);
+                                     InverseDistanceDD<HostView>{to_host(targets), to_host(sources)}, 1e-30);
 }
 
 TEST(DirectSum, SharedPointsSkipTheirOwnPair) {
   // Targets and sources are the same points: the coincident pair contributes 0 through the branch-free guard.
   const DeviceView points = make_points(24, 0.35);
   expect_every_decomposition_matches(24, 24, 1, InverseDistance<DeviceView>{points, points},
-                                  InverseDistance<HostView>{to_host(points), to_host(points)}, 1e-14);
+                                     InverseDistance<HostView>{to_host(points), to_host(points)}, 1e-14);
 }
 
 TEST(DirectSum, PanelsLargerThanTheTargetCount) {
@@ -346,7 +346,7 @@ TEST(DirectSum, PanelsLargerThanTheTargetCount) {
     const DeviceView targets = make_points(num_targets, 0.45);
     const DeviceView sources = make_points(19, 0.55);
     expect_every_decomposition_matches(num_targets, 19, 1, InverseDistance<DeviceView>{targets, sources},
-                                    InverseDistance<HostView>{to_host(targets), to_host(sources)}, 1e-14);
+                                       InverseDistance<HostView>{to_host(targets), to_host(sources)}, 1e-14);
   }
 }
 
@@ -359,8 +359,8 @@ std::vector<double> sums_over_no_sources() {
 }
 
 TEST(DirectSum, NoSourcesGivesZeroSums) {
-  for (const std::vector<double>& sums : {sums_over_no_sources<Panels<4>>(), sums_over_no_sources<LaneTeams<32, 4>>(),
-                                          sums_over_no_sources<Default>()}) {
+  for (const std::vector<double>& sums :
+       {sums_over_no_sources<Panels<4>>(), sums_over_no_sources<LaneTeams<32, 4>>(), sums_over_no_sources<Default>()}) {
     for (const double sum : sums) {
       EXPECT_EQ(sum, 0.0);
     }

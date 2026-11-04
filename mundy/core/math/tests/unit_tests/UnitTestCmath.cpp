@@ -100,9 +100,9 @@ bool same_bits_as_hardware(double a) {
 }
 
 TEST(Cmath, ConstexprSqrtMatchesTheHardwareForDoubles) {
-  for (const double a : {0.0, -0.0, 0x1p-1074, 0x1p-1022, 0x1.fffffffffffffp-1023, 1.0, 0x1.0000000000001p+0,
-                         0x1.fffffffffffffp+1, 4.0, kMax, kInfinity, -1.0, -kInfinity,
-                         std::numeric_limits<double>::quiet_NaN()}) {
+  for (const double a :
+       {0.0, -0.0, 0x1p-1074, 0x1p-1022, 0x1.fffffffffffffp-1023, 1.0, 0x1.0000000000001p+0, 0x1.fffffffffffffp+1, 4.0,
+        kMax, kInfinity, -1.0, -kInfinity, std::numeric_limits<double>::quiet_NaN()}) {
     EXPECT_TRUE(same_bits_as_hardware(a)) << "a = " << a;
   }
 

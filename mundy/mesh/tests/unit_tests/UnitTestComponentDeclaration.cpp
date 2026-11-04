@@ -37,8 +37,8 @@
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/Vector3.hpp>
 #include <mundy_mesh/Aggregate.hpp>
-#include <mundy_mesh/ComponentAccess.hpp>
 #include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/ComponentAccess.hpp>
 #include <mundy_mesh/DeclareComponent.hpp>
 #include <mundy_mesh/DeclarePart.hpp>
 #include <mundy_mesh/FieldComponent.hpp>
@@ -124,16 +124,18 @@ static_assert(component_access_shape_matches_v<Matrix<double, 2, 3>, double, Mat
 static_assert(component_access_shape_matches_v<access::matrix45f, float, Matrix<float, 4, 5>, true, 20>);
 static_assert(component_access_shape_matches_v<Quaternion<double>, double, Quaternion<double>, true, 4>);
 static_assert(component_access_shape_matches_v<AABB<double>, double, AABB<double>, true, 6>);
-static_assert(std::is_same_v<
-              typename impl::field_component_for<canonical_component_access_t<Vector3d>>::template type<double>,
-              Vector3FieldComponent<double>>);
-static_assert(std::is_same_v<
-              typename impl::field_component_for<canonical_component_access_t<Matrix<double, 2, 3>>>::template type<double>,
-              MatrixFieldComponent<double, 2, 3>>);
+static_assert(
+    std::is_same_v<typename impl::field_component_for<canonical_component_access_t<Vector3d>>::template type<double>,
+                   Vector3FieldComponent<double>>);
+static_assert(
+    std::is_same_v<
+        typename impl::field_component_for<canonical_component_access_t<Matrix<double, 2, 3>>>::template type<double>,
+        MatrixFieldComponent<double, 2, 3>>);
 static_assert(std::is_same_v<typename impl::shared_component_for<canonical_component_access_t<Matrix3<double>>>::type,
                              SharedMatrix3Component<double>>);
-static_assert(std::is_same_v<typename impl::shared_component_for<canonical_component_access_t<Matrix<double, 2, 3>>>::type,
-                             SharedMatrixComponent<double, 2, 3>>);
+static_assert(
+    std::is_same_v<typename impl::shared_component_for<canonical_component_access_t<Matrix<double, 2, 3>>>::type,
+                   SharedMatrixComponent<double, 2, 3>>);
 
 }  // namespace
 
@@ -156,26 +158,18 @@ TEST(UnitTestComponentDeclaration, CanonicalComponentAccessDrivesConcreteDeclara
 
   ComponentDeclaration decl(meta_data);
 
-  auto scalar =
-      decl.rank(ELEM_RANK).name("CANONICAL_SCALAR").field<const double&>().tag<CANONICAL_SCALAR>().declare();
-  auto vector = decl.rank(ELEM_RANK)
-                    .name("CANONICAL_VECTOR")
-                    .field<Vector<double, 5>>()
-                    .tag<CANONICAL_VECTOR>()
-                    .declare();
-  auto matrix3 = decl.rank(ELEM_RANK)
-                     .name("CANONICAL_MATRIX3")
-                     .field<Matrix3<double>>()
-                     .tag<CANONICAL_MATRIX3>()
-                     .declare();
+  auto scalar = decl.rank(ELEM_RANK).name("CANONICAL_SCALAR").field<const double&>().tag<CANONICAL_SCALAR>().declare();
+  auto vector =
+      decl.rank(ELEM_RANK).name("CANONICAL_VECTOR").field<Vector<double, 5>>().tag<CANONICAL_VECTOR>().declare();
+  auto matrix3 =
+      decl.rank(ELEM_RANK).name("CANONICAL_MATRIX3").field<Matrix3<double>>().tag<CANONICAL_MATRIX3>().declare();
   auto matrix23 = decl.rank(ELEM_RANK).name("CANONICAL_MATRIX23").field<access::matrix23d>().declare();
   auto quaternion = decl.rank(ELEM_RANK)
                         .name("CANONICAL_QUATERNION")
                         .field<Quaternion<double>>()
                         .tag<CANONICAL_QUATERNION>()
                         .declare();
-  auto aabb =
-      decl.rank(ELEM_RANK).name("CANONICAL_AABB").field<AABB<double>>().tag<CANONICAL_AABB>().declare();
+  auto aabb = decl.rank(ELEM_RANK).name("CANONICAL_AABB").field<AABB<double>>().tag<CANONICAL_AABB>().declare();
 
   static_assert(std::is_same_v<decltype(scalar), TaggedComponent<CANONICAL_SCALAR, ScalarFieldComponent<double>>>);
   static_assert(std::is_same_v<decltype(vector), TaggedComponent<CANONICAL_VECTOR, VectorFieldComponent<double, 5>>>);
@@ -222,8 +216,8 @@ TEST(UnitTestComponentDeclaration, CanonicalComponentAccessDrivesConcreteDeclara
 
   static_assert(
       std::is_same_v<decltype(shared_scalar), TaggedComponent<CANONICAL_SCALAR, SharedScalarComponent<double>>>);
-  static_assert(std::is_same_v<decltype(shared_matrix3),
-                               TaggedComponent<CANONICAL_MATRIX3, SharedMatrix3Component<double>>>);
+  static_assert(
+      std::is_same_v<decltype(shared_matrix3), TaggedComponent<CANONICAL_MATRIX3, SharedMatrix3Component<double>>>);
   static_assert(std::is_same_v<decltype(shared_matrix23), SharedMatrixComponent<double, 2, 3>>);
 }
 
@@ -494,19 +488,12 @@ TEST(UnitTestComponentDeclaration, ComponentDeclarationFieldPath) {
   auto vel = decl.role(TRANSIENT).rank(NODE_RANK).name("VELOCITY").field<Vector3d>().tag<VELOCITY>().declare();
 
   // Backend-first field path: field access chosen first, remaining metadata set after.
-  auto ang = decl.field<Vector3d>()
-                 .tag<ANGULAR_VELOCITY>()
-                 .role(TRANSIENT)
-                 .rank(NODE_RANK)
-                 .name("ANGULAR_VELOCITY")
-                 .declare();
+  auto ang =
+      decl.field<Vector3d>().tag<ANGULAR_VELOCITY>().role(TRANSIENT).rank(NODE_RANK).name("ANGULAR_VELOCITY").declare();
 
   PartDeclaration part_decl(meta_data);
-  stk::mesh::Part& node_part = part_decl.name("SPHERE_NODES")
-                                   .rank(NODE_RANK)
-                                   .put_component(vel, nullptr)
-                                   .put_component(ang, nullptr)
-                                   .declare();
+  stk::mesh::Part& node_part =
+      part_decl.name("SPHERE_NODES").rank(NODE_RANK).put_component(vel, nullptr).put_component(ang, nullptr).declare();
 
   auto bulk_data_ptr = builder.create(meta_data_ptr);
   stk::mesh::BulkData& bulk_data = *bulk_data_ptr;
@@ -539,8 +526,7 @@ TEST(UnitTestComponentDeclaration, ComponentDeclarationSharedPath) {
   ComponentDeclaration decl(meta_data);
 
   // Backend-first shared path: .shared<A>(v).rank(r).name(n).tag<T>().declare()
-  auto drag =
-      decl.shared<double>(0.47).rank(ELEM_RANK).name("drag_coeff").tag<DRAG_COEFFICIENT>().declare();
+  auto drag = decl.shared<double>(0.47).rank(ELEM_RANK).name("drag_coeff").tag<DRAG_COEFFICIENT>().declare();
 
   // Name-first shared path: .rank(r).name(n).shared<A>(v).declare()
   auto radius = decl.rank(ELEM_RANK).name("sphere_radius").shared<double>(1.5).declare();
@@ -578,16 +564,16 @@ TEST(UnitTestComponentDeclaration, CompatibleNonDefaultOutputTypeIsAcceptedForFi
   // FULL_TENSOR_12 has 3 scalars — same as Vector3d — so our scalar-count check accepts it even though
   // it is not the default output type for this access shape. SCALAR (1 scalar) must still be rejected.
   EXPECT_NO_THROW((void)decl.rank(NODE_RANK)
-                             .name("TENSOR12_OUTPUT_FIELD")
-                             .field<Vector3d>()
-                             .output_type(stk::io::FieldOutputType::FULL_TENSOR_12)
-                             .declare());
+                      .name("TENSOR12_OUTPUT_FIELD")
+                      .field<Vector3d>()
+                      .output_type(stk::io::FieldOutputType::FULL_TENSOR_12)
+                      .declare());
 
   EXPECT_THROW((void)decl.rank(NODE_RANK)
-                          .name("BAD_SCALAR_OUTPUT_FIELD")
-                          .field<Vector3d>()
-                          .output_type(stk::io::FieldOutputType::SCALAR)
-                          .declare(),
+                   .name("BAD_SCALAR_OUTPUT_FIELD")
+                   .field<Vector3d>()
+                   .output_type(stk::io::FieldOutputType::SCALAR)
+                   .declare(),
                std::invalid_argument);
 }
 

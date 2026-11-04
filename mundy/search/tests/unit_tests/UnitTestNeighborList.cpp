@@ -1069,7 +1069,7 @@ void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double
                   .build(bulk);
 
   const Kokkos::View<TestAABB*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>> boxes_host(boxes.data(),
-                                                                                                      boxes.size());
+                                                                                                       boxes.size());
   const auto boxes_dev = Kokkos::create_mirror_view_and_copy(TestMemSpace{}, boxes_host);
   bool bad = false;
   Kokkos::LOr<bool> reducer(bad);

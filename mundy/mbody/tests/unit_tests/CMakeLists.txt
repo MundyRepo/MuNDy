@@ -22,7 +22,7 @@
 # as it produces more logical error messages when a test fails.
 if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   message(STATUS "MundyMBody: Setting up unit tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
-  
+
   mundy_tribits_add_executable_and_test(
     UnitTestKokkosMbody
     SOURCES UnitTestKokkosMbody.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}

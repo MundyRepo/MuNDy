@@ -24,10 +24,10 @@
 #include <Kokkos_Core.hpp>
 
 // C++ core
-#include <cmath>      // for std::ldexp, std::sqrt
-#include <cstdint>    // for uint64_t
-#include <limits>     // for std::numeric_limits
-#include <stdexcept>  // for std::runtime_error
+#include <cmath>        // for std::ldexp, std::sqrt
+#include <cstdint>      // for uint64_t
+#include <limits>       // for std::numeric_limits
+#include <stdexcept>    // for std::runtime_error
 #include <type_traits>  // for std::remove_cvref_t
 
 // Mundy
@@ -390,9 +390,9 @@ TEST(LinearSystem, NotPositiveDefiniteStopsEarly) {
   EXPECT_THROW(cg_inv.apply(b, out), std::runtime_error);
 }
 
-// On A = D^T M D, whose workspace holds f = D x and u = M f, every solve ends on an apply at the x it returns: converged
-// from a cold start, converged in its start from the guess 2 x* (alpha = 1/2 exactly, as b is A's own apply at x*, so
-// x0 = x*), capped, and with no iteration from a rescaled guess.
+// On A = D^T M D, whose workspace holds f = D x and u = M f, every solve ends on an apply at the x it returns:
+// converged from a cold start, converged in its start from the guess 2 x* (alpha = 1/2 exactly, as b is A's own apply
+// at x*, so x0 = x*), capped, and with no iteration from a rescaled guess.
 TEST(LinearSystem, SolvesEndOnAnApplyAtTheirSolution) {
   const Matrix3d D{2.0, 0.5, 0.0,  //
                    0.0, 1.0, 0.5,  //

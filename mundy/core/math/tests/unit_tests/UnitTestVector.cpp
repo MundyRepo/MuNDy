@@ -1723,7 +1723,6 @@ TYPED_TEST(VectorSingleTypeTest, ViewFactoryReturnTypeContract) {
 }
 //@}
 
-
 //! \name Kokkos reductions
 //@{
 

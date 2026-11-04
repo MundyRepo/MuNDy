@@ -230,8 +230,7 @@ class MatrixMarketReader {
     std::transform(banner.begin(), banner.end(), banner.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     const std::vector<std::string_view> words = split_words(banner);
-    MUNDY_THROW_REQUIRE(words.size() == 5 && words[0] == "%%matrixmarket" && words[1] == "matrix",
-                        std::runtime_error,
+    MUNDY_THROW_REQUIRE(words.size() == 5 && words[0] == "%%matrixmarket" && words[1] == "matrix", std::runtime_error,
                         mundy::sink() << "read_matrix_market: " << where() << ": " << filename_
                                       << " does not start with a Matrix Market banner such as '"
                                       << std::string(matrix_market_banner) << "'.");
@@ -311,8 +310,8 @@ class MatrixMarketReader {
 
   std::string filename_;
   std::ifstream file_;
-  std::string line_;       //!< The current line
-  size_t position_ = 0;    //!< Where the next token starts in line_
+  std::string line_;     //!< The current line
+  size_t position_ = 0;  //!< Where the next token starts in line_
   size_t line_number_ = 0;
   size_t rows_ = 0;
   size_t cols_ = 0;

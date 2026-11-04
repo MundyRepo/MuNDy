@@ -63,8 +63,7 @@ namespace mesh {
   template <typename... Args>                                                                                          \
   MUNDY_REQUIRES((impl::is_math_expr_arg_v<Args> || ...) ||                                                            \
                  (std::is_invocable_v<const impl::ExprClassName##Func&, const Args&...>))                              \
-  KOKKOS_INLINE_FUNCTION constexpr auto                                                                                \
-  FuncName(const Args&... args) {                                                                                      \
+  KOKKOS_INLINE_FUNCTION constexpr auto FuncName(const Args&... args) {                                                \
     if constexpr ((impl::is_math_expr_arg_v<Args> || ...)) {                                                           \
       return impl::apply_expr_impl(impl::ExprClassName##Func{}, args...);                                              \
     } else {                                                                                                           \

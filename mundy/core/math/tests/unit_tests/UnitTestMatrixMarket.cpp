@@ -59,9 +59,12 @@ namespace {
 template <class Scalar>
 std::vector<Scalar> hard_values() {
   using limits = std::numeric_limits<Scalar>;
-  return {Scalar(0.1),     Scalar(-1.2345678901234566e-07), Scalar(3e-17),        Scalar(1) / Scalar(3),
-          limits::min(),   limits::denorm_min(),            Scalar(-0.0),         limits::max(),
-          limits::lowest(), limits::infinity(),             -limits::infinity(), limits::quiet_NaN()};
+  return {Scalar(0.1),         Scalar(-1.2345678901234566e-07),
+          Scalar(3e-17),       Scalar(1) / Scalar(3),
+          limits::min(),       limits::denorm_min(),
+          Scalar(-0.0),        limits::max(),
+          limits::lowest(),    limits::infinity(),
+          -limits::infinity(), limits::quiet_NaN()};
 }
 
 /// \brief Whether a and b have the same bits; every NaN matches every NaN.

@@ -41,7 +41,7 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_math/NumTraits.hpp>         // for mundy::NumTraits, mundy::is_autodiff_scalar_v
+#include <mundy_math/NumTraits.hpp>        // for mundy::NumTraits, mundy::is_autodiff_scalar_v
 #include <mundy_math/impl/cmath_impl.hpp>  // for mundy::impl::{bit_cast, constexpr_sqrt, constexpr_rsqrt}
 
 namespace mundy {

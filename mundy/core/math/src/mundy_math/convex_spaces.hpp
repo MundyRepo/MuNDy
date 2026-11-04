@@ -30,10 +30,10 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_math/NumTraits.hpp>                 // for mundy::NumTraits
-#include <mundy_math/cmath.hpp>                     // for mundy::max, mundy::min
+#include <mundy_math/NumTraits.hpp>                // for mundy::NumTraits
+#include <mundy_math/cmath.hpp>                    // for mundy::max, mundy::min
 #include <mundy_math/impl/convex_spaces_impl.hpp>  // for mundy::impl::on_bound
-#include <mundy_math/solver_backends.hpp>           // for mundy::BackendVectorExpr and the expression operands
+#include <mundy_math/solver_backends.hpp>          // for mundy::BackendVectorExpr and the expression operands
 
 namespace mundy {
 

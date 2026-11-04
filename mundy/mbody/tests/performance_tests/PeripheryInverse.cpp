@@ -56,7 +56,7 @@
 #include <stk_util/parallel/Parallel.hpp>
 
 // Mundy
-#include <MundyMath_config.hpp>                 // for HAVE_MUNDYMATH_{BELOS,TPETRA,KOKKOSKERNELS}
+#include <MundyMath_config.hpp>                // for HAVE_MUNDYMATH_{BELOS,TPETRA,KOKKOSKERNELS}
 #include <mundy_math/GaussLegendreSphere.hpp>  // for mundy::gauss_legendre_sphere_rule
 #include <mundy_mbody/Periphery.hpp>           // for PeripheryT, InverseMethod
 
@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
   {
-     mundy::mbody::Options opts;
+    mundy::mbody::Options opts;
     for (int i = 1; i < argc; ++i) {
       if (std::string(argv[i]) == "--simple") {
         opts.simple = true;

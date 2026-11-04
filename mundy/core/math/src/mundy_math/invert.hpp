@@ -34,8 +34,9 @@
 
 // External
 #include <KokkosKernels_config.h>  // for KOKKOSKERNELS_ENABLE_TPL_MAGMA
-#include <KokkosLapack_gesv.hpp>   // for KokkosLapack::gesv
-#include <Kokkos_Core.hpp>         // for Kokkos::View, Kokkos::parallel_for, Kokkos::parallel_reduce, Kokkos::isfinite
+
+#include <KokkosLapack_gesv.hpp>  // for KokkosLapack::gesv
+#include <Kokkos_Core.hpp>        // for Kokkos::View, Kokkos::parallel_for, Kokkos::parallel_reduce, Kokkos::isfinite
 
 // C++ core
 #include <stdexcept>    // for std::invalid_argument, std::runtime_error
@@ -106,9 +107,9 @@ void invert(const ExecSpace& space, const MatrixView& matrix, const InverseView&
                 "invert: the views must be accessible from the execution space.");
 
   const size_t n = matrix.extent(0);
-  MUNDY_THROW_REQUIRE(matrix.extent(1) == n, std::invalid_argument,
-                      mundy::sink() << "invert: matrix is " << matrix.extent(0) << " x " << matrix.extent(1)
-                                    << ", not square.");
+  MUNDY_THROW_REQUIRE(
+      matrix.extent(1) == n, std::invalid_argument,
+      mundy::sink() << "invert: matrix is " << matrix.extent(0) << " x " << matrix.extent(1) << ", not square.");
   MUNDY_THROW_REQUIRE(matrix_inverse.extent(0) == n && matrix_inverse.extent(1) == n, std::invalid_argument,
                       mundy::sink() << "invert: matrix_inverse is " << matrix_inverse.extent(0) << " x "
                                     << matrix_inverse.extent(1) << ", but matrix is " << n << " x " << n << ".");

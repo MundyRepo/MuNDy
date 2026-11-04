@@ -588,7 +588,6 @@ TYPED_TEST(MatrixPairwiseTypeTest, NonSquareMatrixVectorAndMatrixMatrixMixedType
 
 //@}
 
-
 //! \name Kokkos reductions
 //@{
 

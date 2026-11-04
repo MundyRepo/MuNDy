@@ -54,8 +54,8 @@
 #include <limits>
 #include <numeric>
 #include <stdexcept>
-#include <type_traits>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -540,7 +540,7 @@ dense_matrix_t make_dense_laplacian(const LaplacianKokkosOp& op) {
 /// of each unit eigenvector, in the same order.
 template <class AlphaArray, class BetaArray>
 std::vector<double> eigen_of_t(const AlphaArray& alpha, const BetaArray& beta, size_t k,
-                                      std::vector<double>* last = nullptr) {
+                               std::vector<double>* last = nullptr) {
   using real = long double;
   constexpr real precision = std::numeric_limits<real>::epsilon();
   std::vector<real> d(k), e(k, 0.0L), z(k, 0.0L);  // z: the last row of the eigenvector matrix
@@ -689,8 +689,7 @@ auto view_Bv(size_t n) {
 template <size_t N, size_t K, bool Preconditioned = false>
 KOKKOS_INLINE_FUNCTION auto mundy_state() {
   return make_lanczos_state(Vector<double, N>{}, Vector<double, N>{}, Vector<double, N>{},
-                            mundy_Bv<N, Preconditioned>(),
-                            Kokkos::Array<double, 4 * K>{});
+                            mundy_Bv<N, Preconditioned>(), Kokkos::Array<double, 4 * K>{});
 }
 
 /// \brief The same with an estimate vector, or NoVector, for each end, and a basis; all three are held by reference.
@@ -698,9 +697,9 @@ template <size_t N, size_t K, bool Preconditioned = false, class Largest, class 
 KOKKOS_INLINE_FUNCTION auto mundy_state(Largest&& largest, Smallest&& smallest, Basis&& basis) {
   constexpr size_t e = !is_no_vector_v<Largest> + !is_no_vector_v<Smallest>;
   return make_lanczos_state(Vector<double, N>{}, Vector<double, N>{}, Vector<double, N>{},
-                            mundy_Bv<N, Preconditioned>(),
-                            Kokkos::Array<double, (4 + e) * K>{}, std::forward<Largest>(largest),
-                            std::forward<Smallest>(smallest), std::forward<Basis>(basis));
+                            mundy_Bv<N, Preconditioned>(), Kokkos::Array<double, (4 + e) * K>{},
+                            std::forward<Largest>(largest), std::forward<Smallest>(smallest),
+                            std::forward<Basis>(basis));
 }
 
 /// \brief A KokkosBackend state of size n with room for k iterations, without estimate vectors.
@@ -791,7 +790,7 @@ struct LanczosKernelColumn {
 
 /// \brief Entity e's two-end Lanczos solve of (e + 1) L from the cold start, with Kokkos::Array scalars and an
 /// estimate of the largest end formed over a basis of 8.
-void solve_lanczos_ends_in_kernel(const Kokkos::View<double* [LanczosKernelColumn::count], memory_space_t>& out) {
+void solve_lanczos_ends_in_kernel(const Kokkos::View<double * [LanczosKernelColumn::count], memory_space_t>& out) {
   using column = LanczosKernelColumn;
   constexpr size_t N = 4;
   constexpr size_t K = 16;
@@ -979,8 +978,7 @@ TEST(Eigenvalues, PowerLimits) {
     SCOPED_TRACE("no iterations");
     auto problem = make_eigen_problem<mm_backend_t>(laplacian<3>(1.0));
     auto state = make_power_state(Vector3d{1.0, 0.3, -0.2}, Vector3d{}, Vector3d{});
-    const auto result =
-        solve_eigen_problem(problem, make_power_strategy(PowerConfig<double>{.max_iters = 0}), state);
+    const auto result = solve_eigen_problem(problem, make_power_strategy(PowerConfig<double>{.max_iters = 0}), state);
     EXPECT_EQ(result.num_iters, 0u);
     EXPECT_TRUE(std::isnan(result.residual));
     EXPECT_TRUE(std::isnan(result.eigenvalue));
@@ -992,9 +990,9 @@ TEST(Eigenvalues, PowerLimits) {
     const Matrix3d D{2.0, 0.5, 0.0,  //
                      0.0, 1.0, 0.5,  //
                      0.0, 0.0, 1.5};
-    const Matrix3d M{2.0, -1.0, 0.0,   //
-                     -1.0, 2.0, -1.0,  //
-                     0.0, -1.0, 2.0};
+    const Matrix3d M{2.0,  -1.0, 0.0,   //
+                     -1.0, 2.0,  -1.0,  //
+                     0.0,  -1.0, 2.0};
     const auto A = make_quadratic_form<mm_backend_t>(transpose(D), M, D);
     for (const unsigned max_iters : {3u, 2000u}) {
       SCOPED_TRACE(::testing::Message() << "max_iters " << max_iters);
@@ -1042,15 +1040,14 @@ TEST(Eigenvalues, PowerEndpoints) {
       const double tol = 1e-12;
       const double gap = laplacian_eigenvalue(n, n) - laplacian_eigenvalue(n, n - 1);
       const double residual = tol + (1.5 * n + 3) * eps * 2.0 * norm_L_bound;
-      const double overlap_floor =
-          (residual / gap) * (residual / gap) +
-          (1.5 * n + 3 + std::sqrt(2.0) * (3.0 * Kokkos::numbers::pi_v<double> * n + 4)) * eps;
+      const double overlap_floor = (residual / gap) * (residual / gap) +
+                                   (1.5 * n + 3 + std::sqrt(2.0) * (3.0 * Kokkos::numbers::pi_v<double> * n + 4)) * eps;
       ASSERT_TRUE(bounds.largest.converged);
       ASSERT_TRUE(bounds.smallest.converged);
-      EXPECT_NEAR(bounds.largest.eigenvalue,
-                  sign > 0.0 ? laplacian_eigenvalue(n, n) : -laplacian_eigenvalue(n, 1), tol);
-      EXPECT_NEAR(bounds.smallest.eigenvalue,
-                  sign > 0.0 ? laplacian_eigenvalue(n, 1) : -laplacian_eigenvalue(n, n), tol);
+      EXPECT_NEAR(bounds.largest.eigenvalue, sign > 0.0 ? laplacian_eigenvalue(n, n) : -laplacian_eigenvalue(n, 1),
+                  tol);
+      EXPECT_NEAR(bounds.smallest.eigenvalue, sign > 0.0 ? laplacian_eigenvalue(n, 1) : -laplacian_eigenvalue(n, n),
+                  tol);
       EXPECT_NEAR(dominant_overlap, 1.0, overlap_floor);
       EXPECT_NEAR(opposite_overlap, 1.0, overlap_floor);
     };
@@ -1080,10 +1077,10 @@ TEST(Eigenvalues, PowerEndpoints) {
         const auto bounds = solve_eigen_bounds(problem, make_power_strategy(config), dominant, opposite);
         ASSERT_TRUE(bounds.largest.converged);
         ASSERT_TRUE(bounds.smallest.converged);
-        EXPECT_NEAR(bounds.largest.eigenvalue,
-                    sign > 0.0 ? laplacian_eigenvalue(n, n) : -laplacian_eigenvalue(n, 1), config.tol);
-        EXPECT_NEAR(bounds.smallest.eigenvalue,
-                    sign > 0.0 ? laplacian_eigenvalue(n, 1) : -laplacian_eigenvalue(n, n), config.tol);
+        EXPECT_NEAR(bounds.largest.eigenvalue, sign > 0.0 ? laplacian_eigenvalue(n, n) : -laplacian_eigenvalue(n, 1),
+                    config.tol);
+        EXPECT_NEAR(bounds.smallest.eigenvalue, sign > 0.0 ? laplacian_eigenvalue(n, 1) : -laplacian_eigenvalue(n, n),
+                    config.tol);
       };
       check(op, "matrix-free operator");
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
@@ -1209,8 +1206,8 @@ TEST(Eigenvalues, ColdStart) {
 
     // Power from zero
     auto power = make_power_state(Vector<double, N>::zeros(), Vector<double, N>{}, Vector<double, N>{});
-    const auto power_result = solve_eigen_problem(
-        problem, make_power_strategy(PowerConfig<double>{.max_iters = 200, .tol = 1e-12}), power);
+    const auto power_result =
+        solve_eigen_problem(problem, make_power_strategy(PowerConfig<double>{.max_iters = 200, .tol = 1e-12}), power);
     EXPECT_TRUE(power_result.converged) << power_result;
     EXPECT_NEAR(power_result.eigenvalue, 2.0, 1e-12);
 
@@ -1222,12 +1219,12 @@ TEST(Eigenvalues, ColdStart) {
     const unsigned k_smallest = lanczos_result.smallest.num_iters;
     EXPECT_TRUE(lanczos_result.largest.converged) << lanczos_result;
     EXPECT_TRUE(lanczos_result.smallest.converged) << lanczos_result;
-    EXPECT_NEAR(lanczos_result.largest.eigenvalue, 2.0,
-                lanczos_result.largest.residual +
-                    k_largest * eps * norm_of_t(lanczos.alpha(), lanczos.beta(), k_largest));
-    EXPECT_NEAR(lanczos_result.smallest.eigenvalue, 1.0,
-                lanczos_result.smallest.residual +
-                    k_smallest * eps * norm_of_t(lanczos.alpha(), lanczos.beta(), k_smallest));
+    EXPECT_NEAR(
+        lanczos_result.largest.eigenvalue, 2.0,
+        lanczos_result.largest.residual + k_largest * eps * norm_of_t(lanczos.alpha(), lanczos.beta(), k_largest));
+    EXPECT_NEAR(
+        lanczos_result.smallest.eigenvalue, 1.0,
+        lanczos_result.smallest.residual + k_smallest * eps * norm_of_t(lanczos.alpha(), lanczos.beta(), k_smallest));
 
     // Control: from +-1 entries summing to zero, orthogonal to the all-ones vector, both find the eigenvalue 1
     Vector<double, N> alternating;
@@ -1382,8 +1379,8 @@ TEST(Eigenvalues, LanczosIterates) {
 // duplicate Ritz values, two eigenvalues within rounding of the top end's theta, while the bottom end is still
 // measured.
 TEST(Eigenvalues, LanczosCertificates) {
-  const auto expect_certified = [](const auto& state, const EigenBounds<double>& result, const auto& spectrum,
-                                   size_t n, double construction, double tol) {
+  const auto expect_certified = [](const auto& state, const EigenBounds<double>& result, const auto& spectrum, size_t n,
+                                   double construction, double tol) {
     for (const bool largest : {true, false}) {
       SCOPED_TRACE(largest ? "largest end" : "smallest end");
       const auto& end = largest ? result.largest : result.smallest;
@@ -1568,9 +1565,8 @@ TEST(Eigenvalues, LanczosInvariantStop) {
 
   {
     SCOPED_TRACE("m = 2");
-    const auto [result, norm_T, largest, smallest, alpha, beta] =
-        solve.template operator()<3>(rotated<3>(Vector3d{1.0, 2.0, 3.0}),
-                                     rotated_eigenvector<3>(0) + rotated_eigenvector<3>(2));
+    const auto [result, norm_T, largest, smallest, alpha, beta] = solve.template operator()<3>(
+        rotated<3>(Vector3d{1.0, 2.0, 3.0}), rotated_eigenvector<3>(0) + rotated_eigenvector<3>(2));
     constexpr size_t N = 3;
     const double floor = 2 * eps * norm_T;
     const double gap = 1.0;  // to the eigenvalue 2
@@ -1776,8 +1772,8 @@ TEST(Eigenvalues, LanczosRitzVectors) {
     ASSERT_TRUE(result.largest.converged && result.smallest.converged) << result;
     ASSERT_NE(result.largest.num_iters, result.smallest.num_iters) << "the ends must stop at different iterations";
     const double rounding = N * stop_of(result) * eps * norm_T + construction_error(spectrum);
-    const double orthogonality = stop_of(result) * eps * norm_T /
-                                 std::min(result.largest.residual, result.smallest.residual);
+    const double orthogonality =
+        stop_of(result) * eps * norm_T / std::min(result.largest.residual, result.smallest.residual);
     for (const bool largest : {true, false}) {
       SCOPED_TRACE(largest ? "largest end" : "smallest end");
       const auto& end = largest ? result.largest : result.smallest;
@@ -1797,9 +1793,8 @@ TEST(Eigenvalues, LanczosRitzVectors) {
     auto smallest = Vector<double, N>::zeros();
     mundy_basis_t<N, K> basis{};
     auto state = mundy_state<N, K>(largest, smallest, basis);
-    const auto result =
-        solve_eigen_problem(make_eigen_problem<mm_backend_t>(Matrix<double, N, N>(R)), make_lanczos_strategy(config),
-                            state);
+    const auto result = solve_eigen_problem(make_eigen_problem<mm_backend_t>(Matrix<double, N, N>(R)),
+                                            make_lanczos_strategy(config), state);
     expect_ritz_vectors(result, norm_of_t(state.alpha(), state.beta(), stop_of(result)), largest, smallest);
   }
   {
@@ -1932,10 +1927,10 @@ TEST(Eigenvalues, LanczosBasisCapacity) {
       using vector_t = std::remove_cvref_t<decltype(x)>;
       return dot(x, y) < 0.0 ? vector_t(-x) : vector_t(x);
     };
-    expect_close(std::tuple{std::get<0>(kokkos_reference),
-                            signed_like(std::get<1>(kokkos_reference), std::get<1>(reference)),
-                            signed_like(std::get<2>(kokkos_reference), std::get<2>(reference))},
-                 reference, drift);
+    expect_close(
+        std::tuple{std::get<0>(kokkos_reference), signed_like(std::get<1>(kokkos_reference), std::get<1>(reference)),
+                   signed_like(std::get<2>(kokkos_reference), std::get<2>(reference))},
+        reference, drift);
   };
   check.template operator()<false>(false);
   check.template operator()<false>(true);
@@ -2058,9 +2053,9 @@ TEST(Eigenvalues, LanczosEstimateScale) {
     SCOPED_TRACE("subnormal");
     const auto [subnormal, subnormal_estimate, subnormal_norm] = solve(-1060);
     ASSERT_TRUE(subnormal.largest.converged) << subnormal;
-    EXPECT_LE(std::abs(subnormal.largest.eigenvalue - spectrum[N - 1]),
-              subnormal.largest.residual + subnormal.largest.num_iters * eps * subnormal_norm +
-                  construction_error(spectrum));
+    EXPECT_LE(
+        std::abs(subnormal.largest.eigenvalue - spectrum[N - 1]),
+        subnormal.largest.residual + subnormal.largest.num_iters * eps * subnormal_norm + construction_error(spectrum));
   }
 }
 
@@ -2266,7 +2261,7 @@ TEST(Eigenvalues, LanczosInKernel) {
   using column = LanczosKernelColumn;
   constexpr size_t N = 4;
   constexpr size_t num_entities = 8;
-  Kokkos::View<double* [column::count], memory_space_t> out("out", num_entities);
+  Kokkos::View<double * [column::count], memory_space_t> out("out", num_entities);
   solve_lanczos_ends_in_kernel(out);
   const auto host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, out);
   for (size_t e = 0; e < num_entities; ++e) {
@@ -2342,8 +2337,8 @@ TEST(Eigenvalues, LanczosRejections) {
   {
     SCOPED_TRACE("a scalar array short of max_iters");
     const auto strategy = make_lanczos_strategy(LanczosConfig<double>{.max_iters = 6});
-    auto short_array = make_lanczos_state(Vector3d{}, Vector3d{}, Vector3d{}, NoVector{},
-                                          Kokkos::Array<double, 4 * 6 - 1>{});
+    auto short_array =
+        make_lanczos_state(Vector3d{}, Vector3d{}, Vector3d{}, NoVector{}, Kokkos::Array<double, 4 * 6 - 1>{});
     EXPECT_THROW(strategy.initialize(problem, short_array), std::invalid_argument);
     auto kokkos_problem = make_eigen_problem<kokkos_backend_t>(LaplacianKokkosOp{3, 1.0});
     auto short_view = make_lanczos_state(view_t("v", 3), view_t("Bv_prev", 3), view_t("Av", 3), NoVector{},

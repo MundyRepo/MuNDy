@@ -319,9 +319,9 @@ TEST(LinearOperators, ShiftedOpWorksWithAWorkspaceOnlyChild) {
 }
 
 TEST(LinearOperators, ShiftedOpMatchesAMinusSigmaIdentityOnMundyMathBackend) {
-  const Matrix3d A{2.0, -1.0, 0.5,   //
-                   -1.0, 3.0, 0.25,  //
-                   0.5, 0.25, -4.0};
+  const Matrix3d A{2.0,  -1.0, 0.5,   //
+                   -1.0, 3.0,  0.25,  //
+                   0.5,  0.25, -4.0};
   constexpr double sigma = 1.75;
   const auto shifted = make_shifted_op<MundyMathBackend>(sigma, A);
 

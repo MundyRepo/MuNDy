@@ -149,7 +149,7 @@ void gauss_legendre_sphere_rule(unsigned n, PointsView& points, WeightsView& wei
   Kokkos::resize(points, 3 * n * m);
   Kokkos::resize(weights, n * m);
   Kokkos::View<impl::SinCos<DoubleDouble>*, memory_space> longitudes("mundy::gauss_legendre_sphere_rule::longitudes",
-                                                                      m);
+                                                                     m);
   Kokkos::parallel_for(
       "mundy::gauss_legendre_sphere_rule::longitudes", Kokkos::RangePolicy<execution_space>(0, m),
       KOKKOS_LAMBDA(const unsigned k) { longitudes(k) = impl::sin_cos_of_turn_fraction<DoubleDouble>(k, m); });

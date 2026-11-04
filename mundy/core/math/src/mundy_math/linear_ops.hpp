@@ -514,8 +514,7 @@ class ScaledOp {
 
    public:
     KOKKOS_INLINE_FUNCTION
-    explicit Workspace(OpWorkspace&& op_workspace)
-        : base_t(std::forward<OpWorkspace>(op_workspace)) {
+    explicit Workspace(OpWorkspace&& op_workspace) : base_t(std::forward<OpWorkspace>(op_workspace)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {
@@ -601,8 +600,7 @@ class ShiftedOp {
 
    public:
     KOKKOS_INLINE_FUNCTION
-    explicit Workspace(OpWorkspace&& op_workspace)
-        : base_t(std::forward<OpWorkspace>(op_workspace)) {
+    explicit Workspace(OpWorkspace&& op_workspace) : base_t(std::forward<OpWorkspace>(op_workspace)) {
     }
 
     KOKKOS_INLINE_FUNCTION Backend backend() const {

@@ -75,7 +75,7 @@ void basic_usage_test() {
   using HostEntityPool = NgpEntityPoolT<Kokkos::HostSpace, long int>;
   HostEntityPool node_pool(bulk_data, stk::topology::NODE_RANK);       // Size 0. Capacity 0.
   HostEntityPool elem_pool(bulk_data, stk::topology::ELEM_RANK, 100);  // Size 0. Capacity 100.
-  node_pool.reserve(100);                                             // Size 0. Capacity 100.
+  node_pool.reserve(100);                                              // Size 0. Capacity 100.
   EXPECT_EQ(node_pool.size(), 0);
   EXPECT_EQ(node_pool.capacity(), 100);
   EXPECT_EQ(elem_pool.size(), 0);

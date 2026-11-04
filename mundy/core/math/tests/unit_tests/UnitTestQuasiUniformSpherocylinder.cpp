@@ -19,12 +19,13 @@
 // @HEADER
 
 /// \file UnitTestQuasiUniformSpherocylinder.cpp
-/// \brief QuasiUniformSpherocylinder and quasi_uniform_spherocylinder_rule (QuasiUniformSpherocylinder.hpp) against exact
-/// spherocylinder integrals, high-precision references, and the rule's layout.
+/// \brief QuasiUniformSpherocylinder and quasi_uniform_spherocylinder_rule (QuasiUniformSpherocylinder.hpp) against
+/// exact spherocylinder integrals, high-precision references, and the rule's layout.
 ///
 /// Anchors:
 ///   - Exact surface area 2 pi (L + 2), and analytic monomial moments through degree two for unit radius and
-///     cylindrical length L. The quasi-uniform rule converges algebraically rather than integrating polynomials exactly.
+///     cylindrical length L. The quasi-uniform rule converges algebraically rather than integrating polynomials
+///     exactly.
 ///   - 30-digit values of a cap point and weight for Ntheta = 8 and 37, L = 4 (the latter crosses a Fibonacci block).
 ///   - Non-polynomial integrands: int exp(z) dA = 4 pi sinh(1 + L/2) (smooth) and
 ///     int max(0, x, x cos t + y sin t) dA = (2L + pi) (1 + sin(t/2)) for 0 <= t <= pi (a kink).
@@ -63,7 +64,7 @@ static_assert(QuasiUniformSpherocylinder<double, 8, 0.0>::num_cylinder_rings == 
 static_assert(QuasiUniformSpherocylinder<double, 8, 4.0>::points()[1] == 0.0,
               "The first point of an unstaggered cylinder ring lies at theta = 0.");
 static_assert(QuasiUniformSpherocylinder<double, 8, 4.0>::integrate([](double, double, double) { return 1.0; }) >
-                  12.0 * Kokkos::numbers::pi_v<double> - 1e-13 &&
+                      12.0 * Kokkos::numbers::pi_v < double > -1e-13 &&
                   QuasiUniformSpherocylinder<double, 8, 4.0>::integrate([](double, double, double) { return 1.0; }) <
                       12.0 * Kokkos::numbers::pi_v<double> + 1e-13,
               "integrate is a constant expression and the surface area is exact to rounding.");
@@ -85,7 +86,7 @@ double monomial_spherocylinder_integral(int a, int b, int c, double L) {
 /// \brief Expect the Ntheta-resolution rule to integrate low-degree monomials with second-order accuracy.
 template <class Scalar>
 void expect_accurate_for_polynomials(const Scalar* points, const Scalar* weights, unsigned ntheta, double L,
-                                    double tolerance) {
+                                     double tolerance) {
   const int max_degree = 2;
   const unsigned nz = impl::compute_num_cylinder_rings(ntheta, L);
   const unsigned ncap = impl::compute_num_cap_points(ntheta);
@@ -95,8 +96,8 @@ void expect_accurate_for_polynomials(const Scalar* points, const Scalar* weights
       for (int c = 0; a + b + c <= max_degree; ++c) {
         double sum = 0.0;
         for (unsigned i = 0; i < num_points; ++i) {
-          sum += weights[i] * std::pow(points[3 * i], a) * std::pow(points[3 * i + 1], b) *
-                 std::pow(points[3 * i + 2], c);
+          sum +=
+              weights[i] * std::pow(points[3 * i], a) * std::pow(points[3 * i + 1], b) * std::pow(points[3 * i + 2], c);
         }
         EXPECT_NEAR(sum, monomial_spherocylinder_integral(a, b, c, L), tolerance)
             << "Ntheta = " << ntheta << ", L = " << L << ", x^" << a << " y^" << b << " z^" << c;
@@ -135,8 +136,7 @@ void expect_layout(const double* points, const double* weights, unsigned ntheta,
       EXPECT_GT(weights[i], 0.0);
     }
     if (j > 0) {
-      EXPECT_GT(points[3 * j * ntheta + 2], points[3 * (j - 1) * ntheta + 2])
-          << "Cylinder rings run from -z to +z.";
+      EXPECT_GT(points[3 * j * ntheta + 2], points[3 * (j - 1) * ntheta + 2]) << "Cylinder rings run from -z to +z.";
     }
   }
   for (unsigned k = 0; k < ncap; ++k) {

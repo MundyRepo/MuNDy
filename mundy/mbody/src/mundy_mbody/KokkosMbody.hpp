@@ -111,8 +111,8 @@ inline std::ostream& operator<<(std::ostream& os, const MixedSLCPResult& result)
 /// An iterate is accepted once, at the configuration it moves the rods to, no ReLCP pair overlaps by more than
 /// length_tol. With relinearize_bilateral, every bilateral row's residual psi + K^-1 y and the displacement its
 /// constraint force directions would change the step by must also be within length_tol (rows and displacements measured
-/// in length) and angle_tol (in radians). length_tol must be at least the inner outer_tol, the floor of every unilateral
-/// row; re-linearizing, both tolerances must be at least the inner cg_tol.
+/// in length) and angle_tol (in radians). length_tol must be at least the inner outer_tol, the floor of every
+/// unilateral row; re-linearizing, both tolerances must be at least the inner cg_tol.
 struct MixedReLCPConfig {
   MixedLCPConfig inner_lcp_config;
   unsigned max_iters = 20;
@@ -226,8 +226,7 @@ template <typename ExecSpace, typename Model, typename Policy, typename... Famil
 class MixedSLCPIntegrator
     : public impl::IntegratorData<
           ExecSpace, Model, Policy,
-          impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
-          Families...> {
+          impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>, Families...> {
  public:
   using impl::IntegratorData<
       ExecSpace, Model, Policy,
@@ -262,8 +261,7 @@ template <typename ExecSpace, typename Model, typename Policy, typename... Famil
 class MixedReLCPIntegrator
     : public impl::IntegratorData<
           ExecSpace, Model, Policy,
-          impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>,
-          Families...> {
+          impl::SequenceWorkspace<ExecSpace, impl::mobility_of_t<Model, ExecSpace>, Policy, Families...>, Families...> {
  public:
   using impl::IntegratorData<
       ExecSpace, Model, Policy,
@@ -400,8 +398,9 @@ MixedSLCPResult solve_step(const MixedSLCPIntegrator<ExecSpace, Model, Policy, F
 
   const impl::SequenceResult result = impl::solve_sequence(
       rods, integrator.constraints(), integrator.mobility_model().make_mobility(rods), integrator.dt(),
-      PGDConfig<double>{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol}, CGConfig<double>{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol},
-      cfg.max_iters, /*stop_when_hopeless=*/true, workspace, impl::RelinearizeBilateral{cfg.length_tol, cfg.angle_tol});
+      PGDConfig<double>{lcp_cfg.max_outer_iters, lcp_cfg.outer_tol},
+      CGConfig<double>{lcp_cfg.max_cg_iters, lcp_cfg.cg_tol}, cfg.max_iters, /*stop_when_hopeless=*/true, workspace,
+      impl::RelinearizeBilateral{cfg.length_tol, cfg.angle_tol});
   const PGDResult<double>& accepted = result.accepted_lcp_result;
   return MixedSLCPResult{result.num_iters, result.residual, result.converged,
                          MixedLCPResult{accepted.num_iters, accepted.residual, accepted.converged}};

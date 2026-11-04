@@ -577,8 +577,7 @@ struct KokkosBackend {
   static void assign(const char* label, TargetsAndSources&&... targets_and_sources) {
     static_assert(sizeof...(TargetsAndSources) > 0 && sizeof...(TargetsAndSources) % 2 == 0,
                   "KokkosBackend::assign takes (target, source) pairs.");
-    assign_impl(label, std::forward_as_tuple(targets_and_sources...),
-                std::index_sequence_for<TargetsAndSources...>{});
+    assign_impl(label, std::forward_as_tuple(targets_and_sources...), std::index_sequence_for<TargetsAndSources...>{});
   }
 
   /// \brief Reduces expressions over their entries: one result for each (reducer, source) pair.
@@ -1063,8 +1062,8 @@ struct MundyMathBackend {
   // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
   template <class Scalar, typename LinearOp, class XVector, class YVector, typename Workspace>
   MUNDY_REQUIRES(HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
-  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
-                                           Workspace&) {
+  KOKKOS_INLINE_FUNCTION
+      static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y, Workspace&) {
     op.apply(alpha, x, beta, y);
   }
 

@@ -64,7 +64,7 @@
 #include <mundy_math/lcp.hpp>
 #include <mundy_math/linear_system.hpp>  // for mundy::{CGConfig, make_cg_inv_op}
 #include <mundy_math/sparse_matrix.hpp>  // for mundy::make_sparse_matrix
-#include <mundy_utils/rng.hpp>  // for mundy::make_philox
+#include <mundy_utils/rng.hpp>           // for mundy::make_philox
 
 namespace mundy {
 
@@ -1536,7 +1536,6 @@ struct MPRGPPGD {
   }
 };
 
-
 /// \brief Whether a run is expected to converge to x* or to fail to converge.
 enum class Expect { converges, fails };
 
@@ -1797,8 +1796,7 @@ void run_kokkos_test(const Test& test, const MakePGD& make_pgd, Expect expect = 
 
   // A bad initial guess, to force more iterations, in the space
   Kokkos::deep_copy(x, 99.99);
-  KokkosBackend<decltype(exec_space)>::assign("start", x,
-                                              projection(KokkosBackend<decltype(exec_space)>{}, space, x));
+  KokkosBackend<decltype(exec_space)>::assign("start", x, projection(KokkosBackend<decltype(exec_space)>{}, space, x));
 
   // Build the problem
   const auto cqpp = make_cqpp<KokkosBackend<decltype(exec_space)>>(A, q, space);
@@ -1849,8 +1847,7 @@ void run_kokkos_congruent_test(const Test& test, const MakePGD& make_pgd, Expect
 
   // A bad initial guess, to force more iterations, in the space
   Kokkos::deep_copy(x, 99.99);
-  KokkosBackend<decltype(exec_space)>::assign("start", x,
-                                              projection(KokkosBackend<decltype(exec_space)>{}, space, x));
+  KokkosBackend<decltype(exec_space)>::assign("start", x, projection(KokkosBackend<decltype(exec_space)>{}, space, x));
 
   // Build quadratic form operator + user-owned workspace, then the problem
   const auto A = make_quadratic_form<KokkosBackend<decltype(exec_space)>>(DT, M, D);
@@ -1992,8 +1989,8 @@ template <class F>
 AllocationCount count_allocations(F&& f) {
   static AllocationCount count;
   count = AllocationCount{};
-  Kokkos::Tools::Experimental::set_init_callback([](const int, const uint64_t, const uint32_t,
-                                                    Kokkos_Profiling_KokkosPDeviceInfo*) {});
+  Kokkos::Tools::Experimental::set_init_callback(
+      [](const int, const uint64_t, const uint32_t, Kokkos_Profiling_KokkosPDeviceInfo*) {});
   Kokkos::Tools::Experimental::set_allocate_data_callback(
       [](const Kokkos_Profiling_SpaceHandle, const char*, const void*, const uint64_t) { ++count.allocations; });
   Kokkos::Tools::Experimental::set_begin_parallel_for_callback([](const char* name, const uint32_t, uint64_t*) {
@@ -2213,8 +2210,8 @@ void expect_iterations_count_every_step(const MakePGD& make_pgd) {
   EXPECT_EQ(at_solution.num_iters, 0u);
 }
 
-/// \brief Every solve make_pgd's strategy ends, capped at any k from 0 to the steps an uncapped one takes, leaves f and u
-/// those of an apply at the returned x and reports the projected-difference residual of A x + q formed by that apply.
+/// \brief Every solve make_pgd's strategy ends, capped at any k from 0 to the steps an uncapped one takes, leaves f and
+/// u those of an apply at the returned x and reports the projected-difference residual of A x + q formed by that apply.
 template <class MakePGD>
 void expect_solves_end_on_an_apply_at_their_iterate(const MakePGD& make_pgd) {
   const math_backend::congruent::CongruentLCPWrapper test{math_backend::PeriodicLaplacianLCP<8>{}};
@@ -2620,8 +2617,8 @@ TEST(Convex, PGDIsScaleInvariant) {
       x_scaled.fill(99.99);
       const auto scaled_pgd = make_pgd(PGDConfig<double>{.max_iters = 1000, .tol = c * 1e-12}, p_scaled);
       auto scaled_state = make_pgd_state(scaled_pgd, x_scaled, grad_scaled, x_tmp_scaled, grad_tmp_scaled);
-      const auto scaled = solve_cqpp(
-          make_cqpp<MundyMathBackend>(test.get_A() * c, test.get_q() * c, test.get_space()), scaled_pgd, scaled_state);
+      const auto scaled = solve_cqpp(make_cqpp<MundyMathBackend>(test.get_A() * c, test.get_q() * c, test.get_space()),
+                                     scaled_pgd, scaled_state);
       EXPECT_TRUE(scaled.converged) << steps << ", c = 2^" << exponent << ": " << scaled;
       EXPECT_EQ(scaled.num_iters, unscaled.num_iters) << steps << ", c = 2^" << exponent;
       for (size_t i = 0; i < vector_t::size; ++i) {
@@ -3048,7 +3045,7 @@ TEST(Convex, MPRGPRecoversFromWarmUndershoot) {
 TEST(Convex, ResidualsMeasureOptimalityViolation) {
   const LowerBoundSpace<double> space{.lower_bound = 0.0};
   const Vector3d x{0.0, 0.0, 1.0};
-  const Vector3d optimal{0.5, 0.0, 0.0};           // x_0 pressed onto its bound, x_2 stationary
+  const Vector3d optimal{0.5, 0.0, 0.0};            // x_0 pressed onto its bound, x_2 stationary
   const Vector3d pulled_off_bound{-0.5, 0.0, 0.0};  // x_0 would decrease the objective by leaving its bound
   const Vector3d not_stationary{0.5, 0.0, 0.3};     // x_2 off its bound with a nonzero gradient
 

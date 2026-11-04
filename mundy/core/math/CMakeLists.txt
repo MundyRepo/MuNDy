@@ -104,7 +104,7 @@ mundy_tribits_add_library(
 
 # Let sqrt vectorize: under the default -fmath-errno, GCC and Clang keep a branch in every sqrt to set errno for a
 # negative argument, which blocks SIMD in dense kernels such as direct_sum. No numerical result changes.
-if(mundy_math_target)  # empty in TriBITS installation-testing mode, which builds no library
+if(mundy_math_target) # empty in TriBITS installation-testing mode, which builds no library
   target_compile_options(${mundy_math_target} PUBLIC $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-fno-math-errno>)
 endif()
 
