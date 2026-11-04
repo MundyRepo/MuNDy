@@ -29,7 +29,7 @@
 
 // Mundy
 #include <mundy_geom/distance/Types.hpp>                            // for mundy::SharedNormalSigned
-#include <mundy_geom/distance/impl/LineSegmentLineSegmentImpl.hpp>  // for mundy::impl::centred_scale_exponent
+#include <mundy_geom/distance/impl/DistanceScalingImpl.hpp>         // for mundy::impl::{centred_scale_exponent, scaled_norm}
 #include <mundy_geom/primitives/Line.hpp>                           // for mundy::Line
 #include <mundy_geom/primitives/Point.hpp>                          // for mundy::Point
 #include <mundy_math/Vector3.hpp>                                   // for mundy::Vector3, mundy::dot, mundy::cross
@@ -180,8 +180,13 @@ KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const S
     const Scalar D = mundy::dot(n, n);
     const Scalar sN = mundy::dot(n, mundy::cross(vs, ws));
 
-    // First, get s minimizing R, or s = 0 when the lines are parallel and every s does.
-    arch_length1 = (D >= norm_min) ? sN / D : static_cast<Scalar>(0.0);
+    // First, get s minimizing R, or s = 0 when the lines are parallel and every s does. Unlike a segment's, a line's s
+    // is unbounded, so |u x v| within the rounding of its own products (4 eps |u| |v|) counts as parallel: s = 0 there
+    // moves the pair along the valley of R by at most that relative amount of the exact closest points' distance from
+    // the centers, which their own rounding already allows.
+    const T eps = mundy_epsilon_v<T>;
+    const bool parallel = !(D > static_cast<T>(16.0) * eps * eps * a * c) || !(D >= norm_min);
+    arch_length1 = parallel ? static_cast<Scalar>(0.0) : sN / D;
 
     // Second, get t minimizing R for that s, or t = 0 when the second line is a point.
     arch_length2 = (c >= norm_min) ? (b * arch_length1 + e) / c : static_cast<Scalar>(0.0);

@@ -421,20 +421,21 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
 }
 
 TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
-  // The following pesky edge case is for a colinear rod that caused an untested edge case.
+  // A segment of length 8.5e-8 crossing a long one (sin^2 of the angle 0.79), which must not be classified as parallel.
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
   mundy::Vector3d sep_actual;
 
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
-  // Hardcoding a case that I know is wrong.
+  // The expected parameters are the unique exact minimizer (rational arithmetic on these inputs); the expected closest
+  // points and distance lie within TEST_DOUBLE_EPSILON of it.
   a1 = {0.2257294191072674, 0.30159862841764695, 0.12784820133135649};
   b1 = {0.5220039935659887, 0.88764831847472003, -0.2219484914838093};
   a2 = {0.22572948671663273, 0.30159858045792487, 0.1278481814714105};
   b2 = {0.50288066060587278, 0.66779290982621586, -0.5723507723323677};
   a12_expected = {0.22572948671663273, 0.30159858045792487, 0.1278481814714105};
   b12_expected = {0.52067221426302679, 0.87233723836682309, -0.24635106326970288};
-  u_expected = 1.0;
-  v_expected = 0.069641589451982497;
+  u_expected = 0.9989252263656248;
+  v_expected = 0.06964158935038495;
   dist_expected = 0.74347757392471259;
 
   const LineSegment<double> line_segment_a(a1, a2);
@@ -664,23 +665,23 @@ TEST(DistanceBetweenLineSegments, EveryBranch) {
 //  - Closest points and separation: start + s (end - start) rounds each coordinate at most twice with s fixed
 //    (Higham, Accuracy and Stability of Numerical Algorithms, 2nd ed., Lemma 3.1: gamma_2 ~ 2 eps), so each closest
 //    point lies within 2 eps X per component of the exact point for its parameter; sep = cp2 - cp1 adds one rounding
-//    of magnitude <= 2 X, and |sep| at most (n/2 + 1) eps |sep| = 2.5 eps d for n = 3 (Higham, Section 3.1). Over three
-//    components this is sqrt(3) (4 + 2) eps X + 2.5 eps d <= 7 eps X + 3 eps d.
-//  - Parameters: the computed parameter pair minimizes R(s, t) = |l(s) - m(t)|^2 exactly along one coordinate
-//    direction each, so its own rounding moves the pair along the valley of R. The segment-segment critique (angle
-//    scans to 1e-20, 150k adversarial cases, both FMA builds) measured that contribution at <= 1.4 eps X; 2 eps X is
-//    charged for it.
-//  Hence dist_tol(X, d) = 9 eps X + 3 eps d.
+//    of at most eps |sep_i| <= eps d. Over three components this is sqrt(3) (4 eps X + eps d) <= 7 eps X + 2 eps d, and
+//    |sep| adds at most (n/2 + 1) eps d = 2.5 eps d for n = 3 (Higham, Section 3.1): 7 eps X + 5 eps d in all.
+//  - Parameters (empirical): the computed parameter pair minimizes R(s, t) = |l(s) - m(t)|^2 exactly along one
+//    coordinate direction each, so its own rounding moves the pair along the valley of R. No bound on that contribution
+//    is derived; adversarial testing (angle scans to 1e-20, 150k cases, both FMA builds) measured it at <= 1.4 eps X,
+//    and 2 eps X is charged for it.
+//  Hence dist_tol(X, d) = 9 eps X + 5 eps d, of which 2 eps X is empirical.
 //  - Where the closest points are exactly representable and the parameters are exact (powers of two and their
 //    sums), only |sep| rounds: exact_dist_tol(d) = 3 eps d + 2^-1074, the last term being the spacing of subnormals.
 //  - A pair within tau of the minimal distance d lies, in (s, t), within sqrt(((d + tau)^2 - d^2) / lambda) of the
 //    minimizer, where lambda is the smallest eigenvalue of [[a, -b], [-b, c]], the Hessian of R / 2 (strong
 //    convexity of R). Parameters are checked against that bound, and only where the minimizer is unique.
 
-/// \brief The distance tolerance dist_tol(X, d) = 9 eps X + 3 eps d
+/// \brief The distance tolerance dist_tol(X, d) = 9 eps X + 5 eps d (2 eps X of it empirical)
 double dist_tol(const double x, const double d) {
   constexpr double eps = std::numeric_limits<double>::epsilon();
-  return 9.0 * eps * x + 3.0 * eps * d;
+  return 9.0 * eps * x + 5.0 * eps * d;
 }
 
 /// \brief The distance tolerance for exactly representable closest points, 3 eps d + 2^-1074
@@ -1098,11 +1099,20 @@ TEST(DistanceBetweenLines, ParallelAndNonUnitDirections) {
     };
     const double big = std::ldexp(1.0, 700);
     const double big_dir = std::ldexp(1.0, 600);
+    // A direction (ox, oy, 0) with full-precision components and its half: u x v is zero, but a fused multiply-add can
+    // round it to a tiny nonzero value. The offset (-oy, ox, 1/2) is perpendicular to it. Reading the components
+    // through volatile keeps the products at run time, where they may be fused, rather than folded at compile time.
+    const volatile double ox_runtime = 0x1.7f817c2d0d048p-1;
+    const volatile double oy_runtime = -0x1.11fd50266e476p-1;
+    const double ox = ox_runtime;
+    const double oy = oy_runtime;
+    const double d_oblique = std::sqrt(ox * ox + oy * oy + 0.25);
     const Case cases[] = {
         {"parallel", {0, 0, 0}, {1, 0, 0}, {5, 0.5, 0}, {1, 0, 0}, 0.5},
         {"antiparallel, non-unit", {0, 0, 0}, {0.25, 0, 0}, {5, 0.5, 0.5}, {-8, 0, 0}, std::sqrt(0.5)},
         {"parallel, large", {0, 0, 0}, {0, 0, big_dir}, {big, 0, 3}, {0, 0, 1}, big},
         {"coincident", {0, 0, 0}, {1, 1, 0}, {2, 2, 0}, {-3, -3, 0}, 0.0},
+        {"parallel, oblique", {0, 0, 0}, {ox, oy, 0}, {-oy, ox, 0.5}, {0.5 * ox, 0.5 * oy, 0}, d_oblique},
     };
     for (const Case& c : cases) {
       SCOPED_TRACE(c.name);
@@ -1110,11 +1120,12 @@ TEST(DistanceBetweenLines, ParallelAndNonUnitDirections) {
       double s = nan, t = nan;
       mundy::Vector3d sep{nan, nan, nan};
       const double dist = distance(Line<double>(c.c1, c.d1), Line<double>(c.c2, c.d2), cp1, cp2, s, t, sep);
-      // Any pair of facing points minimizes, so the returned pair's own coordinates set the rounding.
-      const double x = std::max({length(c.c1), length(c.c2), length(cp1), length(cp2)});
-      const double tau = dist_tol(x, c.d);
+      // The distance is accurate to the inputs' scale, |c1| + |c2|. Any pair of facing points minimizes, so the
+      // returned pair's own coordinates set the rounding of the checks made on it.
+      const double tau = dist_tol(length(c.c1) + length(c.c2), c.d);
       EXPECT_NEAR(dist, c.d, tau);
-      EXPECT_NEAR(length((c.c2 + t * c.d2) - (c.c1 + s * c.d1)), c.d, tau);
+      const double x = std::max({length(c.c1), length(c.c2), length(cp1), length(cp2)});
+      EXPECT_NEAR(length((c.c2 + t * c.d2) - (c.c1 + s * c.d1)), c.d, dist_tol(x, c.d));
       for (unsigned j = 0; j < 3; ++j) {
         EXPECT_EQ(sep[j], cp2[j] - cp1[j]);
         EXPECT_NEAR(cp1[j], c.c1[j] + s * c.d1[j], 2.0 * std::numeric_limits<double>::epsilon() * x);
