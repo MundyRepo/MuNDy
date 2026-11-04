@@ -29,7 +29,7 @@
 
 // Mundy
 #include <mundy_geom/distance/Types.hpp>                            // for mundy::SharedNormalSigned
-#include <mundy_geom/distance/impl/LineSegmentLineSegmentImpl.hpp>  // for mundy::impl::centred_scale_exponent
+#include <mundy_geom/distance/impl/DistanceScalingImpl.hpp>         // for mundy::impl::{centred_scale_exponent, scaled_norm}
 #include <mundy_geom/primitives/LineSegment.hpp>                    // for mundy::LineSegment
 #include <mundy_geom/primitives/Point.hpp>                          // for mundy::Point
 #include <mundy_math/Vector3.hpp>                                   // for mundy::Vector3, mundy::dot, mundy::cross

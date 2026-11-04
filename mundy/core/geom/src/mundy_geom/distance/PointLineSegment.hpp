@@ -29,7 +29,7 @@
 
 // Mundy
 #include <mundy_geom/distance/Types.hpp>                            // for mundy::SharedNormalSigned
-#include <mundy_geom/distance/impl/LineSegmentLineSegmentImpl.hpp>  // for mundy::impl::centred_scale_exponent
+#include <mundy_geom/distance/impl/DistanceScalingImpl.hpp>         // for mundy::impl::{centred_scale_exponent, scaled_norm}
 #include <mundy_geom/primitives/LineSegment.hpp>                    // for mundy::LineSegment
 #include <mundy_geom/primitives/Point.hpp>                          // for mundy::Point
 #include <mundy_math/Vector3.hpp>                                   // for mundy::Vector3, mundy::dot
@@ -141,6 +141,8 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
   }
 
   // Finally, get the closest point and the separation, undoing the quartering.
+  // TODO(palmerb4): A parameter clamped to 1 gives p1 + p21, which can differ from p2 by an ulp. Decide whether callers
+  // need the endpoint exactly there, and if so return p2 when the parameter is 1.
   if (!prescaled) {
     closest_point = p1 + arch_length * p21;
     sep = closest_point - point;
