@@ -23,6 +23,7 @@
 
 // C++ core libs
 #include <cmath>        // for std::sqrt, std::sin, ...
+#include <limits>       // for std::numeric_limits
 #include <type_traits>  // for std::is_same_v
 #include <utility>      // for std::declval
 
@@ -83,6 +84,54 @@ TEST(AutoDiffScalar, ArithmeticChainRules) {
   EXPECT_NEAR(diff.value(), yv, kTol);
   EXPECT_NEAR(diff.derivatives()[0], 0.0, kTol);
   EXPECT_NEAR(diff.derivatives()[1], 1.0, kTol);
+}
+
+// Every division rounds once, as the passive division does: the value is the passive quotient bit for bit, and a
+// subnormal divisor gives the representable quotient and derivatives rather than overflowing through its reciprocal.
+TEST(AutoDiffScalar, DivisionMatchesPassiveDivision) {
+  // 49 (1 / 49) rounds to 1 - 2^-53; 49 / 49 is exactly 1
+  const AD fortynine(49.0, 0);
+  EXPECT_EQ((fortynine / AD(49.0, 1)).value(), 49.0 / 49.0);
+  EXPECT_EQ((fortynine / 49.0).value(), 49.0 / 49.0);
+  EXPECT_EQ((49.0 / fortynine).value(), 49.0 / 49.0);
+  AD self_divided = fortynine;
+  self_divided /= AD(49.0, 1);
+  EXPECT_EQ(self_divided.value(), 49.0 / 49.0);
+  self_divided = fortynine;
+  self_divided /= 49.0;
+  EXPECT_EQ(self_divided.value(), 49.0 / 49.0);
+
+  // x / y for y = 2^-1074, whose reciprocal overflows: x = 2^-1073 with x' = (2^-1074, 0) and y' = (0, 2^-1074) give
+  // x / y = 2 with derivatives x' / y - (x / y) y' / y = (1, -2), all exact
+  const double tiny = std::numeric_limits<double>::denorm_min();
+  const AD x(2.0 * tiny, Vector<double, 2>{tiny, 0.0});
+  const AD y(tiny, Vector<double, 2>{0.0, tiny});
+  const AD quotient = x / y;
+  EXPECT_EQ(quotient.value(), 2.0);
+  EXPECT_EQ(quotient.derivatives()[0], 1.0);
+  EXPECT_EQ(quotient.derivatives()[1], -2.0);
+
+  AD self_quotient = x;
+  self_quotient /= y;
+  EXPECT_EQ(self_quotient.value(), 2.0);
+  EXPECT_EQ(self_quotient.derivatives()[0], 1.0);
+  EXPECT_EQ(self_quotient.derivatives()[1], -2.0);
+
+  const AD by_passive = x / tiny;  // derivatives x' / y = (1, 0)
+  EXPECT_EQ(by_passive.value(), 2.0);
+  EXPECT_EQ(by_passive.derivatives()[0], 1.0);
+  EXPECT_EQ(by_passive.derivatives()[1], 0.0);
+
+  AD self_by_passive = x;
+  self_by_passive /= tiny;
+  EXPECT_EQ(self_by_passive.value(), 2.0);
+  EXPECT_EQ(self_by_passive.derivatives()[0], 1.0);
+  EXPECT_EQ(self_by_passive.derivatives()[1], 0.0);
+
+  const AD passive_by = (2.0 * tiny) / y;  // derivatives -(2 tiny / y) y' / y = (0, -2)
+  EXPECT_EQ(passive_by.value(), 2.0);
+  EXPECT_EQ(passive_by.derivatives()[0], 0.0);
+  EXPECT_EQ(passive_by.derivatives()[1], -2.0);
 }
 
 TEST(AutoDiffScalar, MixedWithPassive) {

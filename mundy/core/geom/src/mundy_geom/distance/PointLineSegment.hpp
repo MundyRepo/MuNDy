@@ -28,11 +28,12 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>     // for mundy::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>          // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::LineSegment
-#include <mundy_geom/primitives/Point.hpp>        // for mundy::Point
-#include <mundy_math/Tolerance.hpp>               // for mundy::get_zero_tolerance
+#include <mundy_geom/distance/Types.hpp>                            // for mundy::SharedNormalSigned
+#include <mundy_geom/distance/impl/LineSegmentLineSegmentImpl.hpp>  // for mundy::impl::centred_scale_exponent
+#include <mundy_geom/primitives/LineSegment.hpp>                    // for mundy::LineSegment
+#include <mundy_geom/primitives/Point.hpp>                          // for mundy::Point
+#include <mundy_math/Vector3.hpp>                                   // for mundy::Vector3, mundy::dot
+#include <mundy_math/cmath.hpp>                                     // for mundy::passive_scalar_t
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -89,6 +90,10 @@ KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point, 
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
+///
+/// The closest point minimizes |closest_point - point| over the segment. It equals start + arch_length (end - start)
+/// with arch_length in [0, 1], sep = closest_point - point, and the return value is |sep|. A segment of zero length
+/// gives arch_length = 0.
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
@@ -104,45 +109,48 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
                                                         typename PointType::value_type& arch_length,              //
                                                         mundy::Vector3<typename PointType::value_type>& sep) {
   using Scalar = typename PointType::value_type;
+  using T = passive_scalar_t<Scalar>;
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
-  const auto p21 = p2 - p1;
 
-  // Get parametric location
-  const Scalar num = dot(p21, point - p1);
-  if ((num < mundy::get_zero_tolerance<Scalar>()) & (num > -mundy::get_zero_tolerance<Scalar>())) {
-    // CASE 1: The vector from p1 to x is orthogonal to the line.
-    // In this case, the closest point is p1 and the parametric coordinate is 0.
-    closest_point = p1;
-    arch_length = static_cast<Scalar>(0.0);
-  } else {
-    const Scalar denom = dot(p21, p21);
-
-    if (denom < mundy::get_zero_tolerance<Scalar>()) {
-      // CASE 2: The line is degenerate (i.e., p1 and p2 are numerically the same point).
-      // In this case, either point could really be the closest point. We'll arbitrarily pick p1 and set t to 0.
-      closest_point = p1;
-      arch_length = static_cast<Scalar>(0.0);
-    } else {
-      // CASE 3: The line is well-defined and we can compute the closest point.
-      arch_length = num / denom;
-
-      if (arch_length < static_cast<Scalar>(0.0)) {
-        // CASE 3.1: The parameter for the infinite line is less than 0. Therefore, the closest point is p1.
-        closest_point = p1;
-        arch_length = static_cast<Scalar>(0.0);
-      } else if (arch_length > static_cast<Scalar>(1.0)) {
-        // CASE 3.2: The parameter for the infinite line is greater than 1. Therefore, the closest point is p2.
-        closest_point = p2;
-        arch_length = static_cast<Scalar>(1.0);
-      } else {
-        // CASE 3.3: The closest point is falls within the line segment.
-        closest_point = p1 + arch_length * p21;
-      }
-    }
+  // Quarter the points when a difference of them would overflow.
+  auto p21 = p2 - p1;
+  auto p01 = point - p1;
+  const bool prescaled = !(impl::max_abs_component<T>(p21, p01, p01) < mundy_infinity_v<T>);
+  const T q = prescaled ? static_cast<T>(0.25) : static_cast<T>(1.0);
+  if (prescaled) {
+    p21 = p2 * q - p1 * q;
+    p01 = point * q - p1 * q;
   }
 
-  return distance(point, closest_point, sep);
+  // The parametric location p21 . p01 / p21 . p21 is formed on p21 and p01 scaled alike by a power of two, to which it
+  // is invariant, so neither product overflows or underflows.
+  const T m21 = impl::max_abs_component<T>(p21, p21, p21);
+  const T m01 = impl::max_abs_component<T>(p01, p01, p01);
+  if (m21 > static_cast<T>(0.0)) {
+    // CASE 1: The segment has length. Project the point onto it and clamp to the segment.
+    const int k = impl::centred_scale_exponent(m21, static_cast<T>(0.0), m01);
+    const auto p21s = impl::scale_by_pow2<T>(p21, k);
+    const auto p01s = impl::scale_by_pow2<T>(p01, k);
+    const Scalar num = mundy::dot(p21s, p01s);
+    const Scalar denom = mundy::dot(p21s, p21s);
+    arch_length = (denom > static_cast<T>(0.0)) ? impl::clamp_to_unit_interval(num / denom) : static_cast<Scalar>(0.0);
+  } else {
+    // CASE 2: The segment is a point.
+    arch_length = static_cast<Scalar>(0.0);
+  }
+
+  // Finally, get the closest point and the separation, undoing the quartering.
+  if (!prescaled) {
+    closest_point = p1 + arch_length * p21;
+    sep = closest_point - point;
+  } else {
+    const T inv_q = static_cast<T>(4.0);
+    const auto cq = p1 * q + arch_length * p21;
+    closest_point = cq * inv_q;
+    sep = (cq - point * q) * inv_q;
+  }
+  return impl::scaled_norm(sep);
 }
 //@}
 

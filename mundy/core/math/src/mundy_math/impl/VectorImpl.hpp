@@ -250,8 +250,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_division_impl(std::index_seq
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using R = scalar_quotient_result_t<T, U>;  // integral/integral promotes to double
   AVector<R, N> result;
-  const R scalar_inv = static_cast<R>(1) / static_cast<R>(scalar);
-  ((result[Is] = static_cast<R>(vec[Is]) * scalar_inv), ...);
+  ((result[Is] = static_cast<R>(vec[Is]) / static_cast<R>(scalar)), ...);
   return result;
 }
 

@@ -26,6 +26,7 @@
 #include <atomic>
 #include <barrier>
 #include <future>
+#include <limits>  // for std::numeric_limits
 #include <map>     // for std::map
 #include <memory>  // for std::shared_ptr, std::unique_ptr
 #include <sstream>
@@ -561,6 +562,30 @@ TYPED_TEST(VectorPairwiseTypeTest, MultiplicationAndDivisionWithScalars) {
   is_close_debug(v6, Vector3<T5>{2, 4, 6}, "Vector-scalar multiplication failed.");
   is_close_debug(T2(2) * v5, Vector3<T5>{2, 4, 6}, "Scalar-vector multiplication failed.");
   is_close_debug(v6 / T2(2), Vector3<T5>{1, 2, 3}, "Vector-scalar division failed.");
+}
+
+// Dividing by a scalar divides each entry, so every entry rounds once and matches its own division bit for bit: 49 / 49
+// is 1 where 49 (1 / 49) is 1 - 2^-53, and a subnormal divisor, whose reciprocal overflows, still gives the
+// representable quotients.
+TEST(VectorScalarDivision, MatchesEntrywiseDivision) {
+  const double tiny = std::numeric_limits<double>::denorm_min();
+  const Vector3<double> v{49.0, 2.0 * tiny, -3.0 * tiny};
+
+  const Vector3<double> by_fortynine = v / 49.0;
+  const Vector3<double> by_tiny = v / tiny;
+  Vector3<double> self_by_fortynine = v;
+  self_by_fortynine /= 49.0;
+  Vector3<double> self_by_tiny = v;
+  self_by_tiny /= tiny;
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(by_fortynine[i], v[i] / 49.0) << "entry " << i;
+    EXPECT_EQ(by_tiny[i], v[i] / tiny) << "entry " << i;
+    EXPECT_EQ(self_by_fortynine[i], v[i] / 49.0) << "entry " << i;
+    EXPECT_EQ(self_by_tiny[i], v[i] / tiny) << "entry " << i;
+  }
+  EXPECT_EQ(by_fortynine[0], 1.0);
+  EXPECT_EQ(by_tiny[1], 2.0);
+  EXPECT_EQ(by_tiny[2], -3.0);
 }
 //@}
 

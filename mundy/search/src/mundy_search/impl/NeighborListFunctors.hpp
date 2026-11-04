@@ -48,16 +48,16 @@ class DeployFunctorOnNeighborPairs {
   /// \param list [in] Concrete neighbor list.
   /// \param functor [in] User callback to run for every neighbor pair.
   KOKKOS_INLINE_FUNCTION
-  DeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor) : list_(&list), functor_(functor) {
+  DeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor) : list_(list), functor_(functor) {
   }
 
   /// \brief Run the user callback for every neighbor of one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index) const {
-    const size_type num_neighbors = list_->num_neighbors(target_index);
+    const size_type num_neighbors = list_.num_neighbors(target_index);
     for (size_type neighbor_ordinal = 0; neighbor_ordinal < num_neighbors; ++neighbor_ordinal) {
-      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, neighbor_ordinal));
+      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, neighbor_ordinal));
     }
   }
 
@@ -65,8 +65,8 @@ class DeployFunctorOnNeighborPairs {
   //! \name Internal members
   //@{
 
-  //! Pointer to the neighbor list (never null after construction; outlives this functor).
-  const NeighborListType* list_;
+  //! The neighbor list, held by value so that a device kernel reads its own copy.
+  NeighborListType list_;
   //! User callback invoked once for each stored neighbor pair.
   Functor functor_;
   //@}
@@ -85,22 +85,22 @@ class DeployFunctorOnTargetNeighbors {
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
   DeployFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Run the user callback for one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index) const {
-    functor_(mundy::search::Neighbors<NeighborListType>(*list_, target_index));
+    functor_(mundy::search::Neighbors<NeighborListType>(list_, target_index));
   }
 
  private:
   //! \name Internal members
   //@{
 
-  //! Pointer to the neighbor list (never null after construction; outlives this functor).
-  const NeighborListType* list_;
+  //! The neighbor list, held by value so that a device kernel reads its own copy.
+  NeighborListType list_;
   //! User callback invoked once for each target-neighbors payload.
   Functor functor_;
   //@}
@@ -126,7 +126,7 @@ class DeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every neighbor pair.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Accumulate over every neighbor of one target ordinal.
@@ -134,15 +134,15 @@ class DeployReduceFunctorOnNeighborPairs {
   /// \param update [in,out] Thread-local reduction accumulator.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index, value_type& update) const {
-    const size_type num_neighbors = list_->num_neighbors(target_index);
+    const size_type num_neighbors = list_.num_neighbors(target_index);
     for (size_type k = 0; k < num_neighbors; ++k) {
-      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, k), update);
+      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, k), update);
     }
   }
 
  private:
-  //! Pointer to the neighbor list (never null after construction; outlives this functor).
-  const NeighborListType* list_;
+  //! The neighbor list, held by value so that a device kernel reads its own copy.
+  NeighborListType list_;
   //! User callback invoked once for each stored neighbor pair.
   Functor functor_;
 };
@@ -165,7 +165,7 @@ class DeployReduceFunctorOnTargetNeighbors {
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Accumulate over one target ordinal.
@@ -173,12 +173,12 @@ class DeployReduceFunctorOnTargetNeighbors {
   /// \param update [in,out] Thread-local reduction accumulator.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index, value_type& update) const {
-    functor_(mundy::search::Neighbors<NeighborListType>(*list_, target_index), update);
+    functor_(mundy::search::Neighbors<NeighborListType>(list_, target_index), update);
   }
 
  private:
-  //! Pointer to the neighbor list (never null after construction; outlives this functor).
-  const NeighborListType* list_;
+  //! The neighbor list, held by value so that a device kernel reads its own copy.
+  NeighborListType list_;
   //! User callback invoked once for each target-neighbors payload.
   Functor functor_;
 };
@@ -202,7 +202,7 @@ class FlatDeployFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every valid neighbor pair.
   KOKKOS_INLINE_FUNCTION
   FlatDeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Invoke the user callback for cell `(target_index, neighbor_ordinal)` if valid.
@@ -210,8 +210,8 @@ class FlatDeployFunctorOnNeighborPairs {
   /// \param neighbor_ordinal [in] Neighbor slot index (inner MDRange dimension).
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index, const size_type neighbor_ordinal) const {
-    if (neighbor_ordinal < list_->num_neighbors(target_index)) {
-      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, neighbor_ordinal));
+    if (neighbor_ordinal < list_.num_neighbors(target_index)) {
+      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, neighbor_ordinal));
     }
   }
 
@@ -219,8 +219,8 @@ class FlatDeployFunctorOnNeighborPairs {
   //! \name Internal members
   //@{
 
-  //! Pointer to the neighbor list (never null after construction; outlives this functor).
-  const NeighborListType* list_;
+  //! The neighbor list, held by value so that a device kernel reads its own copy.
+  NeighborListType list_;
   //! User callback invoked once for each valid pair cell.
   Functor functor_;
   //@}
@@ -244,7 +244,7 @@ class FlatDeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every valid neighbor pair.
   KOKKOS_INLINE_FUNCTION
   FlatDeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Accumulate over cell `(target_index, neighbor_ordinal)` if valid.
@@ -253,8 +253,8 @@ class FlatDeployReduceFunctorOnNeighborPairs {
   /// \param update [in,out] Thread-local reduction accumulator.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index, const size_type neighbor_ordinal, value_type& update) const {
-    if (neighbor_ordinal < list_->num_neighbors(target_index)) {
-      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, neighbor_ordinal), update);
+    if (neighbor_ordinal < list_.num_neighbors(target_index)) {
+      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, neighbor_ordinal), update);
     }
   }
 
@@ -262,8 +262,8 @@ class FlatDeployReduceFunctorOnNeighborPairs {
   //! \name Internal members
   //@{
 
-  //! Pointer to the neighbor list (never null after construction; outlives this functor).
-  const NeighborListType* list_;
+  //! The neighbor list, held by value so that a device kernel reads its own copy.
+  NeighborListType list_;
   //! User callback invoked once for each valid pair cell.
   Functor functor_;
   //@}

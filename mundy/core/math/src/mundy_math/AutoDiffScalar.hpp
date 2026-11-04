@@ -150,9 +150,11 @@ class AutoDiffScalar {
 
   /// \brief Quotient rule: (u / v)' = (u' - (u/v) v') / v.
   KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar operator/(const AutoDiffScalar& o) const {
-    const T inv = T(1) / o.value_;
-    const T quotient = value_ * inv;
-    return {quotient, (derivatives_ - o.derivatives_ * quotient) * inv};
+    // divide rather than multiply by 1 / v, so each entry rounds once and a subnormal v cannot overflow
+    const T quotient = value_ / o.value_;
+    Vector<T, N> derivatives = derivatives_ - o.derivatives_ * quotient;
+    derivatives /= o.value_;
+    return {quotient, derivatives};
   }
 
   KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar& operator+=(const AutoDiffScalar& o) {
@@ -188,8 +190,9 @@ class AutoDiffScalar {
     return {value_ * s, derivatives_ * s};
   }
   KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar operator/(const T& s) const {
-    const T inv = T(1) / s;
-    return {value_ * inv, derivatives_ * inv};
+    Vector<T, N> derivatives = derivatives_;
+    derivatives /= s;
+    return {value_ / s, derivatives};
   }
 
   KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar& operator+=(const T& s) {
@@ -206,9 +209,8 @@ class AutoDiffScalar {
     return *this;
   }
   KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar& operator/=(const T& s) {
-    const T inv = T(1) / s;
-    value_ *= inv;
-    derivatives_ *= inv;
+    value_ /= s;
+    derivatives_ /= s;
     return *this;
   }
   //@}
@@ -242,9 +244,10 @@ KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> operator*(const T& s, cons
 }
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> operator/(const T& s, const AutoDiffScalar<T, N>& a) {
-  const T inv = T(1) / a.value();
-  const T quotient = s * inv;                              // s / a
-  return {quotient, a.derivatives() * (-quotient * inv)};  // d(s/a) = -s/a^2 * a'
+  const T quotient = s / a.value();
+  Vector<T, N> derivatives = a.derivatives() * (-quotient);  // d(s/a) = -(s/a) a' / a
+  derivatives /= a.value();
+  return {quotient, derivatives};
 }
 //@}
 

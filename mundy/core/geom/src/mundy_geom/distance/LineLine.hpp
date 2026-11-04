@@ -28,11 +28,12 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>  // for distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>       // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/Line.hpp>      // for mundy::Line
-#include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
-#include <mundy_math/Tolerance.hpp>            // for mundy::get_zero_tolerance
+#include <mundy_geom/distance/Types.hpp>                            // for mundy::SharedNormalSigned
+#include <mundy_geom/distance/impl/LineSegmentLineSegmentImpl.hpp>  // for mundy::impl::centred_scale_exponent
+#include <mundy_geom/primitives/Line.hpp>                           // for mundy::Line
+#include <mundy_geom/primitives/Point.hpp>                          // for mundy::Point
+#include <mundy_math/Vector3.hpp>                                   // for mundy::Vector3, mundy::dot, mundy::cross
+#include <mundy_math/cmath.hpp>                                     // for mundy::passive_scalar_t
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -109,6 +110,11 @@ KOKKOS_FUNCTION typename LineType1::value_type distance(const LineType1& line1, 
 }
 
 /// \brief Compute the distance between two lines
+///
+/// The closest points minimize |closest_point2 - closest_point1| over the two lines. Where that minimizer is not
+/// unique (parallel lines), any minimizing pair is returned. Each closest point equals center + arch_length direction,
+/// sep = closest_point2 - closest_point1, and the return value is |sep|. A zero direction makes its line the point at
+/// its center.
 /// \tparam Scalar The scalar type
 /// \param[in] distance_type The distance type
 /// \param[in] line1 One line
@@ -129,30 +135,79 @@ KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const S
                                                         typename LineType1::value_type& arch_length2,             //
                                                         mundy::Vector3<typename LineType1::value_type>& sep) {
   using Scalar = typename LineType1::value_type;
+  using T = passive_scalar_t<Scalar>;
 
-  // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
-  const auto center_center = line1.center() - line2.center();
-  const Scalar a = mundy::dot(line1.direction(), line1.direction());
-  const Scalar b = mundy::dot(line1.direction(), line2.direction());
-  const Scalar c = mundy::dot(line2.direction(), line2.direction());
-  const Scalar d = mundy::dot(line1.direction(), center_center);
-  const Scalar e = mundy::dot(line2.direction(), center_center);
-  const Scalar D = a * c - b * b;  // always >= 0
+  // Minimize R(s, t) = |l(s) - m(t)|^2 without classifying the lines as parallel. Each parameter after the first
+  // minimizes R exactly along one coordinate direction, so rounding in the first moves the result along the valley of
+  // R, where R barely changes, and parallel lines get a minimizing pair.
+  const auto& c1 = line1.center();
+  const auto& c2 = line2.center();
+  const auto& d1 = line1.direction();
+  const auto& d2 = line2.direction();
 
-  // Check if the lines are colinear
-  // Two infinite colinear lines intersect at all points.
-  if (D < mundy::get_zero_tolerance<Scalar>()) {
-    sep = {0.0, 0.0, 0.0};
-    return static_cast<Scalar>(0.0);
+  // Quarter the centers and directions alike, to which s and t are invariant, when the centers' difference would
+  // overflow.
+  auto u = d1 * static_cast<T>(1.0);
+  auto v = d2 * static_cast<T>(1.0);
+  auto w = c1 - c2;
+  const bool prescaled = !(impl::max_abs_component<T>(u, v, w) < mundy_infinity_v<T>);
+  const T q = prescaled ? static_cast<T>(0.25) : static_cast<T>(1.0);
+  if (prescaled) {
+    u = d1 * q;
+    v = d2 * q;
+    w = c1 * q - c2 * q;
   }
 
-  // Compute the closest points on the lines
-  const Scalar inv_D = static_cast<Scalar>(1.0) / D;
-  arch_length1 = (b * e - c * d) * inv_D;
-  arch_length2 = (a * e - b * d) * inv_D;
-  closest_point1 = line1.center() + arch_length1 * line1.direction();
-  closest_point2 = line2.center() + arch_length2 * line2.direction();
-  return distance(closest_point1, closest_point2, sep);
+  // a c - b^2 = |u x v|^2 and b e - c d = (u x v) . (v x w), formed on u, v, and w scaled alike by a power of two,
+  // so |u x v|^2 is about the squared sine of the angle between the lines. Every quotient below is invariant to that
+  // scale. A quotient by a subnormal is avoided: the parameter falls back to the case of a zero denominator.
+  const T mu = impl::max_abs_component<T>(u, u, u);
+  const T mv = impl::max_abs_component<T>(v, v, v);
+  const T mw = impl::max_abs_component<T>(w, w, w);
+  const T norm_min = mundy_norm_min_v<T>;
+  if (mu > static_cast<T>(0.0) || mv > static_cast<T>(0.0)) {
+    // CASE 1: At least one line has a direction. Minimize over both parameters.
+    const int k = impl::centred_scale_exponent(mu, mv, mw);
+    const auto us = impl::scale_by_pow2<T>(u, k);
+    const auto vs = impl::scale_by_pow2<T>(v, k);
+    const auto ws = impl::scale_by_pow2<T>(w, k);
+    const Scalar a = mundy::dot(us, us);
+    const Scalar b = mundy::dot(us, vs);
+    const Scalar c = mundy::dot(vs, vs);
+    const Scalar d = mundy::dot(us, ws);
+    const Scalar e = mundy::dot(vs, ws);
+    const auto n = mundy::cross(us, vs);
+    const Scalar D = mundy::dot(n, n);
+    const Scalar sN = mundy::dot(n, mundy::cross(vs, ws));
+
+    // First, get s minimizing R, or s = 0 when the lines are parallel and every s does.
+    arch_length1 = (D >= norm_min) ? sN / D : static_cast<Scalar>(0.0);
+
+    // Second, get t minimizing R for that s, or t = 0 when the second line is a point.
+    arch_length2 = (c >= norm_min) ? (b * arch_length1 + e) / c : static_cast<Scalar>(0.0);
+
+    // Third, get s minimizing R for that t, or s = 0 when the first line is a point.
+    arch_length1 = (a >= norm_min) ? (b * arch_length2 - d) / a : static_cast<Scalar>(0.0);
+  } else {
+    // CASE 2: Both lines are points.
+    arch_length1 = static_cast<Scalar>(0.0);
+    arch_length2 = static_cast<Scalar>(0.0);
+  }
+
+  // Finally, get the corresponding closest points and their distance, undoing the quartering.
+  if (!prescaled) {
+    closest_point1 = c1 + arch_length1 * d1;
+    closest_point2 = c2 + arch_length2 * d2;
+    sep = closest_point2 - closest_point1;
+  } else {
+    const T inv_q = static_cast<T>(4.0);
+    const auto cq1 = c1 * q + arch_length1 * u;
+    const auto cq2 = c2 * q + arch_length2 * v;
+    closest_point1 = cq1 * inv_q;
+    closest_point2 = cq2 * inv_q;
+    sep = (cq2 - cq1) * inv_q;
+  }
+  return impl::scaled_norm(sep);
 }
 //@}
 
